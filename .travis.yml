@@ -1,0 +1,27 @@
+language: python
+
+python:
+  - 3.6
+
+services:
+  - docker
+
+install:
+  - pip install -U codecov
+
+script:
+  - bash test-container.sh
+
+after_success:
+  - codecov
+
+deploy:
+  provider: pypi
+  distributions: sdist bdist_wheel
+  user: leukgen
+  password: <TO REPLACE THIS RUN `travis encrypt --add deploy.password`>
+  on:
+    tags: true
+    repo: leukgen/cli
+    python: 3.6
+    branch: master
