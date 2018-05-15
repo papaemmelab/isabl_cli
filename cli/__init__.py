@@ -28,27 +28,32 @@ class UserSettings(object):
     settings_dir = join(expanduser('~'), '.bee',)
     settings_path = join(settings_dir, 'settings.json')
 
-    def __repr__(self):
-        return f'UserSettings({self._read_data()})'
+    def __repr__(self):  # pragma: no cover
+        """Show all configurations in `settings_path`."""
+        return f'UserSettings({self._read()})'
 
     def __setattr__(self, name, value):
-        self._write_data(name, value)
+        """Write attribute to `settings_path`."""
+        self._write(name, value)
 
     def __getattr__(self, name):
-        return self._read_data().get(name, None)
+        """Get attribute from `settings_path`."""
+        return self._read().get(name, None)
 
-    def _read_data(self):
+    def _read(self):
+        """Read settings.json."""
         try:
             with open(self.settings_path, 'r') as f:
                 return json.load(f) or {}
         except:  # pylint: disable=W0702
             return {}
 
-    def _write_data(self, name, value):
+    def _write(self, name, value):
+        """Write key, value to settings.json."""
         os.makedirs(self.settings_dir, exist_ok=True)
 
         with open(self.settings_path, 'w') as f:
-            data = self._read_data()
+            data = self._read()
             data[name] = value
             json.dump(data, f, indent=4, sort_keys=True)
 
