@@ -16,8 +16,7 @@ with open(join(ROOT, "VERSION"), "r") as version_file:
 __version__ = VERSION
 
 _DEFAULTS = {
-    'API_V1_URL': 'http://0.0.0.0:8000/api/v1',
-    'API_TOKEN_URL': 'http://0.0.0.0:8000/api/v1/auth/token/',
+    'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
     }
 
 

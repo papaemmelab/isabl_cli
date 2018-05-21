@@ -22,8 +22,7 @@ def chunks(array, size):
 
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
-    token_url = system_settings.API_TOKEN_URL
-    auth_url = f'{system_settings.API_V1_URL}/auth'
+    auth_url = f'{system_settings.API_BASE_URL}/auth'
     headers = {'Authorization': f'Token {user_settings.API_TOKEN}'}
     response = requests.get(url=auth_url, headers=headers)
 
@@ -33,7 +32,7 @@ def get_token_headers():
             "password": click.prompt('password', type=str, hide_input=True)
             }
 
-        response = requests.post(url=token_url, data=data)
+        response = requests.post(url=f'{auth_url}/token', data=data)
         response.raise_for_status()
         user_settings.API_TOKEN = response.json()['token']
         headers = {'Authorization': f'Token {user_settings.API_TOKEN}'}
@@ -121,27 +120,73 @@ def iterate(url, limit=1000, **filters):
 
 def get_instance(endpoint, identifier):
     """
-    Get instance from API.
+    Get database instance.
 
     Arguments:
         identifier (str): a primary key, system_id, email or username.
-        endpoint (str): endpoint without API base URL (e.g. `workflows`).
+        endpoint (str): endpoint without API base URL (e.g. `analyses`).
 
     Returns:
-        dict: Dictionary returned from the API.
+        types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f'{system_settings.API_V1_URL}/{endpoint}/{identifier}'
-    return api_request('get', url=url).json()
+    url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
+    data = api_request('get', url=url).json()
+    return data
 
 
-def get_instances(endpoint, identifiers=None, **filters):
+def create_instance(endpoint, **data):
     """
-    Return list objects from a list API endpoint.
+    Create database instance.
+
+    Arguments:
+        endpoint (str): endpoint without API base URL (e.g. `analyses`).
+        data (dict): fields to be created.
+
+    Returns:
+        types.SimpleNamespace: loaded with data returned from the API.
+    """
+    url = f'{system_settings.API_BASE_URL}/{endpoint}'
+    data = api_request('post', url=url, json=data).json()
+    return data
+
+
+def patch_instance(endpoint, identifier, **data):
+    """
+    Patch database instance.
+
+    Arguments:
+        identifier (str): a primary key, system_id, email or username.
+        endpoint (str): endpoint without API base URL (e.g. `analyses`).
+        data (dict): fields to be patched.
+
+    Returns:
+        types.SimpleNamespace: loaded with data returned from the API.
+    """
+    url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
+    data = api_request('patch', url=url, json=data).json()
+    return data
+
+
+def delete_instance(endpoint, identifier):
+    """
+    Delete database instance.
+
+    Arguments:
+        identifier (str): a primary key, system_id, email or username.
+        endpoint (str): endpoint without API base URL (e.g. `analyses`).
+    """
+    url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
+    api_request('delete', url=url)
+
+
+def get_instances(endpoint, identifiers=None, verbose=False, **filters):
+    """
+    Return instances from a list API endpoint.
 
     if not `identifiers` and not `filters` retrieves all objects in database.
 
     Arguments:
-        endpoint (str): endpoint without API base URL (e.g. `workflows`).
+        endpoint (str): endpoint without API base URL (e.g. `analyses`).
         identifiers (list): List of identifiers.
         filters (dict): name, value pairs for API filtering.
 
@@ -150,12 +195,16 @@ def get_instances(endpoint, identifiers=None, **filters):
             specimens or workdflows.
 
     Returns:
-        list: of objects as returned by the API.
+        list: of types.SimpleNamespace objects loaded with dicts from API.
     """
     check_system_id = endpoint in {'individuals', 'specimens', 'workflows'}
-    url = f'{system_settings.API_V1_URL}/{endpoint}'
+    url = f'{system_settings.API_BASE_URL}/{endpoint}'
     instances = []
     keys = set()
+
+    if verbose:
+        count = get_instances_count(**filters) + len(identifiers or [])
+        click.echo(f'Retrieving at least {count} {endpoint}...')
 
     if filters or identifiers is None:
         instances += iterate(url, limit=2000, **filters)
@@ -190,13 +239,19 @@ def get_instances_count(endpoint, **filters):
     Return the count of a list url.
 
     Arguments:
-        endpoint (str): endpoint without API base URL (e.g. `workflows`).
+        endpoint (str): endpoint without API base URL (e.g. `analyses`).
         filters (dict): name, value pairs for API filtering.
 
     Returns:
         int: count of objects matching the provided filters.
     """
-    url = f'{system_settings.API_V1_URL}/{endpoint}'
+    url = f'{system_settings.API_BASE_URL}/{endpoint}'
     filters = process_api_filters(**filters)
     filters['limit'] = 1
     return int(api_request('get', url=url, params=filters).json()['count'])
+
+
+def patch_analyses_status(primary_keys, status):
+    """Patch the `status` of multiple analyses given their `primary_keys`."""
+    url = f'{system_settings.API_BASE_URL}/analyses/status/'
+    api_request('patch', url=url, json={'ids': primary_keys, 'status': status})
