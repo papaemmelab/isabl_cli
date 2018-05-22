@@ -4,6 +4,17 @@ import os
 import tarfile
 
 
+def get_tree_size(path, follow_symlinks=False):
+    """Return total size of directory in bytes."""
+    total = 0
+    for entry in os.scandir(path):
+        if entry.is_dir(follow_symlinks=follow_symlinks):
+            total += get_tree_size(entry.path)
+        else:
+            total += entry.stat(follow_symlinks=follow_symlinks).st_size
+    return total
+
+
 def force_link(src, dst):
     """Force a link between src and dst."""
     try:

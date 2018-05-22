@@ -1,12 +1,14 @@
 """cli module."""
 
-import json
-import os
+from importlib import import_module
+from os import environ
 from os.path import abspath
 from os.path import dirname
-from os.path import join
-from os import environ
 from os.path import expanduser
+from os.path import join
+import importlib
+import json
+import os
 
 ROOT = abspath(dirname(__file__))  # make sure we use absolute paths
 
@@ -17,7 +19,23 @@ __version__ = VERSION
 
 _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
+    'GET_DATA_DIR_FUNCTION': 'cli.data.get_data_dir',
+    'DATA_STORAGE_DIRECTORY': None
     }
+
+_IMPORT_STRINGS = {'GET_DATA_DIR'}
+
+
+def import_from_string(val, setting_name):
+    """Attempt to import a class from a string representation."""
+    try:
+        module_path, class_name = val.rsplit('.', 1)
+        module = import_module(module_path)
+        return getattr(module, class_name)
+    except (ImportError, AttributeError) as error:
+        raise ImportError(
+            f"Could not import '{val}' for setting '{setting_name}'. "
+            f"{error.__class__.__name__}: {error}.")
 
 
 class UserSettings(object):
@@ -85,12 +103,11 @@ class SystemSettings(object):
             val = self.defaults[attr]
 
         if attr in self.import_strings:  # coerce import strings into object
-            pass
-            # val = perform_import(val, attr)
+            val = import_from_string(val, attr)
 
         return val
 
 
 # pylint: disable=C0103
-system_settings = SystemSettings(defaults=_DEFAULTS, import_strings={})
+system_settings = SystemSettings(_DEFAULTS, _IMPORT_STRINGS)
 user_settings = UserSettings()
