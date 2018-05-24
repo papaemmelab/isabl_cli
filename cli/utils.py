@@ -1,7 +1,10 @@
 """cli utils."""
 
+import getpass
 import os
 import tarfile
+
+from cli import system_settings
 
 
 def get_tree_size(path, follow_symlinks=False):
@@ -39,13 +42,10 @@ def tar_dir(output_path, source_dir):
         tar.add(source_dir, arcname=os.path.basename(source_dir))
 
 
-def _check_admin(msg=None):
-    """Raise error if user is not settings.ADMIN unless settings.TEST_MODE."""
-    if settings.TEST_MODE:
-        return
+def check_admin(msg=None):
+    """Raise PermissionError if user is not system_settings.ADMIN_USER."""
+    admin = system_settings.ADMIN_USER
+    msg = msg or f'Operation can only be performed by {admin}'
 
-    if msg is None:
-        msg = "Operation can only be performed by %s" % settings.ADMIN_USER
-
-    if getpass.getuser() != settings.ADMIN_USER:
+    if getpass.getuser() != admin:
         raise PermissionError(msg)

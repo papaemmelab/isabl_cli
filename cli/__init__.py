@@ -9,6 +9,7 @@ from os.path import join
 import importlib
 import json
 import os
+import getpass
 
 ROOT = abspath(dirname(__file__))  # make sure we use absolute paths
 
@@ -20,10 +21,12 @@ __version__ = VERSION
 _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
     'GET_DATA_DIR_FUNCTION': 'cli.data.get_data_dir',
-    'DATA_STORAGE_DIRECTORY': None
+    'DATA_STORAGE_DIRECTORY': None,
+    'FASTQ_READ_PREFIX': '',
+    'ADMIN_USER': getpass.getuser(),
     }
 
-_IMPORT_STRINGS = {'GET_DATA_DIR'}
+_IMPORT_STRINGS = {'GET_DATA_DIR_FUNCTION'}
 
 
 def import_from_string(val, setting_name):

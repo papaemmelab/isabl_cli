@@ -203,8 +203,10 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
     keys = set()
 
     if verbose:
-        count = get_instances_count(**filters) + len(identifiers or [])
-        click.echo(f'Retrieving at least {count} {endpoint}...')
+        count = get_instances_count(endpoint, **filters)
+        count += len(identifiers or [])
+        idmsg = ' at least ' if identifiers else ' '  # these may be in filters
+        click.echo(f'Retrieving{idmsg}{count} from {endpoint} API endpoint...')
 
     if filters or identifiers is None:
         instances += iterate(url, limit=2000, **filters)

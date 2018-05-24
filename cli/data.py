@@ -1,5 +1,8 @@
+"""Data import logic."""
+
 from os.path import basename
 from os.path import join
+from os.path import dirname
 import collections
 import os
 import re
@@ -11,7 +14,8 @@ from cli import system_settings
 from cli import utils
 
 
-def import_bedfile():
+def import_bedfile():  # pragma: no cover
+    """Register bedfile in technique data directory."""
     # we need to make sure bedfiles don't have the chr prefix
     bedfiles = []
 
@@ -28,7 +32,7 @@ def get_data_dir(endpoint, primary_key):
     hash_2 = f'{primary_key:04d}' [-2:]
     use_hash = {'individuals', 'spcimens', 'workflows', 'analyses'}
 
-    if not base:
+    if not base:  # pragma: no cover
         return 'Setting `DATA_STORAGE_DIRECTORY` not defined.'
 
     if endpoint in use_hash and base:
@@ -41,158 +45,166 @@ def get_data_dir(endpoint, primary_key):
 
 class LocalDataImporter():
 
+    FASTQ_REGEX = r'(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$'
+
     def __init__(self):
         self.cache = None
 
-    def import_raw_data(
-            self, filters, directories,
-            symlink=False, commit=False, key=lambda x: x['system_id']):
-        utils._check_admin()
+    def import_data(
+            self, directories, symlink=False, commit=False,
+            key=lambda x: x['system_id'], **filters):
+        utils.check_admin()
         patterns, imported, files_matched = [], [], 0
-        self.cache = collections.defaultdict(dict)
+        data_dir_fn = system_settings.GET_DATA_DIR_FUNCTION
+        self.cache = {}
 
-        for i in api.get_instances(verbose=True, **filters):
-            pk = i['pk']
+        for i in api.get_instances('workflows', verbose=True, **filters):
+            index = f"primary_key_{i['pk']}"
             identifier = str(key(i))
-            data_dir = system_settings.GET_DATA_DIR_FUNCTION('workflows', pk)
-            self.cache[pk]['workflow']: i
-            self.cache[pk]['identifier']: identifier
-            self.cache[pk]['src_dst_tuples']: []
-            self.cache[pk]['dtype']: None
-            self.cache[pk]['data_dir']: data_dir
-            self.cache[pk]['uid']: f"{i['system_id']} (using {identifier})"
+            self.cache[index] = {}
+            self.cache[index]['workflow'] = i
+            self.cache[index]['identifier'] = identifier
+            self.cache[index]['src_dst_tuples'] = []
+            self.cache[index]['dtype'] = None
+            self.cache[index]['data_dir'] = data_dir_fn('workflows', i['pk'])
+            self.cache[index]['uid'] = f"{i['system_id']} (using {identifier})"
 
-            if not i['raw_data']:
-                patterns.append(self.get_regex_pattern(i['pk'], identifier))
+            if not i['data_type']:
+                patterns.append(self._get_regex_pattern(index, identifier))
 
-        label = f'Exploring directories...'
-        for directory in directories:
-            with click.progressbar(os.walk(directory), label=label) as bar:
-                # see http://stackoverflow.com/questions/8888567
-                pattern = re.compile('|'.join(patterns))
-                for root, _, files in bar:
-                    for i in files:
-                        path = join(root, i)
-                        matched = self._update_src_dst(path, pattern)
-                        files_matched += 1 if matched else 0
+        if patterns:
+            label = f'Exploring directories...'
+            pattern = re.compile('|'.join(patterns))
 
-        if commit:
+            for directory in directories:
+                with click.progressbar(os.walk(directory), label=label) as bar:
+                    # see http://stackoverflow.com/questions/8888567
+                    for root, _, files in bar:
+                        for i in files:
+                            path = join(root, i)
+                            matched = self._update_src_dst(path, pattern)
+                            files_matched += 1 if matched else 0
+
+        if commit and files_matched:
             label = f'Processing {files_matched} matched files...'
-            with click.progressbar(self.cache.items(), label=label) as bar:
-                for pk, i in bar:
-                    for src, dst in i['src_dst_tuples']:
-                        if symlink:
-                            self.symlink(src, dst)
-                        else:
-                            self.move(src, dst)
+            with click.progressbar(self.cache.values(), label=label) as bar:
+                for i in bar:
+                    if i['src_dst_tuples']:
+                        os.makedirs(i['data_dir'], exist_ok=True)
 
-                    imported.append(api.patch_instance(
-                        endpoint='workflows',
-                        identifier=pk,
-                        data_url=i['data_dir'],
-                        data_usage=utils.get_tree_size(i['data_dir']),
-                        data_type=i['workflow']['dtype']))
+                        for src, dst in i['src_dst_tuples']:
+                            if symlink:
+                                self._symlink(src, dst)
+                            else:
+                                self._move(src, dst)
 
-        self._echo_summary()
+                        imported.append(api.patch_instance(
+                            endpoint='workflows',
+                            identifier=i['workflow']['pk'],
+                            storage_url=i['data_dir'],
+                            storage_usage=utils.get_tree_size(i['data_dir']),
+                            data_type=i['dtype']))
+
+        summary = self._get_summary()
+        click.echo(summary)
+
         return imported
 
     @staticmethod
-    def symlink(src, dst):
+    def _symlink(src, dst):
         return utils.force_symlink(os.path.realpath(src), dst)
 
     @staticmethod
-    def move(src, dst):
+    def _move(src, dst):
         return os.rename(os.path.realpath(src), dst)
 
-    def is_valid_fastq(self, path):
-        return path.endswith('.fastq.gz')
-
-    def is_valid_bam(self, path):
-        return path.endswith('.bam') or '.bam.' in path
-
     @staticmethod
-    def get_regex_pattern(primary_key, identifier):
+    def _get_regex_pattern(group_name, identifier):
         """
-        Get regex pattern for `identifier` that uses `primary_key` as group.
+        Get regex pattern for `identifier` that sets `group_name` as group.
 
         This pattern treats dashes, underscores and dots equally.
 
         Arguments:
-            primary_key (int): primary key used as group in regex pattern.
+            group_name (str): regex pattern group name.
             identifier (str): identifier to be matched by regex.
 
         Returns:
             str: a regex pattern.
         """
         pattern = re.sub(r'[-_.]', r'[-_.]', identifier)
-        return r'(?P<{}>[-_.]?{}[-_.])'.format(primary_key, pattern)
+        return r'(?P<{}>[-_.]?{}[-_.])'.format(group_name, pattern)
 
     def _update_src_dst(self, path, pattern):
-        dst = None
-        matches = pattern.finditer(path)
-
         try:
-            pk = next(matches).lastgroup
-            uid = self.cache[pk]['uid']
-            src_dst_tuples = self.cache[pk]['src_dst_tuples']
-        except StopIteration:
+            matches = pattern.finditer(path)
+            index = next(matches).lastgroup
+            uid = self.cache[index]['uid']
+            data_dir = self.cache[index]['data_dir']
+            system_id = self.cache[index]['workflow']['system_id']
+            src_dst_tuples = self.cache[index]['src_dst_tuples']
+        except StopIteration:  # pragma: no cover
             return
 
-        try:
-            # raise error if multiple samples match the same file.
-            uid2 = self.cache[next(matches).lastgroup]['uid']
-            raise click.UsageError(f'{uid} and {uid2} matched: {path}')
-        except StopIteration:
-            pass
+        dst = None
+        bam_dst = self._get_bam_dst(path)
+        fastq_dst = self._get_fastq_dst(path)
 
-        if self.is_valid_bam(path):
-            src_dst_tuples.append((path, self._get_bam_dst(pk, path)))
-            dtype = 'BAM'
-        elif self.is_valid_fastq(path):
-            src_dst_tuples.append((path, self._get_fastq_dst(pk, path)))
-            dtype = 'FASTQ'
+        if bam_dst or fastq_dst:
+            try:  # raise error if multiple samples match the same file.
+                uid2 = self.cache[next(matches).lastgroup]['uid']
+                raise click.UsageError(f'{uid} and {uid2} matched: {path}')
+            except StopIteration:  # pragma: no cover
+                pass
 
-        if self.cache['pk']['dtype'] in {None, dtype}:
-            self.cache['pk']['dtype'] = dtype
-        else:
-            raise click.UsageError(
-                f'{uid} matched different data types: '
-                f"{', '.join(i for i, _ in src_dst_tuples)}")
+            dst = bam_dst or fastq_dst
+            dst = join(data_dir, system_id + '_' + basename(dst))
+            dtype = 'BAM' if bam_dst else 'FASTQ'
+            src_dst_tuples.append((path, dst))
+
+            if self.cache[index]['dtype'] in {None, dtype}:
+                self.cache[index]['dtype'] = dtype
+            else:
+                raise click.UsageError(
+                    f'{uid} matched different data types: '
+                    f"{', '.join(i for i, _ in src_dst_tuples)}")
+
 
         return dst is not None
 
-    def _get_bam_dst(self, pk, path):
-        return join(
-            self.cache[pk]['data_dir'],
-            self.cache[pk]['workflow']['system_id'] + '_' + basename(path))
+    def _get_bam_dst(self, path):
+        return path if re.search(r'\.bam(\.[a-z0-9]+)?$', path) else None
 
-    def _get_fastq_dst(self, pk, path):
-        if re.search('_[1|2].fastq', path):
-            dst = path
-        elif re.search('[_.]R1[_.]', path):
-            dst = re.sub('[_.]R1[_.]', '_', path)
-            dst = re.sub('[-_.]fastq', '_1.fastq', dst)
-        elif re.search('[_.]R2[_.]', path):
-            dst = re.sub('[_.]R2[_.]', '_', path)
-            dst = re.sub('[-_.]fastq', '_2.fastq', dst)
-        else:
-            raise click.UsageError('Fastq names missing `_R1_` or `_R2_`')
+    def _get_fastq_dst(self, path):
+        for i in [1, 2]:
+            letter_index_fastq = r'[_.]R{}([_.])?\.f(ast)?q'.format(i)
+            number_index_fastq = r'[_.]{}([_.])?\.f(ast)?q'.format(i)
+            letter_index_anyix = r'[_.]R{}[_.]'.format(i)
 
-        return join(
-            self.cache[pk]['data_dir'],
-            self.cache[pk]['workflow']['system_id'] + '_' + basename(dst))
+            if re.search(self.FASTQ_REGEX.format(i), path):
+                suffix = f'_{system_settings.FASTQ_READ_PREFIX}{i}.fastq'
+                dst = re.sub(letter_index_fastq, '.fastq', path)
+                dst = re.sub(number_index_fastq, '.fastq', dst)
+                dst = re.sub(letter_index_anyix, '_', dst)
+                return re.sub(r'[_.]f(ast)?q', suffix, dst)
 
-    def _echo_summary(self):
+        if re.search(r'\.f(ast)?q(\.gz)?$', path):
+            msg = f'cant determine if read 1 or read 2 from: {path}'
+            raise click.UsageError(msg)
+
+        return None
+
+    def _get_summary(self):
         """Get a summary of the matched, skipped, and missing files."""
         skipped, missing, matched, total_matched, nl = [], [], [], 0, '\n'
 
         for i in self.cache.values():
-            if i['workflow']['raw_data']:
+            if i['workflow']['data_type']:
                 msg = click.style(f"skipped {i['uid']}\t", fg='cyan')
-                msg += f"{i['workflow']['raw_data']} exists"
+                msg += f"{i['workflow']['data_type']} exists"
                 skipped.append(msg)
             elif i['src_dst_tuples']:
-                msg = click.style(f"found {i['uid']}\t\t", fg='green')
+                msg = click.style(f"found {i['uid']}\n\t\t", fg='green')
                 msg += '\n\t\t'.join(src for src, _ in i['src_dst_tuples'])
                 total_matched += len(i['src_dst_tuples'])
                 matched.append(msg)
@@ -201,11 +213,11 @@ class LocalDataImporter():
                 msg += 'no files matched'
                 missing.append(msg)
 
-        click.echo(
+        return (
             f"{nl.join([nl] + skipped) if skipped else ''}"
             f"{nl.join([nl] + missing) if missing else ''}"
             f"{nl.join([nl] + matched) if matched else ''}"
-            f'\ntotal samples: {len(self.cache)}'
+            f'\n\ntotal samples: {len(self.cache)}'
             f'\nsamples skipped: {len(skipped)}'
             f'\nsamples missing: {len(missing)}'
             f'\nsamples matched: {len(matched)}'
