@@ -4,6 +4,9 @@ from os.path import join
 import os
 import tarfile
 
+import pytest
+
+from cli import _DEFAULTS
 from cli import utils
 
 
@@ -99,3 +102,26 @@ def test_tar_dir(tmpdir):
         i = i.replace(source_dir, join(dst_dir, "source_dir"))
         with open(i, "r") as f:
             assert j in f.read()
+
+
+def test_get_tree_size(tmpdir):
+    tmpdir.mkdir('l1').mkdir('l2').join('test').write('foo')
+    tmpdir.mkdir('l3').mkdir('l2').join('test').write('foo')
+    sym_false = utils.get_tree_size(tmpdir.join('l1'), follow_symlinks=False)
+    os.symlink(tmpdir.join('l3'), tmpdir.join('l1').join('l3'))
+    sym_true = utils.get_tree_size(tmpdir.join('l1'), follow_symlinks=True)
+
+    assert sym_false
+    assert sym_true
+    assert sym_true > sym_false
+
+
+def test_check_admin():
+    admin = _DEFAULTS['ADMIN_USER']
+    _DEFAULTS['ADMIN_USER'] = 'not the admin'
+
+    with pytest.raises(PermissionError) as error:
+        utils.check_admin()
+
+    assert 'not the admin' in str(error.value)
+    _DEFAULTS['ADMIN_USER'] = admin

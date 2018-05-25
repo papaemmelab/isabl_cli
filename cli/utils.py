@@ -15,6 +15,8 @@ def get_tree_size(path, follow_symlinks=False):
             total += get_tree_size(entry.path)
         else:
             total += entry.stat(follow_symlinks=follow_symlinks).st_size
+
+        print(total, entry)
     return total
 
 
@@ -43,7 +45,7 @@ def tar_dir(output_path, source_dir):
 
 
 def check_admin(msg=None):
-    """Raise PermissionError if user is not system_settings.ADMIN_USER."""
+    """Raise `PermissionError` if user is not `system_settings.ADMIN_USER`."""
     admin = system_settings.ADMIN_USER
     msg = msg or f'Operation can only be performed by {admin}'
 

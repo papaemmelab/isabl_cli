@@ -11,6 +11,8 @@ import json
 import os
 import getpass
 
+import yaml
+
 ROOT = abspath(dirname(__file__))  # make sure we use absolute paths
 
 with open(join(ROOT, "VERSION"), "r") as version_file:
@@ -28,6 +30,8 @@ _DEFAULTS = {
 
 _IMPORT_STRINGS = {'GET_DATA_DIR_FUNCTION'}
 
+_PATH_STRINGS = {'DATA_STORAGE_DIRECTORY'}
+
 
 def import_from_string(val, setting_name):
     """Attempt to import a class from a string representation."""
@@ -35,7 +39,7 @@ def import_from_string(val, setting_name):
         module_path, class_name = val.rsplit('.', 1)
         module = import_module(module_path)
         return getattr(module, class_name)
-    except (ImportError, AttributeError) as error:
+    except (ImportError, AttributeError) as error:  # pragma: no cover
         raise ImportError(
             f"Could not import '{val}' for setting '{setting_name}'. "
             f"{error.__class__.__name__}: {error}.")
@@ -85,15 +89,22 @@ class SystemSettings(object):
 
     """Obtained from drf-yasg."""
 
-    def __init__(self, defaults, import_strings=None):
+    def __init__(self, defaults, import_strings=None, path_strings=None):
         """See: https://github.com/axnsan12/drf-yasg/."""
         self.defaults = defaults
+        self.path_strings = path_strings or []
         self.import_strings = import_strings or []
 
     @property
     def _settings(self):
         """Return dictionary system with settings."""
-        return environ
+        settings = {}
+
+        if 'CLI_SETTINGS_PATH' in environ:
+            with open(environ['CLI_SETTINGS_PATH'], 'r') as f:
+                settings = yaml.load(f.read())
+
+        return settings
 
     def __getattr__(self, attr):
         """Check if present in user settings or fall back to defaults."""
@@ -107,10 +118,12 @@ class SystemSettings(object):
 
         if attr in self.import_strings:  # coerce import strings into object
             val = import_from_string(val, attr)
+        elif val and attr in self.path_strings:
+            val = abspath(val)
 
         return val
 
 
 # pylint: disable=C0103
-system_settings = SystemSettings(_DEFAULTS, _IMPORT_STRINGS)
+system_settings = SystemSettings(_DEFAULTS, _IMPORT_STRINGS, _PATH_STRINGS)
 user_settings = UserSettings()

@@ -22,6 +22,6 @@ from cli import __version__
 @click.command()
 @click.option("--message", default="Hello World")
 @click.version_option(version=__version__)
-def main(message):
+def main(message):  # pragma: no cover
     """Echo message and exit."""
     click.echo(message)
