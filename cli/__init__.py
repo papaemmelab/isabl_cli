@@ -10,7 +10,9 @@ import importlib
 import json
 import os
 import getpass
+import six
 
+from cached_property import cached_property
 import pytz
 import yaml
 
@@ -30,14 +32,27 @@ _DEFAULTS = {
     'ADMIN_USER': getpass.getuser(),
     'TIME_ZONE': 'America/New_York',
     'BASE_RUN_DIRECTORY': None,
+    'COMMANDS_LIST': []
     }
 
 _IMPORT_STRINGS = {
     'GET_STORAGE_DIRECTORY_FUNCTION',
     'TRASH_ANALYSIS_STORAGE_FUNCTION',
+    'COMMANDS_LIST',
     }
 
 _PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}
+
+
+def perform_import(val, setting_name):
+    """Perform the necessary import or imports."""
+    if val is None:
+        return None
+    elif isinstance(val, six.string_types):
+        return import_from_string(val, setting_name)
+    elif isinstance(val, (list, tuple)):
+        return [import_from_string(item, setting_name) for item in val]
+    return val
 
 
 def import_from_string(val, setting_name):
@@ -124,7 +139,7 @@ class SystemSettings(object):
             val = self.defaults[attr]
 
         if attr in self.import_strings:  # coerce import strings into object
-            val = import_from_string(val, attr)
+            val = perform_import(val, attr)
         elif val and attr in self.path_strings:
             val = abspath(val)
         elif attr == 'TIME_ZONE':

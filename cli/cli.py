@@ -18,10 +18,18 @@ Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 import click
 
 from cli import __version__
+from cli import commands
+from cli import system_settings
 
-@click.command()
-@click.option("--message", default="Hello World")
+
+@click.group()
 @click.version_option(version=__version__)
-def main(message):  # pragma: no cover
-    """Echo message and exit."""
-    click.echo(message)
+def main():  # pragma: no cover
+    """CLI command line tools."""
+    pass
+
+
+for i in system_settings.COMMANDS_LIST:
+    main.add_command(i)
+
+main.add_command(commands.patch_status)

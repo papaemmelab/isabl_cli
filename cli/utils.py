@@ -10,6 +10,29 @@ import click
 from cli import system_settings
 
 
+def apply_decorators(decorators):
+    """
+    Apply a list of decorators to callable.
+
+    See: http://stackoverflow.com/questions/4122815
+    """
+    def decorator(f):
+        for i in reversed(decorators):
+            f = i(f)
+        return f
+
+    return decorator
+
+
+def get_rsync_command(src, dst, chmod='a-w'):
+    """Get str for commant to move `src` directory to `dst`."""
+    return (
+        f'rsync -va --append-verify --chmod={chmod} '
+        f'--remove-source-files {src}/ {dst}/ && '
+        f'find {src}/ -depth -type d -empty '
+        r'-exec rmdir "{}" \;')
+
+
 def get_tree_size(path, follow_symlinks=False):
     """Return total size of directory in bytes."""
     total = 0

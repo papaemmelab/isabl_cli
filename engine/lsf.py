@@ -1,37 +1,59 @@
+"""An LSF pipeline engine."""
+
 from .pipeline import AbstractPipeline
+
+from collections import defaultdict
+from datetime import datetime
+from itertools import chain
+from os.path import abspath
+from os.path import dirname
+from os.path import join
+from getpass import getuser
+import os
+import random
+import re
+import subprocess
+import sys
+
+from click import progressbar
+import click
+
+from cli import system_settings
+from cli import utils
+from cli import exceptions
+from .creator import Creator
 
 
 class LsfPipeline(AbstractPipeline):
 
-    def _submit_analyses(self, command_tuples):
+    def submit_analyses(self, command_tuples):
         """
         Submit pipelines as arrays grouped by the target methods.
 
         Arguments:
             command_tuples (list): list of (analysis, command) tuples.
         """
-        label = "Grouping analyses...\t\t"
         groups = defaultdict(list)
 
         # group analyses by the methods of its targets
-        with progressbar(command_tuples, file=sys.stderr, label=label) as bar:
-            for analysis, command in bar:
-                analysis.command = command
-                targets = analysis.as_target_objects
-                key = tuple(sorted({i.technique.method for i in targets}))
-                groups[key].append(analysis)
+        for analysis, command in command_tuples:
+            targets = analysis['targets']
+            key = tuple(sorted({i['technique']['method'] for i in targets}))
+            groups[key].append((analysis, command))
 
         # execute analyses on a methods basis
-        for methods, analyses in groups.items():
-            click.echo(f"Sumbitting {len(analyses)} {methods} jobs...")
-            commands, projects = [], {}
+        for methods, command_tuples in groups.items():
+            click.echo(f"Sumbitting {len(command_tuples)} {methods} jobs...")
+            commands, projects = [], set()
 
-            for i in analyses:
-                commands.append((i.command, i.get_patch_command("FAILED")))
-                projects.update(i.projects)
+            for i, cmd in command_tuples:
+                exit_cmd = f'cli patch_status --key {i["pk"]} --status FAILED'
+                commands.append((cmd, exit_cmd))
+                projects.update(j for k in i['targets'] for j in k['projects'])
 
-            jobname = (f"Array | pipeline: {self.pipeline} | "
-                       f"methods: {methods} | projects: {projects}")
+            jobname = (
+                f"Array | pipeline: {self.pipeline['pk']} | "
+                f"methods: {methods} | projects: {projects}")
 
             try:
                 requirements = self.get_requirements(methods)  # pylint: disable=E1111

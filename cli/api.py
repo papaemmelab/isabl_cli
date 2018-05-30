@@ -253,7 +253,8 @@ def get_instances_count(endpoint, **filters):
     return int(api_request('get', url=url, params=filters).json()['count'])
 
 
-def patch_analyses_status(primary_keys, status):
+def patch_analyses_status(primary_keys, status, ran_by=None):
     """Patch the `status` of multiple analyses given their `primary_keys`."""
     url = f'{system_settings.API_BASE_URL}/analyses/status/'
-    api_request('patch', url=url, json={'ids': primary_keys, 'status': status})
+    data = {'ids': primary_keys, 'status': status, 'ran_by': ran_by}
+    api_request('patch', url=url, json=data)

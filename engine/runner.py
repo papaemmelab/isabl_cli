@@ -1,17 +1,10 @@
 """Engine runner."""
 
-from collections import defaultdict
-from datetime import datetime
 from itertools import chain
-from os.path import abspath
-from os.path import dirname
 from os.path import join
-from getpass import getpass
+from getpass import getuser
 import os
 import random
-import re
-import subprocess
-import sys
 
 from click import progressbar
 import click
@@ -57,6 +50,39 @@ class Runner(Creator):
         """Must return string, See pipeline.py module for documentation."""
         raise NotImplementedError
 
+    @staticmethod
+    def get_job_name(analysis):
+        """Get job name given an analysis dict."""
+        targets = analysis['targets']
+        references = analysis['references']
+        methods = ' '.join({i['technique']['method'] for i in targets})
+        projects = ' '.join({str(j) for i in targets for j in i['projects']})
+
+        if len(targets) > 2 or not targets:
+            targets = f'{len(targets)} samples.'
+        else:
+            targets = ' '.join([i['system_id'] for i in targets])
+
+        if len(references) > 2 or not references:
+            references = f'{len(references)} samples.'
+        else:
+            references = ' '.join([i['system_id'] for i in references])
+
+        return (
+            f'targets: {targets} | references: {references} | '
+            f'methods: {methods} | analysis: {analysis["pk"]} | '
+            f'projects: {projects} | rundir: {analysis["storage_url"]} | '
+            f'pipeline: {analysis["pipeline"]["pk"]}')
+
+    def submit_analyses(self, command_tuples):
+        """
+        Submit pipelines as arrays grouped by the target methods.
+
+        Arguments:
+            command_tuples (list): of (analysis, command) tuples.
+        """
+        raise NotImplementedError
+
     def _run_tuples(self, tuples):
         """
         Run a list of tuples.
@@ -64,6 +90,9 @@ class Runner(Creator):
         Arguments:
             tuples (list): list of (targets, references, analyses) tuples.
                 elements can be objects or identifiers.
+
+        Returns:
+            tuple: command_tuples, skipped_tuples, invalid_tuples
         """
         tuples = list(tuples)
         utils.echo_title(f'Running {len(tuples)} tuples for {self.pipeline}')
@@ -89,12 +118,14 @@ class Runner(Creator):
                 except self._skip_exceptions as error:
                     skipped_tuples.append((i, error))
 
-        self._echo_summary(invalid_tuples, command_tuples, skipped_tuples)
+        self._echo_summary(command_tuples, skipped_tuples, invalid_tuples)
 
         if self._force or self._commit:
-            self._submit_analyses(command_tuples)
+            self.submit_analyses(command_tuples)
         else:
             click.secho('\nAdd --commit to submit.\n', fg='green', blink=True)
+
+        return command_tuples, skipped_tuples, invalid_tuples
 
     def _build_command(self, analysis):
         """
@@ -109,16 +140,18 @@ class Runner(Creator):
         command, status, env = self.build_command(analysis)  # pylint: disable=E1111
         job_path = join(analysis['storage_url'], "head_job.sh")
         env_path = join(analysis['storage_url'], "head_job.env")
-        env['RUNDIR'] = analysis['storage_url']
-        env['JOBNAME'] = self.get_jobname(analysis)
-        status = 'FINISHED' if status in {'FINISHED', 'SUCCEEDED'} else status
 
-        # add a random sleep so many parallel jobs don't hit API at same time
+        if getuser() == system_settings.ADMIN_USER:
+            status = 'SUCCEEDED' if status == 'FINISHED' else status
+        elif status == 'SUCCEEDED':
+            status = 'FINISHED'
+
         command = (
-            f"sleep {random.uniform(0, 10):.3} && "
-            f"cd {analysis.rundir} && source {env_path} && "
-            f"{analysis.get_patch_command('STARTED')} && date && "
-            f"{command} && {analysis.get_patch_command(status)}")
+            f"sleep {random.uniform(0, 10):.3} && "  # avoid parallel API hits
+            f"cd {analysis['storage_url']} && source {env_path} && "
+            f"cli patch_status --key {analysis['pk']} --status STARTED"
+            f"&& date && {command} && "
+            f"cli patch_status --key {analysis['pk']} --status {status}")
 
         with open(job_path, "w") as f:
             f.write(command)
@@ -128,16 +161,7 @@ class Runner(Creator):
 
         return job_path
 
-    def _submit_analyses(self, command_tuples):
-        """
-        Submit pipelines as arrays grouped by the target methods.
-
-        Arguments:
-            command_tuples (list): of (analysis, command) tuples.
-        """
-        raise NotImplementedError
-
-    def _echo_summary(self, invalid_tuples, command_tuples, skipped_tuples):
+    def _echo_summary(self, command_tuples, skipped_tuples, invalid_tuples):
         """
         Echo errors for error tuples such as `invalid`, `cant_run`.
 

@@ -1,11 +1,10 @@
-"""Leuktools base validator."""
+"""Pipeline engine command line interface logic."""
 
 import click
 
-from leuktools import exceptions
-from leuktools import options
-from leuktools import utils
-from leuktools.engine.runner import Runner
+from cli import options
+from cli import utils
+from .runner import Runner
 
 
 class Interface(Runner):
@@ -15,17 +14,17 @@ class Interface(Runner):
     @staticmethod
     def get_cli_options():
         """Must return CLI options, see pipeline.py for documentation."""
-        raise exceptions.NotImplementedError()
+        raise NotImplementedError
 
     @staticmethod
     def get_cli_help():
         """Must return CLI help, see pipeline.py for documentation."""
-        raise exceptions.NotImplementedError()
+        raise NotImplementedError
 
     @staticmethod
     def process_cli_options(**cli_options):
         """Must return list of tuples, see pipeline.py for documentation."""
-        raise exceptions.NotImplementedError()
+        raise NotImplementedError
 
     def _get_cli_command(self):
         """Get the click command line command."""
@@ -41,10 +40,9 @@ class Interface(Runner):
         return command
 
     def _get_cmd_name(self):
-        return f"run_{self.pipeline.name.lower()}_{self.pk}"
+        return f"run_{self.pipeline['name']}_{self.pipeline['pk']}".lower()
 
     def _get_cli_options(self):
         """Add default options."""
         return self.get_cli_options() + [
-            options.COMMIT, options.FORCE, options.QUIET
-            ]
+            options.COMMIT, options.FORCE, options.QUIET]
