@@ -11,6 +11,7 @@ import json
 import os
 import getpass
 
+import pytz
 import yaml
 
 ROOT = abspath(dirname(__file__))  # make sure we use absolute paths
@@ -22,15 +23,21 @@ __version__ = VERSION
 
 _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
-    'GET_DATA_DIR_FUNCTION': 'cli.data.get_data_dir',
-    'DATA_STORAGE_DIRECTORY': None,
+    'GET_STORAGE_DIRECTORY_FUNCTION': 'cli.data.get_storage_directory',
+    'TRASH_ANALYSIS_STORAGE_FUNCTION': 'cli.data.trash_analysis_storage',
+    'BASE_STORAGE_DIRECTORY': None,
     'FASTQ_READ_PREFIX': '',
     'ADMIN_USER': getpass.getuser(),
+    'TIME_ZONE': 'America/New_York',
+    'BASE_RUN_DIRECTORY': None,
     }
 
-_IMPORT_STRINGS = {'GET_DATA_DIR_FUNCTION'}
+_IMPORT_STRINGS = {
+    'GET_STORAGE_DIRECTORY_FUNCTION',
+    'TRASH_ANALYSIS_STORAGE_FUNCTION',
+    }
 
-_PATH_STRINGS = {'DATA_STORAGE_DIRECTORY'}
+_PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}
 
 
 def import_from_string(val, setting_name):
@@ -120,6 +127,8 @@ class SystemSettings(object):
             val = import_from_string(val, attr)
         elif val and attr in self.path_strings:
             val = abspath(val)
+        elif attr == 'TIME_ZONE':
+            val = pytz.timezone(val)
 
         return val
 

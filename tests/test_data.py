@@ -12,7 +12,7 @@ from . import factories
 
 def test_import_bed(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
-    _DEFAULTS['DATA_STORAGE_DIRECTORY'] = str(data_storage_directory)
+    _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)
     technique = api.create_instance('techniques', **factories.TechniqueFactory())
     bed = tmpdir.join('test.bed')
     bed.write('2\t1\t2\n1\t1\t2\n')
@@ -34,7 +34,7 @@ def test_import_bed(tmpdir):
 
 def test_local_data_import(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
-    _DEFAULTS['DATA_STORAGE_DIRECTORY'] = str(data_storage_directory)
+    _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)
     keys = [1, 2, 3]
     workflows = api.get_instances('workflows', keys)
 

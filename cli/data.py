@@ -1,10 +1,14 @@
 """Data import logic."""
 
+from datetime import datetime
 from os.path import basename
 from os.path import join
+from os.path import isdir
+import shutil
 import os
 import re
 import subprocess
+from getpass import getuser
 
 import click
 
@@ -13,7 +17,28 @@ from cli import system_settings
 from cli import utils
 
 
-def get_data_dir(endpoint, primary_key):
+def trash_analysis_storage(analysis):
+    """Move analysis `storage_url` to a trash directory."""
+    if analysis['status'] == 'SUCCEEDED':
+        raise click.UsageError("You can't wipe a succeeded analysis")
+
+    slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
+    slug += datetime.now(system_settings.TIME_ZONE).isoformat()
+
+    if isdir(analysis['storage_url']):
+        assert 'analyses' in analysis['storage_url']
+        trash_directory = get_storage_directory(
+            endpoint='.trashed_analyses',
+            primary_key=analysis['pk'],
+            base_directory=analysis['storage_url'].split('analyses')[0])
+
+        os.makedirs(trash_directory, exist_ok=True)
+        dst = join(trash_directory, slug)
+        click.echo(f"\n\ntrashing: {analysis['storage_url']} -> {dst}")
+        shutil.move(analysis['storage_url'], dst)
+
+
+def get_storage_directory(endpoint, primary_key, base_directory=None):
     """
     Get path to instance's data directory.
 
@@ -21,36 +46,37 @@ def get_data_dir(endpoint, primary_key):
     spcimens, workflows and analyses. For example given analyses with
     primary key 12345 and 2345:
 
-        DATA_STORAGE_DIRECTORY/analyses/23/45/2345
-        DATA_STORAGE_DIRECTORY/analyses/23/45/12345
+        {base_directory}/analyses/23/45/2345
+        {base_directory}/analyses/23/45/12345
 
     For other models such as projects or techniques the primary key is used
     naively:
 
-        DATA_STORAGE_DIRECTORY/projects/100
-        DATA_STORAGE_DIRECTORY/techniques/2
+        {base_directory}/projects/100
+        {base_directory}/techniques/2
 
     Arguments:
         endpoint (str): instance's API endpoint.
         primary_key (str): instance's primary key.
+        base_directory (str): default is system_settings.BASE_STORAGE_DIRECTORY.
 
     Returns:
         str: path to instance's data directory.
     """
-    base = system_settings.DATA_STORAGE_DIRECTORY
+    base_directory = base_directory or system_settings.BASE_STORAGE_DIRECTORY
     hash_1 = f'{primary_key:04d}' [-4:-2]
     hash_2 = f'{primary_key:04d}' [-2:]
-    use_hash = {'individuals', 'spcimens', 'workflows', 'analyses'}
+    dont_use_hash = {'projects', 'pipelines', 'techniques'}
 
-    if not base:  # pragma: no cover
-        return 'Setting `DATA_STORAGE_DIRECTORY` not defined.'
+    if not base_directory:  # pragma: no cover
+        return 'Setting `BASE_STORAGE_DIRECTORY` not defined.'
 
-    if endpoint in use_hash and base:
-        path = os.path.join(endpoint, hash_1, hash_2)
-    else:
+    if endpoint in dont_use_hash:
         path = os.path.join(endpoint)
+    else:
+        path = os.path.join(endpoint, hash_1, hash_2)
 
-    return os.path.join(base, endpoint, path, str(primary_key))
+    return os.path.join(base_directory, endpoint, path, str(primary_key))
 
 
 def import_bedfile(technique_primary_key, input_bed_path):
@@ -74,7 +100,7 @@ def import_bedfile(technique_primary_key, input_bed_path):
         raise click.UsageError(f'No .bed suffix: {input_bed_path}')
 
     instance = api.get_instance('techniques', technique_primary_key)
-    data_dir_fn = system_settings.GET_DATA_DIR_FUNCTION
+    data_dir_fn = system_settings.GET_STORAGE_DIRECTORY_FUNCTION
     data_dir = data_dir_fn('techniques', instance['pk'])
 
     if instance['bed_url']:
@@ -144,7 +170,7 @@ class LocalDataImporter():
         """
         utils.check_admin()
         imported, files_matched = [], 0
-        data_storage_dir = system_settings.DATA_STORAGE_DIRECTORY
+        data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
         pattern = self._build_cache(key, filters)
 
         if pattern:
@@ -295,7 +321,7 @@ class LocalDataImporter():
         self.cache = {}
         patterns = []
         identifiers = {}
-        data_dir_fn = system_settings.GET_DATA_DIR_FUNCTION
+        data_dir_fn = system_settings.GET_STORAGE_DIRECTORY_FUNCTION
 
         for i in api.get_instances('workflows', verbose=True, **filters):
             index = f"primary_key_{i['pk']}"

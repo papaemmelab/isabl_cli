@@ -2,7 +2,10 @@
 
 import getpass
 import os
+import sys
 import tarfile
+
+import click
 
 from cli import system_settings
 
@@ -51,3 +54,15 @@ def check_admin(msg=None):
 
     if getpass.getuser() != admin:
         raise PermissionError(msg)
+
+
+def echo_add_commit_message():
+    """Echo add `--commit` flag message."""
+    click.secho('\nAdd --commit to proceed.\n', fg='green', blink=True)
+
+
+def echo_title(title, color="cyan", blink=False):
+    """Echo a title."""
+    title = "\n" + title.strip().upper() + "\n"
+    title += "".join("-" for i in title.strip()) + "\n"
+    click.secho(title, fg=color, file=sys.stderr, blink=blink)
