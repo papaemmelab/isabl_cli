@@ -19,7 +19,8 @@
     ],
     "install_requires": [
         "Click>=6.7",
-        "PyYAML>=3.12"
+        "PyYAML>=3.12",
+        "cached_property>=1.4.2"
     ],
     "extras_require": {
         "test": [

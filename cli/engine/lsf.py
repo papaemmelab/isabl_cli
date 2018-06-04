@@ -26,6 +26,19 @@ from .creator import Creator
 
 class LsfPipeline(AbstractPipeline):
 
+    @staticmethod
+    def get_requirements(sequencing_methods):
+        """
+        Get submission requirements given a set of targets' methods.
+
+        Arguments:
+            sequencing_methods (set): targets sequencing methods.
+
+        Returns:
+            str: lsf requirements (e.g. -q test).
+        """
+        raise NotImplementedError()
+
     def submit_analyses(self, command_tuples):
         """
         Submit pipelines as arrays grouped by the target methods.
@@ -113,8 +126,9 @@ class LsfPipeline(AbstractPipeline):
         jobid = re.findall("<(.*?)>", jobid)[0]
 
         # submit array of exit commands
-        cmd = (f'bsub -J "EXIT: {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
-               f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash ')
+        cmd = (
+            f'bsub -J "EXIT: {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
+            f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash ')
 
         jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
         jobid = re.findall("<(.*?)>", jobid)[0]

@@ -6,6 +6,7 @@ from os.path import abspath
 from os.path import dirname
 from os.path import expanduser
 from os.path import join
+from getpass import getuser
 import importlib
 import json
 import os
@@ -116,6 +117,18 @@ class SystemSettings(object):
         self.defaults = defaults
         self.path_strings = path_strings or []
         self.import_strings = import_strings or []
+
+    @cached_property
+    def is_admin_user(self):
+        """True if current user is ADMIN_USER."""
+        return getuser() == self.ADMIN_USER
+
+    @cached_property
+    def api_username(self):
+        """Get current username from database."""
+        from cli.api import api_request
+        response = api_request('get', url=f'{self.API_BASE_URL}/preferences')
+        return response.json()['user']
 
     @property
     def _settings(self):

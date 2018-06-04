@@ -69,14 +69,14 @@ def get_storage_directory(endpoint, primary_key, base_directory=None):
     dont_use_hash = {'projects', 'pipelines', 'techniques'}
 
     if not base_directory:  # pragma: no cover
-        return 'Setting `BASE_STORAGE_DIRECTORY` not defined.'
+        raise click.UsageError('Setting `BASE_STORAGE_DIRECTORY` not defined.')
 
     if endpoint in dont_use_hash:
         path = os.path.join(endpoint)
     else:
         path = os.path.join(endpoint, hash_1, hash_2)
 
-    return os.path.join(base_directory, endpoint, path, str(primary_key))
+    return os.path.join(base_directory, path, str(primary_key))
 
 
 def import_bedfile(technique_primary_key, input_bed_path):

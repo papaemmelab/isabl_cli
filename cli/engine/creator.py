@@ -23,8 +23,14 @@ class Creator(Validator):
     @cached_property
     def pipeline(self):
         """Get pipeline database object."""
+        if not self.NAME or not self.VERSION:
+            raise NotImplementedError("NAME and VERSION attributes not set.")
+
         return api.create_instance(
-            'pipelines', name=self.NAME, version=self.VERSION)
+            endpoint='pipelines',
+            name=self.NAME,
+            version=self.VERSION,
+            created_by=system_settings.api_username)
 
     @staticmethod
     def validate_tuple(targets, references, analyses):
@@ -55,7 +61,8 @@ class Creator(Validator):
                         pipeline=self.pipeline,
                         targets=i[0],
                         references=i[1],
-                        analyses=i[2])
+                        analyses=i[2],
+                        created_by=system_settings.api_username)
 
                     rundir = system_settings.GET_STORAGE_DIRECTORY_FUNCTION(
                         endpoint='analyses',
@@ -68,7 +75,7 @@ class Creator(Validator):
                         storage_url=rundir,
                         storage_usage=0)
 
-                    os.makedirs(rundir)
+                    os.makedirs(rundir, exist_ok=True)
                     created_analyses.append(analysis)
                 except click.UsageError as error:
                     invalid_tuples.append(i, error)

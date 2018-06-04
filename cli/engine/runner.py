@@ -2,16 +2,17 @@
 
 from itertools import chain
 from os.path import join
-from getpass import getuser
 import os
 import random
+import subprocess
 
 from click import progressbar
 import click
 
+from cli import exceptions
 from cli import system_settings
 from cli import utils
-from cli import exceptions
+
 from .creator import Creator
 
 
@@ -23,16 +24,10 @@ class Runner(Creator):
     Implementors must define logic to build the command and get requirements.
 
     Attributes:
-        _force (bool): if true, analyses are wiped before being submitted.
-        _commit (bool): if true, analyses are started (`_force` overwrites).
-        _quiet (bool): whether or not verbose output should be printed.
+
         _skip_status (set): set of analyses status to skip.
         _skip_exceptions (bool): expected exceptions that may occur.
     """
-
-    _force = False
-    _commit = False
-    _quiet = True
     _skip_status = {'FAILED', 'FINISHED', 'STARTED', 'SUBMITTED', 'SUCCEEDED'}
     _skip_exceptions = (
         click.UsageError,
@@ -41,14 +36,19 @@ class Runner(Creator):
         exceptions.MissingOutputError)
 
     @staticmethod
-    def build_command(analysis):
-        """Must return string, see pipeline.py module for documentation."""
+    def get_patch_status_command(key, status):
+        """Return a command to patch the `status` of a given analysis `key`."""
+        return f'cli patch_status --key {key} --status {status}'
+
+    @staticmethod
+    def get_command(analysis):
+        """Must return string with command to be run."""
         raise NotImplementedError
 
     @staticmethod
-    def get_requirements(sequencing_methods):
-        """Must return string, See pipeline.py module for documentation."""
-        raise NotImplementedError
+    def get_status(analysis):  # pylint: disable=W0613
+        """Possible values are FINISHED and IN_PROGRESS."""
+        return 'FINISHED'
 
     @staticmethod
     def get_job_name(analysis):
@@ -74,28 +74,40 @@ class Runner(Creator):
             f'projects: {projects} | rundir: {analysis["storage_url"]} | '
             f'pipeline: {analysis["pipeline"]["pk"]}')
 
-    def submit_analyses(self, command_tuples):
+    @staticmethod
+    def submit_analyses(command_tuples):
         """
         Submit pipelines as arrays grouped by the target methods.
 
         Arguments:
             command_tuples (list): of (analysis, command) tuples.
         """
-        raise NotImplementedError
+        label = f'Running {len(command_tuples)} analyses...'
+        with progressbar(command_tuples, label=label) as bar:
+            for _, i in bar:
+                try:
+                    subprocess.check_call(['bash', i])
+                except subprocess.CalledProcessError:
+                    pass
 
-    def _run_tuples(self, tuples):
+    def run_tuples(self, tuples, commit, force=False, verbose=True):
         """
         Run a list of tuples.
 
         Arguments:
+            force (bool): if true, analyses are wiped before being submitted.
+            commit (bool): if true, analyses are started (`force` overwrites).
+            verbose (bool): whether or not verbose output should be printed.
             tuples (list): list of (targets, references, analyses) tuples.
                 elements can be objects or identifiers.
 
         Returns:
             tuple: command_tuples, skipped_tuples, invalid_tuples
         """
+        commit = True if force else commit
         tuples = list(tuples)
-        utils.echo_title(f'Running {len(tuples)} tuples for {self.pipeline}')
+        utils.echo_title(
+            f'Running {len(tuples)} tuples for {self.NAME} ({self.VERSION})')
 
         if not tuples:
             return None
@@ -105,29 +117,33 @@ class Runner(Creator):
 
         with progressbar(analyses, label='Building commands...\t\t') as bar:
             for i in bar:
-                if self._force and i['status'] not in {'SUCCEEDED', 'FINISHED'}:
+                if force and i['status'] not in {'SUCCEEDED', 'FINISHED'}:
                     system_settings.TRASH_ANALYSIS_STORAGE_FUNCTION(i)
-                    os.makedirs(i['storage_url'])
+                    os.makedirs(i['storage_url'], exist_ok=True)
                 elif i['status'] in self._skip_status:
                     skipped_tuples.append((i, i['status']))
                     continue
 
                 try:
-                    command = self._build_command(i)
+                    command = self._build_command_script(i)
                     command_tuples.append((i, command))
                 except self._skip_exceptions as error:
                     skipped_tuples.append((i, error))
 
-        self._echo_summary(command_tuples, skipped_tuples, invalid_tuples)
+        if verbose:
+            self._echo_summary(command_tuples, skipped_tuples, invalid_tuples)
 
-        if self._force or self._commit:
+        click.echo(
+            f"RUNNING {len(command_tuples)} | "
+            f"SKIPPED {len(skipped_tuples)} | "
+            f"INVALID {len(invalid_tuples)}")
+
+        if commit:
             self.submit_analyses(command_tuples)
-        else:
-            click.secho('\nAdd --commit to submit.\n', fg='green', blink=True)
 
         return command_tuples, skipped_tuples, invalid_tuples
 
-    def _build_command(self, analysis):
+    def _build_command_script(self, analysis):
         """
         Get analysis command as a path to a bash script.
 
@@ -137,29 +153,26 @@ class Runner(Creator):
         Returns:
             str: analysis command as a path to a bash script.
         """
-        command, status, env = self.build_command(analysis)  # pylint: disable=E1111
-        job_path = join(analysis['storage_url'], "head_job.sh")
-        env_path = join(analysis['storage_url'], "head_job.env")
+        command = self.get_command(analysis)
+        status = self.get_status(analysis)
+        command_path = join(analysis['storage_url'], "head_job.sh")
+        assert status in {'IN_PROGRESS', 'FINISHED'}
 
-        if getuser() == system_settings.ADMIN_USER:
-            status = 'SUCCEEDED' if status == 'FINISHED' else status
-        elif status == 'SUCCEEDED':
+        # analyses not run but admin will be marked as succeeded after
+        if not system_settings.is_admin_user and status == 'FINISHED':
             status = 'FINISHED'
 
         command = (
             f"sleep {random.uniform(0, 10):.3} && "  # avoid parallel API hits
-            f"cd {analysis['storage_url']} && source {env_path} && "
-            f"cli patch_status --key {analysis['pk']} --status STARTED"
+            f"cd {analysis['storage_url']} && "
+            f"{self.get_patch_status_command(analysis['pk'], 'STARTED')}"
             f"&& date && {command} && "
-            f"cli patch_status --key {analysis['pk']} --status {status}")
+            f"{self.get_patch_status_command(analysis['pk'], status)}")
 
-        with open(job_path, "w") as f:
+        with open(command_path, "w") as f:
             f.write(command)
 
-        with open(env_path, "w") as f:
-            f.write("".join(f'export {i}={env[i]}\n' for i in sorted(env)))
-
-        return job_path
+        return command_path
 
     def _echo_summary(self, command_tuples, skipped_tuples, invalid_tuples):
         """
@@ -177,22 +190,16 @@ class Runner(Creator):
         skipped_tuples.sort(key=lambda i: i[1])
         tuples = chain(command_tuples, invalid_tuples, skipped_tuples)
 
-        if self._quiet:
-            for i, msg in tuples:
-                row = {k: "NA" for k in summary_keys}
-                targets = getattr(i, "as_target_objects", i[0])
-                references = getattr(i, "as_reference_objects", i[1])
-                row["PK"] = getattr(i, "pk", "NA")
-                row["MESSAGE"] = self._style_msg(msg)
-                row["PROJECTS"] = self._style_projects(targets)
-                row["TARGETS"] = self._style_workflows(targets)
-                row["REFERENCES"] = self._style_workflows(references)
-                summary.append("\t".join(row[k] for k in summary_keys))
+        for i, msg in tuples:
+            row = {k: "NA" for k in summary_keys}
+            row["PK"] = getattr(i, "pk", "NA")
+            row["MESSAGE"] = self._style_msg(msg)
+            row["PROJECTS"] = self._style_projects(i['targets'])
+            row["TARGETS"] = self._style_workflows(i['targets'])
+            row["REFERENCES"] = self._style_workflows(i['references'])
+            summary.append("\t".join(row[k] for k in summary_keys))
 
         summary = "\n".join(summary).expandtabs(12) + "\n"
-        summary += f"RUNNING {len(command_tuples)} | "
-        summary += f"SKIPPED {len(skipped_tuples)} | "
-        summary += f"INVALID {len(invalid_tuples)}"
         click.echo(f"{summary}\n")
 
     @staticmethod
@@ -214,8 +221,8 @@ class Runner(Creator):
         keys = set()
 
         for i in targets:
-            for j in i.projects:
-                keys.add(f"{j} {i.technique.method}")
+            for j in i['projects']:
+                keys.add(f"{j} {i['technique']['method']}")
 
         return f"Projects {' '.join(keys)}"
 
@@ -225,6 +232,6 @@ class Runner(Creator):
         if len(workflows) > 2 or not workflows:
             message = f"{len(workflows)} workflows."
         else:
-            message = " ".join([i.leukid for i in workflows])
+            message = " ".join([i['system_id'] for i in workflows])
 
         return message

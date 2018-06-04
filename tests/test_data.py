@@ -34,7 +34,7 @@ def test_import_bed(tmpdir):
 
 def test_local_data_import(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
-    _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)
+    _DEFAULTS['BASE_STORAGE_DIRECTORY'] = data_storage_directory.strpath
     keys = [1, 2, 3]
     workflows = api.get_instances('workflows', keys)
 

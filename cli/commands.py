@@ -1,6 +1,5 @@
 """commands logic."""
 
-from getpass import getuser
 import subprocess
 import shutil
 import click
@@ -31,15 +30,28 @@ def patch_status(key, status):
     if analysis['status'] == 'SUCCEEDED':
         raise click.UsageError('Analysis already SUCCEEDED, cannot be patched')
 
-    if status == 'SUCCEEDED':
+    if status == 'SUCCEEDED' and True:
         utils.check_admin()
+
+    api.patch_instance(
+        endpoint='analyses',
+        identifier=analysis['pk'],
+        status=status,
+        storage_url=storage_url,
+        storage_usage=utils.get_tree_size(storage_url))
+
+
+def processed_finished():
+    utils.check_admin()
+
+    for i in api.get_instances('analyses', status='FINISHED'):
         get_storage_url = system_settings.GET_STORAGE_DIRECTORY_FUNCTION
-        storage_url = get_storage_url('analyses', analysis['pk'])
-        src = analysis['storage_url']
+        storage_url = get_storage_url('analyses', i['pk'])
+        src = i['storage_url']
 
         if storage_url != src:  # true when BASE_RUN_DIRECTORY is set
             command = utils.get_rsync_command(src, storage_url, chmod='a-w')
-        elif analysis['ran_by'] == getuser():
+        elif i['ran_by'] == system_settings.api_username:
             command = f'chmod -R a-w {storage_url}'
         else:  # need to copy if ran by other user than admin
             src = src + '__tmp'
@@ -48,8 +60,9 @@ def patch_status(key, status):
 
         subprocess.check_call(command, shell=True)
 
-    api.patch_instance(
-        endpoint='analyses',
-        identifier=analysis['pk'],
-        storage_url=storage_url,
-        storage_usage=utils.get_tree_size(storage_url))
+        api.patch_instance(
+            endpoint='analyses',
+            identifier=i['pk'],
+            storage_url=storage_url,
+            status='SUCCEEDED',
+            storage_usage=utils.get_tree_size(storage_url))
