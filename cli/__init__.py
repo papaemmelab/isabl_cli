@@ -26,20 +26,22 @@ __version__ = VERSION
 
 _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
-    'GET_STORAGE_DIRECTORY_FUNCTION': 'cli.data.get_storage_directory',
+    'GET_STORAGE_DIRECTORY': 'cli.data.get_storage_directory',
     'TRASH_ANALYSIS_STORAGE_FUNCTION': 'cli.data.trash_analysis_storage',
     'BASE_STORAGE_DIRECTORY': None,
     'FASTQ_READ_PREFIX': '',
     'ADMIN_USER': getpass.getuser(),
     'TIME_ZONE': 'America/New_York',
-    'BASE_RUN_DIRECTORY': None,
-    'COMMANDS_LIST': []
+    'COMMANDS_LIST': [],
+    'PIPELINES_SETTINGS': {},
+    'INSTALLED_PIPELINES': [],
     }
 
 _IMPORT_STRINGS = {
-    'GET_STORAGE_DIRECTORY_FUNCTION',
+    'GET_STORAGE_DIRECTORY',
     'TRASH_ANALYSIS_STORAGE_FUNCTION',
     'COMMANDS_LIST',
+    'INSTALLED_PIPELINES',
     }
 
 _PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}
@@ -47,13 +49,11 @@ _PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}
 
 def perform_import(val, setting_name):
     """Perform the necessary import or imports."""
-    if val is None:
-        return None
-    elif isinstance(val, six.string_types):
+    if isinstance(val, six.string_types):
         return import_from_string(val, setting_name)
     elif isinstance(val, (list, tuple)):
         return [import_from_string(item, setting_name) for item in val]
-    return val
+    return val  # pragma: no cover
 
 
 def import_from_string(val, setting_name):
@@ -120,7 +120,7 @@ class SystemSettings(object):
 
     @cached_property
     def is_admin_user(self):
-        """True if current user is ADMIN_USER."""
+        """Return True if current user is ADMIN_USER."""
         return getuser() == self.ADMIN_USER
 
     @cached_property

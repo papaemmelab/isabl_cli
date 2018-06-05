@@ -4,7 +4,6 @@ import subprocess
 import shutil
 import click
 
-from cli import system_settings
 from cli import utils
 from cli import api
 
@@ -30,7 +29,7 @@ def patch_status(key, status):
     if analysis['status'] == 'SUCCEEDED':
         raise click.UsageError('Analysis already SUCCEEDED, cannot be patched')
 
-    if status == 'SUCCEEDED' and True:
+    if status == 'SUCCEEDED':
         utils.check_admin()
 
     api.patch_instance(
@@ -41,28 +40,14 @@ def patch_status(key, status):
         storage_usage=utils.get_tree_size(storage_url))
 
 
+@click.command()
 def processed_finished():
+    """Process and update all finished analyses that were not ran by admin."""
     utils.check_admin()
-
     for i in api.get_instances('analyses', status='FINISHED'):
-        get_storage_url = system_settings.GET_STORAGE_DIRECTORY_FUNCTION
-        storage_url = get_storage_url('analyses', i['pk'])
-        src = i['storage_url']
-
-        if storage_url != src:  # true when BASE_RUN_DIRECTORY is set
-            command = utils.get_rsync_command(src, storage_url, chmod='a-w')
-        elif i['ran_by'] == system_settings.api_username:
-            command = f'chmod -R a-w {storage_url}'
-        else:  # need to copy if ran by other user than admin
-            src = src + '__tmp'
-            shutil.move(storage_url, src)
-            command = utils.get_rsync_command(src, storage_url, chmod='a-w')
-
+        dst = i['storage_url']
+        src = dst + '__tmp'
+        shutil.move(dst, src)
+        command = utils.get_rsync_command(src, dst, chmod='a-w')
         subprocess.check_call(command, shell=True)
-
-        api.patch_instance(
-            endpoint='analyses',
-            identifier=i['pk'],
-            storage_url=storage_url,
-            status='SUCCEEDED',
-            storage_usage=utils.get_tree_size(storage_url))
+        api.patch_instance('analyses', i['pk'], status='SUCCEEDED')

@@ -22,61 +22,53 @@ def trash_analysis_storage(analysis):
     if analysis['status'] == 'SUCCEEDED':
         raise click.UsageError("You can't wipe a succeeded analysis")
 
-    slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
-    slug += datetime.now(system_settings.TIME_ZONE).isoformat()
-
     if isdir(analysis['storage_url']):
-        assert 'analyses' in analysis['storage_url']
-        trash_directory = get_storage_directory(
-            endpoint='.trashed_analyses',
-            primary_key=analysis['pk'],
-            base_directory=analysis['storage_url'].split('analyses')[0])
-
-        os.makedirs(trash_directory, exist_ok=True)
-        dst = join(trash_directory, slug)
-        click.echo(f"\n\ntrashing: {analysis['storage_url']} -> {dst}")
+        slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
+        slug += datetime.now(system_settings.TIME_ZONE).isoformat()
+        trash_dir = get_storage_directory('.analyses_trash', analysis['pk'])
+        os.makedirs(trash_dir, exist_ok=True)
+        dst = join(trash_dir, slug)
+        click.echo(f"\ntrashing: {analysis['storage_url']} -> {dst}\n")
         shutil.move(analysis['storage_url'], dst)
 
 
-def get_storage_directory(endpoint, primary_key, base_directory=None):
+def get_storage_directory(endpoint, primary_key, root=None, use_hash=True):
     """
     Get path to instance's data directory.
 
-    A hash naming system using the primay key is used for individuals,
-    spcimens, workflows and analyses. For example given analyses with
-    primary key 12345 and 2345:
+    If `use_hash` a naming system using the primay key is used. For example
+    given `endpoint` analyses with primary keys 12345 and 2345:
 
-        {base_directory}/analyses/23/45/2345
-        {base_directory}/analyses/23/45/12345
+        {root}/analyses/23/45/2345
+        {root}/analyses/23/45/12345
 
-    For other models such as projects or techniques the primary key is used
-    naively:
+    If `use_hash` is False:
 
-        {base_directory}/projects/100
-        {base_directory}/techniques/2
+        {root}/projects/100
+        {root}/techniques/2
 
     Arguments:
         endpoint (str): instance's API endpoint.
         primary_key (str): instance's primary key.
-        base_directory (str): default is system_settings.BASE_STORAGE_DIRECTORY.
+        root (str): default is system_settings.BASE_STORAGE_DIRECTORY.
+        use_hash (bool): hash primary key for directories.
 
     Returns:
         str: path to instance's data directory.
     """
-    base_directory = base_directory or system_settings.BASE_STORAGE_DIRECTORY
+    root = root or system_settings.BASE_STORAGE_DIRECTORY
     hash_1 = f'{primary_key:04d}' [-4:-2]
     hash_2 = f'{primary_key:04d}' [-2:]
-    dont_use_hash = {'projects', 'pipelines', 'techniques'}
 
-    if not base_directory:  # pragma: no cover
+    if not root:  # pragma: no cover
         raise click.UsageError('Setting `BASE_STORAGE_DIRECTORY` not defined.')
 
-    if endpoint in dont_use_hash:
-        path = os.path.join(endpoint)
+    if use_hash:
+        path = os.path.join('data', endpoint, hash_1, hash_2)
     else:
-        path = os.path.join(endpoint, hash_1, hash_2)
+        path = os.path.join('data', endpoint)
 
-    return os.path.join(base_directory, path, str(primary_key))
+    return os.path.join(root, path, str(primary_key))
 
 
 def import_bedfile(technique_primary_key, input_bed_path):
@@ -100,7 +92,7 @@ def import_bedfile(technique_primary_key, input_bed_path):
         raise click.UsageError(f'No .bed suffix: {input_bed_path}')
 
     instance = api.get_instance('techniques', technique_primary_key)
-    data_dir_fn = system_settings.GET_STORAGE_DIRECTORY_FUNCTION
+    data_dir_fn = system_settings.GET_STORAGE_DIRECTORY
     data_dir = data_dir_fn('techniques', instance['pk'])
 
     if instance['bed_url']:
@@ -321,7 +313,7 @@ class LocalDataImporter():
         self.cache = {}
         patterns = []
         identifiers = {}
-        data_dir_fn = system_settings.GET_STORAGE_DIRECTORY_FUNCTION
+        data_dir_fn = system_settings.GET_STORAGE_DIRECTORY
 
         for i in api.get_instances('workflows', verbose=True, **filters):
             index = f"primary_key_{i['pk']}"

@@ -64,21 +64,20 @@ class Creator(Validator):
                         analyses=i[2],
                         created_by=system_settings.api_username)
 
-                    rundir = system_settings.GET_STORAGE_DIRECTORY_FUNCTION(
+                    storage_url = system_settings.GET_STORAGE_DIRECTORY(
                         endpoint='analyses',
-                        primary_key=analysis['pk'],
-                        base_directory=system_settings.BASE_RUN_DIRECTORY)
+                        primary_key=analysis['pk'])
 
                     analysis = api.patch_instance(
                         endpoint='analyses',
                         identifier=analysis['pk'],
-                        storage_url=rundir,
+                        storage_url=storage_url,
                         storage_usage=0)
 
-                    os.makedirs(rundir, exist_ok=True)
+                    os.makedirs(storage_url, exist_ok=True)
                     created_analyses.append(analysis)
                 except click.UsageError as error:
-                    invalid_tuples.append(i, error)
+                    invalid_tuples.append((i, error))
 
         return existing_analyses + created_analyses, invalid_tuples
 

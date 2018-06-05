@@ -12,6 +12,7 @@ import click
 from cli import exceptions
 from cli import system_settings
 from cli import utils
+from cli import api
 
 from .creator import Creator
 
@@ -24,10 +25,10 @@ class Runner(Creator):
     Implementors must define logic to build the command and get requirements.
 
     Attributes:
-
         _skip_status (set): set of analyses status to skip.
         _skip_exceptions (bool): expected exceptions that may occur.
     """
+
     _skip_status = {'FAILED', 'FINISHED', 'STARTED', 'SUBMITTED', 'SUCCEEDED'}
     _skip_exceptions = (
         click.UsageError,
@@ -36,43 +37,19 @@ class Runner(Creator):
         exceptions.MissingOutputError)
 
     @staticmethod
-    def get_patch_status_command(key, status):
-        """Return a command to patch the `status` of a given analysis `key`."""
-        return f'cli patch_status --key {key} --status {status}'
-
-    @staticmethod
-    def get_command(analysis):
+    def get_command(analysis, settings):
         """Must return string with command to be run."""
         raise NotImplementedError
 
     @staticmethod
     def get_status(analysis):  # pylint: disable=W0613
         """Possible values are FINISHED and IN_PROGRESS."""
-        return 'FINISHED'
+        raise NotImplementedError
 
     @staticmethod
-    def get_job_name(analysis):
-        """Get job name given an analysis dict."""
-        targets = analysis['targets']
-        references = analysis['references']
-        methods = ' '.join({i['technique']['method'] for i in targets})
-        projects = ' '.join({str(j) for i in targets for j in i['projects']})
-
-        if len(targets) > 2 or not targets:
-            targets = f'{len(targets)} samples.'
-        else:
-            targets = ' '.join([i['system_id'] for i in targets])
-
-        if len(references) > 2 or not references:
-            references = f'{len(references)} samples.'
-        else:
-            references = ' '.join([i['system_id'] for i in references])
-
-        return (
-            f'targets: {targets} | references: {references} | '
-            f'methods: {methods} | analysis: {analysis["pk"]} | '
-            f'projects: {projects} | rundir: {analysis["storage_url"]} | '
-            f'pipeline: {analysis["pipeline"]["pk"]}')
+    def get_patch_status_command(key, status):
+        """Return a command to patch the `status` of a given analysis `key`."""
+        return f'cli patch_status --key {key} --status {status}'
 
     @staticmethod
     def submit_analyses(command_tuples):
@@ -84,11 +61,22 @@ class Runner(Creator):
         """
         label = f'Running {len(command_tuples)} analyses...'
         with progressbar(command_tuples, label=label) as bar:
-            for _, i in bar:
+            for i, j in bar:
                 try:
-                    subprocess.check_call(['bash', i])
+                    log = join(i['storage_url'], 'head_job.log')
+                    err = join(i['storage_url'], 'head_job.err')
+                    with open(log, 'w') as stdout, open(err, 'w') as stderr:
+                        subprocess.check_call(
+                            args=['bash', j],
+                            stdout=stdout,
+                            stderr=stderr)
+
                 except subprocess.CalledProcessError:
-                    pass
+                    api.patch_instance(
+                        endpoint='analyses',
+                        identifier=i['pk'],
+                        storage_usage=utils.get_tree_size(i['storage_url']),
+                        status='FAILED')
 
     def run_tuples(self, tuples, commit, force=False, verbose=True):
         """
@@ -109,7 +97,7 @@ class Runner(Creator):
         utils.echo_title(
             f'Running {len(tuples)} tuples for {self.NAME} ({self.VERSION})')
 
-        if not tuples:
+        if not tuples:  # pragma: no cover
             return None
 
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
@@ -127,7 +115,7 @@ class Runner(Creator):
                 try:
                     command = self._build_command_script(i)
                     command_tuples.append((i, command))
-                except self._skip_exceptions as error:
+                except self._skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
         if verbose:
@@ -136,7 +124,7 @@ class Runner(Creator):
         click.echo(
             f"RUNNING {len(command_tuples)} | "
             f"SKIPPED {len(skipped_tuples)} | "
-            f"INVALID {len(invalid_tuples)}")
+            f"INVALID {len(invalid_tuples)}\n")
 
         if commit:
             self.submit_analyses(command_tuples)
@@ -153,28 +141,32 @@ class Runner(Creator):
         Returns:
             str: analysis command as a path to a bash script.
         """
-        command = self.get_command(analysis)
+        command = self.get_command(analysis, system_settings.PIPELINES_SETTINGS)
         status = self.get_status(analysis)
-        command_path = join(analysis['storage_url'], "head_job.sh")
+        command_path = join(analysis['storage_url'], 'head_job.sh')
         assert status in {'IN_PROGRESS', 'FINISHED'}
 
         # analyses not run but admin will be marked as succeeded after
-        if not system_settings.is_admin_user and status == 'FINISHED':
-            status = 'FINISHED'
+        if system_settings.is_admin_user and status == 'FINISHED':
+            status = 'SUCCEEDED'
 
         command = (
-            f"sleep {random.uniform(0, 10):.3} && "  # avoid parallel API hits
-            f"cd {analysis['storage_url']} && "
-            f"{self.get_patch_status_command(analysis['pk'], 'STARTED')}"
+            # f"sleep {random.uniform(0, 3):.3} && "  # avoid parallel API hits
+            f"cd {analysis['storage_url']} && umask g+wrx && "
+            f"{self.get_patch_status_command(analysis['pk'], 'STARTED')} "
             f"&& date && {command} && "
             f"{self.get_patch_status_command(analysis['pk'], status)}")
+
+        if system_settings.is_admin_user:
+            command += f" && chmod -R a-w {analysis['storage_url']}"
 
         with open(command_path, "w") as f:
             f.write(command)
 
         return command_path
 
-    def _echo_summary(self, command_tuples, skipped_tuples, invalid_tuples):
+    @staticmethod
+    def _echo_summary(command_tuples, skipped_tuples, invalid_tuples):
         """
         Echo errors for error tuples such as `invalid`, `cant_run`.
 
@@ -183,55 +175,49 @@ class Runner(Creator):
             command_tuples (list): of (analysis, command) tuples.
             skipped_tuples (list): of (analysis, skip reason) tuples.
         """
-        summary_keys = ["PK", "PROJECTS", "TARGETS", "REFERENCES", "MESSAGE"]
-        summary = ["\n"]
+        summary_keys = ['PK', 'PROJECTS', 'TARGETS', 'REFERENCES', 'MESSAGE']
+        summary = ['\n']
         command_tuples.sort(key=lambda i: i[1])
         invalid_tuples.sort(key=lambda i: i[1])
         skipped_tuples.sort(key=lambda i: i[1])
-        tuples = chain(command_tuples, invalid_tuples, skipped_tuples)
 
-        for i, msg in tuples:
-            row = {k: "NA" for k in summary_keys}
-            row["PK"] = getattr(i, "pk", "NA")
-            row["MESSAGE"] = self._style_msg(msg)
-            row["PROJECTS"] = self._style_projects(i['targets'])
-            row["TARGETS"] = self._style_workflows(i['targets'])
-            row["REFERENCES"] = self._style_workflows(i['references'])
-            summary.append("\t".join(row[k] for k in summary_keys))
+        def _style_msg(msg):
+            color = 'blue'
+            if isinstance(msg, Exception):
+                color = 'red'
+            elif msg == 'SUCCEEDED':
+                color = 'green'
+            return click.style(str(msg), fg=color)
 
-        summary = "\n".join(summary).expandtabs(12) + "\n"
-        click.echo(f"{summary}\n")
+        def _style_projects(targets):
+            keys = set()
+            for i in targets:
+                for j in i['projects']:  # pragma: no cover
+                    keys.add(f"{j} {i['technique']['method']}")
+            return f"Projects {' '.join(keys)}" if keys else '0 projects'
 
-    @staticmethod
-    def _style_msg(msg):
-        """Color message depending on its nature."""
-        if isinstance(msg, exceptions.MissingRequirementError):
-            color = "yellow"
-        elif isinstance(msg, Exception):
-            color = "red"
-        elif msg == "SUCCEEDED":
-            color = "green"
-        else:
-            color = "blue"
-        return click.style(msg, fg=color)
+        def _style_workflows(workflows, relation='targets'):
+            if len(workflows) > 2 or not workflows:
+                return f'{len(workflows)} {relation}'
+            return ' '.join([i['system_id'] for i in workflows])
 
-    @staticmethod
-    def _style_projects(targets):
-        """Color message depending on its nature."""
-        keys = set()
+        for i, msg in command_tuples + skipped_tuples + invalid_tuples:
+            if isinstance(i, dict):  # if skipped, command
+                identifier = str(i['pk'])
+                targets = i['targets']
+                references = i['references']
+            else:  # if invalid tuples
+                identifier = 'INVALID'
+                targets = i[0]
+                references = i[1]
 
-        for i in targets:
-            for j in i['projects']:
-                keys.add(f"{j} {i['technique']['method']}")
+            row = {k: 'NA' for k in summary_keys}
+            row['PK'] = identifier
+            row['MESSAGE'] = _style_msg(msg)
+            row['PROJECTS'] = _style_projects(targets)
+            row['TARGETS'] = _style_workflows(targets)
+            row['REFERENCES'] = _style_workflows(references, 'references')
+            summary.append('\t'.join(row[k] for k in summary_keys))
 
-        return f"Projects {' '.join(keys)}"
-
-    @staticmethod
-    def _style_workflows(workflows):
-        """Color message depending on its nature."""
-        if len(workflows) > 2 or not workflows:
-            message = f"{len(workflows)} workflows."
-        else:
-            message = " ".join([i['system_id'] for i in workflows])
-
-        return message
+        summary = '\n'.join(summary).expandtabs(12) + '\n'
+        click.echo(f'{summary}\n')

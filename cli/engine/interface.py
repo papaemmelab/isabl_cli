@@ -45,25 +45,27 @@ class Interface(Runner):
         """Must return list of tuples, see pipeline.py for documentation."""
         raise NotImplementedError
 
-    def get_cli_command(self):
-        """Get the click command line command."""
-        @click.command(help=self.get_cli_help(), name=self._get_cmd_name())
-        @utils.apply_decorators(self._get_cli_options())
+    @classmethod
+    def as_cli_command(cls):
+        """Get pipeline as click command line interface."""
+        pipe = cls()
+
+        @click.command(help=pipe.get_cli_help(), name=pipe._get_cmd_name())
+        @utils.apply_decorators(pipe._get_cli_options())
         def command(commit, force, verbose, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
                 raise click.UsageError(
                     '--commit is redundant with --force, simply use --force')
 
-            self.run_tuples(
-                tuples=self.get_tuples(**cli_options),
+            pipe.run_tuples(
+                tuples=pipe.get_tuples(**cli_options),
                 commit=commit,
                 force=force,
                 verbose=verbose)
 
             if not (commit or force):
-                msg = '\nAdd --commit to submit.\n'
-                click.secho(msg, fg='green', blink=True)
+                utils.echo_add_commit_message()
 
         return command
 

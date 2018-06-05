@@ -11,21 +11,20 @@ class Validator():
     def validate_tuple_ispair(self, targets, references, analyses):
         """Validate targets, references tuple is a pair."""
         if len(targets) != 1 or len(references) != 1:
-            raise click.UsageError("Pipeline requires tumor normal pairs")
+            raise click.UsageError('Target, reference pairs required.')
         return True
 
     def validate_onetarget_noreferences(self, targets, references, analyses):
         """Test only one sample is passed targets and none on references."""
-        if len(targets) != 1 and references:
-            raise click.UsageError("Pipeline requires no references.")
+        if len(targets) != 1 or references:
+            raise click.UsageError('References not allowed.')
         return True
 
     def validate_atleast_onetarget_onereference(
             self, targets, references, analyses):
         """Validate that at least one reference and target are passed."""
         if not references or not targets:
-            raise click.UsageError(
-                "Pipeline requires at least one reference and one target.")
+            raise click.UsageError('References and targets required.')
         return True
 
     def validate_targets_notin_references(self, targets, references, analyses):
@@ -47,7 +46,7 @@ class Validator():
         msg = []
 
         for i in targets + references:
-            if i['technique']['analyte'] != "DNA":
+            if i['technique']['analyte'] != 'DNA':
                 msg .append(f"{i['system_id']} analyte is not DNA")
 
         if msg:
@@ -67,7 +66,7 @@ class Validator():
 
         if len(techniques) > 1:
             raise click.UsageError(
-                f"References have different techniques: {techniques}")
+                f'Multiple references techniques: {techniques}')
 
         msg = []
         for i in targets:

@@ -41,8 +41,6 @@ def get_tree_size(path, follow_symlinks=False):
             total += get_tree_size(entry.path)
         else:
             total += entry.stat(follow_symlinks=follow_symlinks).st_size
-
-        print(total, entry)
     return total
 
 

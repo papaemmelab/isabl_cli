@@ -10,6 +10,20 @@ from cli import data
 from . import factories
 
 
+def test_trash_analysis_storage():
+    # the rest is tested in test_engine
+    with pytest.raises(click.UsageError) as error:
+        data.trash_analysis_storage({'status': 'SUCCEEDED'})
+    assert "You can't wipe a succeeded analysis" in str(error.value)
+
+
+def test_get_storage_directory():
+    i = data.get_storage_directory('test', 12345, root='/', use_hash=True)
+    j = data.get_storage_directory('test', 12345, root='/', use_hash=False)
+    assert i == '/data/test/23/45/12345'
+    assert j == '/data/test/12345'
+
+
 def test_import_bed(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
     _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)

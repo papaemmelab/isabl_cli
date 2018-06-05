@@ -63,7 +63,7 @@ class AbstractPipeline(Interface):
         raise NotImplementedError()
 
     @staticmethod
-    def get_command(analysis):
+    def get_command(analysis, settings):
         """
         Must return command and final analysis status.
 
@@ -71,6 +71,7 @@ class AbstractPipeline(Interface):
 
         Arguments:
             analysis (dict): an analysis object as retrieved from API.
+            settings (dict): pipelines settings.
 
         Returns:
             tuple: command (str), final status (str)

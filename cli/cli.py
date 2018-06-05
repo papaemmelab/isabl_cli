@@ -29,7 +29,11 @@ def main():  # pragma: no cover
     pass
 
 
-for i in system_settings.COMMANDS_LIST:
+for i in system_settings.COMMANDS_LIST:  # pragma: no cover
     main.add_command(i)
 
+for i in system_settings.INSTALLED_PIPELINES:  # pragma: no cover
+    main.add_command(i.as_cli_command())
+
 main.add_command(commands.patch_status)
+main.add_command(commands.processed_finished)
