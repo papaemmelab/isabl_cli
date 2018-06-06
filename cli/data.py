@@ -15,6 +15,7 @@ import click
 from cli import api
 from cli import system_settings
 from cli import utils
+from cli import options
 
 
 def trash_analysis_storage(analysis):
@@ -71,7 +72,7 @@ def get_storage_directory(endpoint, primary_key, root=None, use_hash=True):
     return os.path.join(root, path, str(primary_key))
 
 
-def import_bedfile(technique_primary_key, input_bed_path):
+def import_bed(technique_primary_key, input_bed_path):
     """
     Register input_bed_path in technique data directory.
 
@@ -136,6 +137,35 @@ class LocalDataImporter():
         """Initialize cache to None."""
         self.cache = None
 
+    @classmethod
+    def as_cli_command(cls):
+        """Get data importerls as click command line interface."""
+        @click.command(help='local data import', name='import_data')
+        @options.DIRECTORIES
+        @options.IDENTIFIER
+        @options.FILTERS
+        @options.COMMIT
+        @options.SYMLINK
+        def command(identifier, commit, filters, directories, symlink):
+            """Click command to be used in the CLI."""
+            def key(workflow):
+                value, types = workflow, (int, str, type(None))
+                for i in identifier:
+                    value = value.get(i)
+                if not isinstance(value, types):
+                    raise click.UsageError(
+                        f'invalid type for identifier '
+                        f'`{".".join(identifier)}`: {type(value)}')
+                return value
+
+            matched = cls().import_data(
+                directories, symlink, commit, key, **filters)
+
+            if not commit and matched:  # pragma: no cover
+                utils.echo_add_commit_message()
+
+        return command
+
     def import_data(
             self, directories, symlink=False, commit=False,
             key=lambda x: x['system_id'], **filters):
@@ -161,7 +191,7 @@ class LocalDataImporter():
             list: of workflows dicts for which data has been matched.
         """
         utils.check_admin()
-        imported, files_matched = [], 0
+        workflows_matched, files_matched = [], 0
         data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
         pattern = self._build_cache(key, filters)
 
@@ -191,17 +221,21 @@ class LocalDataImporter():
                             else:
                                 self.move(src, dst)
 
-                        imported.append(api.patch_instance(
+                        workflows_matched.append(api.patch_instance(
                             endpoint='workflows',
                             identifier=i['workflow']['pk'],
                             storage_url=i['data_dir'],
                             storage_usage=utils.get_tree_size(i['data_dir']),
                             data_type=i['data_type']))
+        elif files_matched:  # pragma: no cover
+            for i in self.cache.values():
+                if i['src_dst_tuples']:
+                    workflows_matched.append(i['workflow'])
 
         summary = self.get_summary()
         click.echo(summary)
 
-        return imported
+        return workflows_matched
 
     def format_bam_dst(self, path):
         """Return `path` if its a valid bam file name."""
@@ -321,7 +355,7 @@ class LocalDataImporter():
 
             if identifier in identifiers:  # duplicated identifiers not valid
                 raise click.UsageError(
-                    f"{key} returned the same identifier for {i['system_id']} "
+                    f"Can't use same identifier for {i['system_id']} "
                     f'and {identifiers[identifier]}: {identifier}')
             elif not identifier:
                 identifier = 'IDENTIFIER IS NULL'
@@ -347,12 +381,13 @@ class LocalDataImporter():
         try:
             matches = pattern.finditer(path)
             index = next(matches).lastgroup
+            assert index is not None  # happens when pattern is empty
             uid = self.cache[index]['uid']
             data_dir = self.cache[index]['data_dir']
             system_id = self.cache[index]['workflow']['system_id']
             src_dst_tuples = self.cache[index]['src_dst_tuples']
-        except StopIteration:  # pragma: no cover
-            return
+        except (StopIteration, AssertionError):  # pragma: no cover
+            return None
 
         dst = None
         bam_dst = self.format_bam_dst(path)

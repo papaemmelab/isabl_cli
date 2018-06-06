@@ -27,21 +27,35 @@ __version__ = VERSION
 _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
     'GET_STORAGE_DIRECTORY': 'cli.data.get_storage_directory',
-    'TRASH_ANALYSIS_STORAGE_FUNCTION': 'cli.data.trash_analysis_storage',
-    'BASE_STORAGE_DIRECTORY': None,
+    'TRASH_ANALYSIS_STORAGE': 'cli.data.trash_analysis_storage',
+    'DATA_IMPORTER_CLASS': 'cli.data.LocalDataImporter',
+    'BASE_STORAGE_DIRECTORY': join(expanduser('~'), 'bee_storage'),
     'FASTQ_READ_PREFIX': '',
     'ADMIN_USER': getpass.getuser(),
     'TIME_ZONE': 'America/New_York',
-    'COMMANDS_LIST': [],
     'PIPELINES_SETTINGS': {},
     'INSTALLED_PIPELINES': [],
+    'CUSTOM_COMMANDS': [],
+    'ADMIN_COMMANDS': [
+        'cli.commands.import_bed',
+        'cli.commands.processed_finished',
+        ],
+    'SYSTEM_COMMANDS': [
+        'cli.commands.patch_status',
+        'cli.commands.get_fields',
+        'cli.commands.get_paths',
+        'cli.commands.get_dirs',
+        ],
     }
 
 _IMPORT_STRINGS = {
     'GET_STORAGE_DIRECTORY',
-    'TRASH_ANALYSIS_STORAGE_FUNCTION',
-    'COMMANDS_LIST',
+    'TRASH_ANALYSIS_STORAGE',
+    'ADMIN_COMMANDS',
+    'SYSTEM_COMMANDS',
+    'CUSTOM_COMMANDS',
     'INSTALLED_PIPELINES',
+    'DATA_IMPORTER_CLASS',
     }
 
 _PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}

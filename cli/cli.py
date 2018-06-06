@@ -18,7 +18,6 @@ Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 import click
 
 from cli import __version__
-from cli import commands
 from cli import system_settings
 
 
@@ -29,11 +28,17 @@ def main():  # pragma: no cover
     pass
 
 
-for i in system_settings.COMMANDS_LIST:  # pragma: no cover
+for i in system_settings.ADMIN_COMMANDS:
+    main.add_command(i)
+
+for i in system_settings.SYSTEM_COMMANDS:
+    main.add_command(i)
+
+for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
 for i in system_settings.INSTALLED_PIPELINES:  # pragma: no cover
     main.add_command(i.as_cli_command())
 
-main.add_command(commands.patch_status)
-main.add_command(commands.processed_finished)
+if system_settings.DATA_IMPORTER_CLASS:
+    main.add_command(system_settings.DATA_IMPORTER_CLASS.as_cli_command())

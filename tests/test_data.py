@@ -9,6 +9,10 @@ from cli import data
 
 from . import factories
 
+from click.testing import CliRunner
+
+from cli import cli
+
 
 def test_trash_analysis_storage():
     # the rest is tested in test_engine
@@ -30,7 +34,7 @@ def test_import_bed(tmpdir):
     technique = api.create_instance('techniques', **factories.TechniqueFactory())
     bed = tmpdir.join('test.bed')
     bed.write('2\t1\t2\n1\t1\t2\n')
-    technique = data.import_bedfile(technique['pk'], bed.strpath)
+    technique = data.import_bed(technique['pk'], bed.strpath)
 
     assert technique['bed_url']
     assert os.path.isfile(technique['bed_url'])
@@ -41,7 +45,7 @@ def test_import_bed(tmpdir):
         assert next(f).startswith('1')
 
     with pytest.raises(click.UsageError) as error:
-        data.import_bedfile(technique['pk'], bed.strpath)
+        data.import_bed(technique['pk'], bed.strpath)
 
     assert 'as a bed registered' in str(error.value)
 
@@ -99,7 +103,7 @@ def test_local_data_import(tmpdir):
             directories=[tmpdir.strpath],
             pk__in=keys)
 
-    assert ' returned the same identifier for ' in str(error.value)
+    assert 'same identifier for' in str(error.value)
 
     path_1 = tmpdir.join(f'{workflows[1]["system_id"]}_R1_foo.fastq')
     path_2 = tmpdir.join(f'{workflows[1]["system_id"]}_R2_foo.fastq')
@@ -124,6 +128,16 @@ def test_local_data_import(tmpdir):
     assert len(os.listdir(imported[1]['storage_url'])) == 2
     assert 'samples matched: 2' in importer.get_summary()
     assert 'samples skipped: 1' in importer.get_summary()
+
+    command = data.LocalDataImporter.as_cli_command()
+    runner = CliRunner()
+    args = ['-di', tmpdir.strpath, '-id', 'system_id', '-fi', 'pk__in', keys]
+    result = runner.invoke(command, args, catch_exceptions=False)
+    assert 'samples skipped: 3' in result.output
+
+    args = ['-di', tmpdir.strpath, '-id', 'specimen', '-fi', 'pk__in', keys]
+    result = runner.invoke(command, args)
+    assert 'invalid type for identifier' in result.output
 
 
 def test_get_dst():

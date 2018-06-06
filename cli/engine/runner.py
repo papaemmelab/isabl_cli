@@ -1,9 +1,7 @@
 """Engine runner."""
 
-from itertools import chain
 from os.path import join
 import os
-import random
 import subprocess
 
 from click import progressbar
@@ -106,7 +104,7 @@ class Runner(Creator):
         with progressbar(analyses, label='Building commands...\t\t') as bar:
             for i in bar:
                 if force and i['status'] not in {'SUCCEEDED', 'FINISHED'}:
-                    system_settings.TRASH_ANALYSIS_STORAGE_FUNCTION(i)
+                    system_settings.TRASH_ANALYSIS_STORAGE(i)
                     os.makedirs(i['storage_url'], exist_ok=True)
                 elif i['status'] in self._skip_status:
                     skipped_tuples.append((i, i['status']))
@@ -151,11 +149,10 @@ class Runner(Creator):
             status = 'SUCCEEDED'
 
         command = (
-            # f"sleep {random.uniform(0, 3):.3} && "  # avoid parallel API hits
-            f"cd {analysis['storage_url']} && umask g+wrx && "
-            f"{self.get_patch_status_command(analysis['pk'], 'STARTED')} "
-            f"&& date && {command} && "
-            f"{self.get_patch_status_command(analysis['pk'], status)}")
+            f'cd {analysis["storage_url"]} && umask g+wrx && '
+            f'{self.get_patch_status_command(analysis["pk"], "STARTED")} '
+            f'&& date && {command} && '
+            f'{self.get_patch_status_command(analysis["pk"], status)}')
 
         if system_settings.is_admin_user:
             command += f" && chmod -R a-w {analysis['storage_url']}"

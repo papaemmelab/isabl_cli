@@ -92,28 +92,33 @@ def process_api_filters(**filters):
     return filters_dict
 
 
-def iterate(url, limit=1000, **filters):
+def iterate(url, **filters):
     """
     Iterate through a paginated API endpoint and yield instances.
 
     Arguments:
         url (str): API URL address.
         filters (dict): name, value pairs for API filtering.
-        limit (int): max number of instances requested to API at the same time.
 
     Returns:
         list: of objects in the 'results' key of the API response.
     """
-    filters = process_api_filters(limit=limit, **filters)
+    limit = int(filters.get('limit', 5000))  # default limit to 5000 per hit
+    filters['limit'] = limit
+    filters = process_api_filters(**filters)
     nexturl = url
     objects = []
 
     while nexturl:
-        filters = filters if nexturl == url else None  # nexturl includes params
+        filters = filters if nexturl == url else {}  # nexturl includes params
         response = api_request('get', url=nexturl, params=filters)
         results = response.json()
         nexturl = results['next']
         objects += results['results']
+
+        if len(objects) >= limit:  # pragma: no cover
+            message = f'retrieved {len(objects)} ouf of {results["count"]}...'
+            click.echo(message, err=True)
 
     return objects
 
@@ -189,6 +194,7 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
         identifiers (list): List of identifiers.
         filters (dict): name, value pairs for API filtering.
+        verbose (bool): print to stderr how many instances will be retrieved.
 
     Raises:
         click.UsageError: if string identifier and endpoint not in individuals,
@@ -205,14 +211,16 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
     if verbose:
         count = get_instances_count(endpoint, **filters)
         count += len(identifiers or [])
-        idmsg = ' at least ' if identifiers else ' '  # these may be in filters
-        click.echo(f'Retrieving{idmsg}{count} from {endpoint} API endpoint...')
+        ids_msg = ' at least ' if identifiers else ' '  # ids may be in filters
+        click.echo(
+            f'Retrieving{ids_msg}{count} from {endpoint} API endpoint...',
+            err=True)
 
     if filters or identifiers is None:
-        instances += iterate(url, limit=2000, **filters)
+        instances += iterate(url, **filters)
         keys = {i['pk'] for i in instances}
 
-    for chunk in chunks(identifiers or [], 1000):
+    for chunk in chunks(identifiers or [], 10000):
         primary_keys = set()
         system_ids = set()
 
@@ -253,8 +261,9 @@ def get_instances_count(endpoint, **filters):
     return int(api_request('get', url=url, params=filters).json()['count'])
 
 
-def patch_analyses_status(primary_keys, status, ran_by=None):
+def patch_analyses_status(primary_keys, status):
     """Patch the `status` of multiple analyses given their `primary_keys`."""
     url = f'{system_settings.API_BASE_URL}/analyses/bulk_update/'
+    ran_by = system_settings.api_username
     data = {'ids': primary_keys, 'status': status, 'ran_by': ran_by}
     api_request('patch', url=url, json=data)
