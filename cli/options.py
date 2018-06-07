@@ -56,10 +56,10 @@ NO_HEADERS = click.option(
 FILE_PATTERN = click.option(
     '--pattern',
     help='paths pattern to be matched',
-    default='*.bam',
+    default=None,
     show_default=True,
     type=click.STRING,
-    required=True)
+    required=False)
 
 FILTERS = click.option(
     '--filters', '-fi',

@@ -2,12 +2,12 @@
 
 from glob import glob
 from os.path import join
-import json
 import shutil
 import subprocess
 
 import click
 
+from cli import system_settings
 from cli import api
 from cli import data
 from cli import options
@@ -15,16 +15,24 @@ from cli import utils
 
 
 @click.command()
-def processed_finished():
+@options.FILTERS
+def processed_finished(filters):
     """Process and update finished analyses."""
     utils.check_admin()
-    for i in api.get_instances('analyses', status='FINISHED'):
-        dst = i['storage_url']
-        src = dst + '__tmp'
-        shutil.move(dst, src)
-        command = utils.get_rsync_command(src, dst, chmod='a-w')
-        subprocess.check_call(command, shell=True)
-        api.patch_instance('analyses', i['pk'], status='SUCCEEDED')
+    filters.update(status='FINISHED')
+
+    for i in api.get_instances('analyses', **filters):
+        if i['ran_by'] != system_settings.api_username:  # admin must own dir
+            src = i['storage_url'] + '__tmp'
+            shutil.move(i['storage_url'], src)
+            cmd = utils.get_rsync_command(src, i['storage_url'], chmod='a-w')
+            subprocess.check_call(cmd, shell=True)
+
+        api.patch_instance(
+            endpoint='analyses',
+            identifier=i['pk'],
+            status='SUCCEEDED',
+            storage_usage=utils.get_tree_size(i['storage_url']))
 
 
 @click.command()
@@ -33,20 +41,11 @@ def processed_finished():
 def patch_status(key, status):
     """Patch status of a given analysis."""
     analysis = api.get_instance('analyses', key)
-    storage_url = analysis['storage_url']
-
-    if analysis['status'] == 'SUCCEEDED':
-        raise click.UsageError('Analysis already SUCCEEDED, cannot be patched')
-
-    if status == 'SUCCEEDED':
-        utils.check_admin()
-
     api.patch_instance(
         endpoint='analyses',
         identifier=analysis['pk'],
         status=status,
-        storage_url=storage_url,
-        storage_usage=utils.get_tree_size(storage_url))
+        storage_usage=utils.get_tree_size(analysis['storage_url']))
 
 
 @click.command()
@@ -54,25 +53,15 @@ def patch_status(key, status):
 @options.FIELDS
 @options.FILTERS
 @options.NO_HEADERS
-def get_fields(endpoint, field, filters, no_headers):
-    """Get instances database fields."""
+def get_attributes(endpoint, field, filters, no_headers):
+    """Get database attributes from API."""
     result = [] if no_headers else ['\t'.join('.'.join(i) for i in field)]
+    filters['fields'] = ','.join(i[0] for i in field)
 
     for i in api.get_instances(endpoint, verbose=True, **filters):
-        values = []
-        for j in field:
-            value = i
-            for k in j:
-                try:
-                    value = value.get(k, f'INVALID FIELD ({k})') or None
-                except AttributeError:
-                    value = f'INVALID FIELD ({k})'
-
-            if isinstance(value, dict):
-                value = json.dumps(value)
-
-            values.append(str(value))
+        values = [utils.traverse_dict(i, j, serialize=True) for j in field]
         result.append('\t'.join(values))
+
     click.echo('\n'.join(result).expandtabs(30))
 
 
@@ -81,24 +70,19 @@ def get_fields(endpoint, field, filters, no_headers):
 @options.FILE_PATTERN
 @options.FILTERS
 def get_paths(endpoint, pattern, filters):
-    """Get paths from storage directories."""
+    """Get storage directories, use `pattern` to match files inside dirs."""
+    filters.update(fields='storage_url', limit=100000)
     for i in api.get_instances(endpoint, verbose=True, **filters):
         if i['storage_url']:
-            click.echo('\n'.join(glob(join(i['storage_url'], pattern))))
+            if pattern:
+                click.echo('\n'.join(glob(join(i['storage_url'], pattern))))
+            else:
+                click.echo(i['storage_url'])
 
-
-@click.command()
-@options.ENDPOINT
-@options.FILTERS
-def get_dirs(endpoint, filters):
-    """Get instances storage directory."""
-    for i in api.get_instances(endpoint, verbose=True, **filters):
-        if i['storage_url']:
-            click.echo(i['storage_url'])
 
 @click.command()
 @options.PRIMARY_KEY
 @options.BEDFILE
-def import_bed(primary_key, bedfile):
+def import_bed(primary_key, bedfile):  # pragma: no cover
     """Import a technique bedfile."""
     data.import_bed(primary_key, bedfile)

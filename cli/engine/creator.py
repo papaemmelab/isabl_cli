@@ -95,7 +95,7 @@ class Creator(Validator):
             tuple: list of existing analyses, list of tuples without analysis
         """
         click.echo("Checking for existing analyses...", file=sys.stderr)
-        projects = {j for i, _, __ in tuples for j in i[0]['projects']}
+        projects = {j['pk'] for i, _, __ in tuples for j in i[0]['projects']}
         filters = dict(pipeline=self.pipeline['pk'], projects__pk__in=projects)
         cache = defaultdict(list)
         existing, missing = [], []

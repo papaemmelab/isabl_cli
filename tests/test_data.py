@@ -1,4 +1,5 @@
 import os
+import re
 
 import click
 import pytest
@@ -24,8 +25,8 @@ def test_trash_analysis_storage():
 def test_get_storage_directory():
     i = data.get_storage_directory('test', 12345, root='/', use_hash=True)
     j = data.get_storage_directory('test', 12345, root='/', use_hash=False)
-    assert i == '/data/test/23/45/12345'
-    assert j == '/data/test/12345'
+    assert i == '/test/23/45/12345'
+    assert j == '/test/12345'
 
 
 def test_import_bed(tmpdir):
@@ -53,15 +54,14 @@ def test_import_bed(tmpdir):
 def test_local_data_import(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
     _DEFAULTS['BASE_STORAGE_DIRECTORY'] = data_storage_directory.strpath
-    keys = [1, 2, 3]
-    workflows = api.get_instances('workflows', keys)
 
-    if not workflows:
-        workflows = [factories.WorkflowFactory() for i in range(3)]
-        workflows = [api.create_instance('workflows', **i) for i in workflows]
+    projects = [api.create_instance('projects', **factories.ProjectFactory())]
+    workflows = [factories.WorkflowFactory(projects=projects) for i in range(3)]
+    workflows = [api.create_instance('workflows', **i) for i in workflows]
+    keys = [i['pk'] for i in workflows]
 
     for i in workflows:
-        api.patch_instance('workflows', i['pk'], data_type=None)
+        api.patch_instance('workflows', i['pk'], data_type=None, projects=projects)
 
     importer = data.LocalDataImporter()
     importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
@@ -121,11 +121,13 @@ def test_local_data_import(tmpdir):
         symlink=True,
         pk__in=keys)
 
+    project = api.get_instance('projects', projects[0]['pk'])
+    assert project['storage_url']
     assert imported[0]['storage_usage'] > 0
     assert imported[0]['data_type'] == 'FASTQ'
     assert imported[1]['data_type'] == 'BAM'
     assert 'workflows' in imported[1]['storage_url']
-    assert len(os.listdir(imported[1]['storage_url'])) == 2
+    assert len(os.listdir(os.path.join(imported[1]['storage_url'], 'data'))) == 2
     assert 'samples matched: 2' in importer.get_summary()
     assert 'samples skipped: 1' in importer.get_summary()
 
@@ -142,8 +144,6 @@ def test_local_data_import(tmpdir):
 
 def test_get_dst():
     importer = data.LocalDataImporter()
-    assert importer.format_fastq_dst('not a fastq') is None
-    assert importer.format_bam_dst('not a bam') is None
 
     bam_test = [
         'sample.bam',
@@ -161,13 +161,16 @@ def test_get_dst():
         ('sample_{}', 'sample_{}'),
         ]
 
+    assert importer._format_fastq_path('not a fastq') is None
+
     for i in bam_test:
-        assert importer.format_bam_dst(i) == i
+        assert re.search(importer.BAM_REGEX, i)
+        assert not re.search(importer.BAM_REGEX, i + 'not a bam')
 
     for test, expected in fastq_test:
         for index in [1, 2]:
             for fastq in ['.fastq', '.fq']:
                 for gzipped in ['', '.gz']:
                     path = test.format(index) + fastq + gzipped
-                    obtained = importer.format_fastq_dst(path)
+                    obtained = importer._format_fastq_path(path)
                     assert obtained == expected.format(index) + '.fastq' + gzipped

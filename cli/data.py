@@ -1,21 +1,56 @@
 """Data import logic."""
 
 from datetime import datetime
+from getpass import getuser
 from os.path import basename
-from os.path import join
 from os.path import isdir
-import shutil
+from os.path import join
 import os
 import re
+import shutil
 import subprocess
-from getpass import getuser
 
 import click
 
 from cli import api
+from cli import options
 from cli import system_settings
 from cli import utils
-from cli import options
+
+
+def symlink_workflow_to_projects(workflow):
+    """Create symlink from workflow directory and projects directories."""
+    for i in workflow['projects']:
+        storage_url = i['storage_url']
+
+        if not storage_url:
+            get_dir = system_settings.GET_STORAGE_DIRECTORY
+            storage_url = get_dir('projects', i['pk'], use_hash=False)
+            os.makedirs(storage_url, exist_ok=True)
+            api.patch_instance('projects', i['pk'], storage_url=storage_url)
+
+        utils.force_symlink(
+            workflow['storage_url'],
+            join(storage_url, workflow['system_id']))
+
+
+def symlink_analysis_to_targets(analysis):
+    """Create symlink from workflow directory and projects directories."""
+    for i in analysis['targets']:
+        storage_url = i['storage_url']
+
+        if not storage_url:
+            get_dir = system_settings.GET_STORAGE_DIRECTORY
+            storage_url = get_dir('workflows', i['pk'])
+            os.makedirs(storage_url, exist_ok=True)
+            api.patch_instance('workflows', i['pk'], storage_url=storage_url)
+
+        dst = '__'.join([
+            analysis['pipeline']['name'].lower().replace(' ', '_'),
+            analysis['pipeline']['version'].lower().replace(' ', '_'),
+            str(analysis['pk'])])
+
+        utils.force_symlink(analysis['storage_url'], join(storage_url, dst))
 
 
 def trash_analysis_storage(analysis):
@@ -65,9 +100,9 @@ def get_storage_directory(endpoint, primary_key, root=None, use_hash=True):
         raise click.UsageError('Setting `BASE_STORAGE_DIRECTORY` not defined.')
 
     if use_hash:
-        path = os.path.join('data', endpoint, hash_1, hash_2)
+        path = os.path.join(endpoint, hash_1, hash_2)
     else:
-        path = os.path.join('data', endpoint)
+        path = os.path.join(endpoint)
 
     return os.path.join(root, path, str(primary_key))
 
@@ -129,42 +164,15 @@ class LocalDataImporter():
 
     Attributes:
         FASTQ_REGEX (str): a regex pattern used to match fastq files.
+        BAM_REGEX (str): a regex pattern to match bams.
     """
 
+    BAM_REGEX = r'\.bam(\.[a-z0-9]+)?$'
     FASTQ_REGEX = r'(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$'
 
     def __init__(self):
         """Initialize cache to None."""
         self.cache = None
-
-    @classmethod
-    def as_cli_command(cls):
-        """Get data importerls as click command line interface."""
-        @click.command(help='local data import', name='import_data')
-        @options.DIRECTORIES
-        @options.IDENTIFIER
-        @options.FILTERS
-        @options.COMMIT
-        @options.SYMLINK
-        def command(identifier, commit, filters, directories, symlink):
-            """Click command to be used in the CLI."""
-            def key(workflow):
-                value, types = workflow, (int, str, type(None))
-                for i in identifier:
-                    value = value.get(i)
-                if not isinstance(value, types):
-                    raise click.UsageError(
-                        f'invalid type for identifier '
-                        f'`{".".join(identifier)}`: {type(value)}')
-                return value
-
-            matched = cls().import_data(
-                directories, symlink, commit, key, **filters)
-
-            if not commit and matched:  # pragma: no cover
-                utils.echo_add_commit_message()
-
-        return command
 
     def import_data(
             self, directories, symlink=False, commit=False,
@@ -213,8 +221,6 @@ class LocalDataImporter():
             with click.progressbar(self.cache.values(), label=label) as bar:
                 for i in sorted(bar, key=lambda x: x['workflow']['pk']):
                     if i['src_dst_tuples']:
-                        os.makedirs(i['data_dir'], exist_ok=True)
-
                         for src, dst in i['src_dst_tuples']:
                             if symlink:
                                 self.symlink(src, dst)
@@ -224,42 +230,17 @@ class LocalDataImporter():
                         workflows_matched.append(api.patch_instance(
                             endpoint='workflows',
                             identifier=i['workflow']['pk'],
-                            storage_url=i['data_dir'],
-                            storage_usage=utils.get_tree_size(i['data_dir']),
+                            storage_url=i['storage_url'],
+                            storage_usage=utils.get_tree_size(i['storage_url']),
                             data_type=i['data_type']))
+
         elif files_matched:  # pragma: no cover
             for i in self.cache.values():
                 if i['src_dst_tuples']:
                     workflows_matched.append(i['workflow'])
 
-        summary = self.get_summary()
-        click.echo(summary)
-
+        click.echo(self.get_summary())
         return workflows_matched
-
-    def format_bam_dst(self, path):
-        """Return `path` if its a valid bam file name."""
-        return path if re.search(r'\.bam(\.[a-z0-9]+)?$', path) else None
-
-    def format_fastq_dst(self, path):
-        """Format fastq file name if `path` is valid fastq path."""
-        for i in [1, 2]:
-            letter_index_fastq = r'[_.]R{}([_.])?\.f(ast)?q'.format(i)
-            number_index_fastq = r'[_.]{}([_.])?\.f(ast)?q'.format(i)
-            letter_index_anyix = r'[_.]R{}[_.]'.format(i)
-
-            if re.search(self.FASTQ_REGEX.format(i), path):
-                suffix = f'_{system_settings.FASTQ_READ_PREFIX}{i}.fastq'
-                dst = re.sub(letter_index_fastq, '.fastq', path)
-                dst = re.sub(number_index_fastq, '.fastq', dst)
-                dst = re.sub(letter_index_anyix, '_', dst)
-                return re.sub(r'[_.]f(ast)?q', suffix, dst)
-
-        if re.search(r'\.f(ast)?q(\.gz)?$', path):
-            msg = f'cant determine if read 1 or read 2 from: {path}'
-            raise click.UsageError(msg)
-
-        return None
 
     def get_summary(self):
         """Get a summary of the matched, skipped, and missing files."""
@@ -289,6 +270,35 @@ class LocalDataImporter():
             f'\nsamples missing: {len(missing)}'
             f'\nsamples matched: {len(matched)}'
             f'\ntotal files matched: {total_matched}')
+
+    @classmethod
+    def as_cli_command(cls):
+        """Get data importerls as click command line interface."""
+        @click.command(help='local data import', name='import_data')
+        @options.DIRECTORIES
+        @options.IDENTIFIER
+        @options.FILTERS
+        @options.COMMIT
+        @options.SYMLINK
+        def command(identifier, commit, filters, directories, symlink):
+            """Click command to be used in the CLI."""
+            def key(workflow):
+                value, types = workflow, (int, str, type(None))
+                for i in identifier:
+                    value = value.get(i)
+                if not isinstance(value, types):
+                    raise click.UsageError(
+                        f'invalid type for identifier '
+                        f'`{".".join(identifier)}`: {type(value)}')
+                return value
+
+            matched = cls().import_data(
+                directories, symlink, commit, key, **filters)
+
+            if not commit and matched:  # pragma: no cover
+                utils.echo_add_commit_message()
+
+        return command
 
     @staticmethod
     def symlink(src, dst):
@@ -347,19 +357,22 @@ class LocalDataImporter():
         self.cache = {}
         patterns = []
         identifiers = {}
-        data_dir_fn = system_settings.GET_STORAGE_DIRECTORY
+        get_dir = system_settings.GET_STORAGE_DIRECTORY
 
         for i in api.get_instances('workflows', verbose=True, **filters):
             index = f"primary_key_{i['pk']}"
-            identifier = key(i)
+            identifier = key(i) or 'IDENTIFIER IS NULL'
+            storage_url = i['storage_url'] or get_dir('workflows', i['pk'])
+            data_dir = join(storage_url, 'data')
+
+            if not i['storage_url']:
+                os.makedirs(data_dir, exist_ok=True)
 
             if identifier in identifiers:  # duplicated identifiers not valid
                 raise click.UsageError(
                     f"Can't use same identifier for {i['system_id']} "
                     f'and {identifiers[identifier]}: {identifier}')
-            elif not identifier:
-                identifier = 'IDENTIFIER IS NULL'
-            else:
+            elif identifier != 'IDENTIFIER IS NULL':
                 identifiers[identifier] = i['system_id']
 
             self.cache[index] = {}
@@ -367,7 +380,8 @@ class LocalDataImporter():
             self.cache[index]['identifier'] = identifier
             self.cache[index]['src_dst_tuples'] = []
             self.cache[index]['data_type'] = None
-            self.cache[index]['data_dir'] = data_dir_fn('workflows', i['pk'])
+            self.cache[index]['storage_url'] = storage_url
+            self.cache[index]['data_dir'] = data_dir
             self.cache[index]['uid'] = f"{i['system_id']} (using {identifier})"
 
             if not i['data_type']:
@@ -390,14 +404,14 @@ class LocalDataImporter():
             return None
 
         dst = None
-        bam_dst = self.format_bam_dst(path)
-        fastq_dst = self.format_fastq_dst(path)
+        bam_dst = path if re.search(self.BAM_REGEX, path) else None
+        fastq_dst = self._format_fastq_path(path)
 
         if bam_dst or fastq_dst:
-            dst = bam_dst or fastq_dst
-            dst = join(data_dir, system_id + '_' + basename(dst))
+            dst = basename(bam_dst or fastq_dst)
+            dst = dst if dst.startswith(system_id) else f'{system_id}_{dst}'
             data_type = 'BAM' if bam_dst else 'FASTQ'
-            src_dst_tuples.append((path, dst))
+            src_dst_tuples.append((path, join(data_dir, dst)))
 
             if self.cache[index]['data_type'] in {None, data_type}:
                 self.cache[index]['data_type'] = data_type
@@ -407,3 +421,23 @@ class LocalDataImporter():
                     f"{', '.join(i for i, _ in src_dst_tuples)}")
 
         return dst is not None
+
+    def _format_fastq_path(self, path):
+        """Format fastq file name if `path` is valid fastq path."""
+        for i in [1, 2]:
+            letter_index_fastq = r'[_.]R{}([_.])?\.f(ast)?q'.format(i)
+            number_index_fastq = r'[_.]{}([_.])?\.f(ast)?q'.format(i)
+            letter_index_anyix = r'[_.]R{}[_.]'.format(i)
+
+            if re.search(self.FASTQ_REGEX.format(i), path):
+                suffix = f'_{system_settings.FASTQ_READ_PREFIX}{i}.fastq'
+                dst = re.sub(letter_index_fastq, '.fastq', path)
+                dst = re.sub(number_index_fastq, '.fastq', dst)
+                dst = re.sub(letter_index_anyix, '_', dst)
+                return re.sub(r'[_.]f(ast)?q', suffix, dst)
+
+        if re.search(r'\.f(ast)?q(\.gz)?$', path):
+            msg = f'cant determine if read 1 or read 2 from: {path}'
+            raise click.UsageError(msg)
+
+        return None

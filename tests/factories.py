@@ -10,6 +10,15 @@ class BaseFactory(factory.DictFactory):
     tags = [{'name': 'tag 1'}, {'name': 'tag 2'}]
 
 
+class ProjectFactory(BaseFactory):
+    analyst = factory.Sequence(lambda n: f'analyst-{n}@test.com')
+    coordinator = factory.Sequence(lambda n: f'coordinator-{n}@test.com')
+    description = fuzzy.FuzzyText(length=20, chars=string.ascii_lowercase + " ")
+    owner = factory.Sequence(lambda n: f'owner-{n}@test.com')
+    principal_investigator = factory.Sequence(lambda n: f'pi-{n}@test.com')
+    title = fuzzy.FuzzyText(length=20, chars=string.ascii_lowercase + " ")
+
+
 class CenterFactory(BaseFactory):
     acronym = fuzzy.FuzzyText(length=3, chars=string.ascii_letters)
     internal = fuzzy.FuzzyChoice([True, False])
@@ -68,6 +77,7 @@ class SpecimenFactory(BaseFactory):
 
 
 class WorkflowFactory(BaseFactory):
+    projects = []
     cell_type = fuzzy.FuzzyChoice(['SINGLE', 'BULK'])
     center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     portion_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)

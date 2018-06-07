@@ -4,10 +4,41 @@ import getpass
 import os
 import sys
 import tarfile
+import json
 
 import click
 
 from cli import system_settings
+
+
+def traverse_dict(dictionary, keys, serialize=False):
+    """
+    Traverse a `dictionary` using a list of `keys`.
+
+    Arguments:
+        dictionary (dict): dict to be traversed.
+        keys (list): keys to be explored.
+        serialize (bool): force to string, if value is dict use json.dumps.
+
+    Returns:
+        str:  if `serialize` is True.
+        object: if `serialize` is false.
+    """
+    value = dictionary
+
+    for i in keys:
+        try:
+            value = value.get(i, f'INVALID KEY ({i})')
+        except AttributeError:
+            value = f'INVALID KEY ({i})'
+
+    if serialize:
+        if isinstance(value, dict):
+            value = json.dumps(value)
+        else:
+            value = str(value)
+
+    return value
 
 
 def apply_decorators(decorators):

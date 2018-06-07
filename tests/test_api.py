@@ -56,9 +56,9 @@ def test_patch_analyses_status():
     assert all([i['status'] == 'CREATED' for i in created])
 
     pks = [i['pk'] for i in created]
-    api.patch_analyses_status(pks, 'SUCCEEDED')
+    api.patch_analyses_status(created, 'STAGED')
     retrieved = api.get_instances('analyses', pks)
-    assert all([i['status'] == 'SUCCEEDED' for i in retrieved])
+    assert all([i['status'] == 'STAGED' for i in retrieved])
 
     for i in created:
         api.delete_instance('analyses', i['pk'])

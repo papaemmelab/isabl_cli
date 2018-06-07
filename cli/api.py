@@ -10,6 +10,7 @@ import requests
 
 from cli import system_settings
 from cli import user_settings
+from cli import utils
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # pylint: disable=E1101
 
@@ -81,6 +82,8 @@ def process_api_filters(**filters):
 
     for key, value in filters.items():
         if isinstance(value, (str, int, float, type(None))):
+            if key == 'fields' and 'pk' not in value:  # pk is required
+                value = ','.join(value.split(',') + ['pk'])
             filters_dict[key] = value
         elif isinstance(value, collections.Iterable):
             is_in = key.endswith('__in') or key.endswith('__in!')
@@ -168,7 +171,22 @@ def patch_instance(endpoint, identifier, **data):
         types.SimpleNamespace: loaded with data returned from the API.
     """
     url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
+
+    if endpoint == 'analyses' and data.get('status') == 'SUCCEEDED':
+        msg = 'storage_usage must be updated on success.'
+        assert data.get('storage_usage') is not None, msg
+        utils.check_admin()
+
     data = api_request('patch', url=url, json=data).json()
+
+    if endpoint == 'analyses' and data.get('status'):
+        for i in system_settings.ON_STATUS_CHANGE:
+            i(data)
+
+    if endpoint == 'workflows' and data.get('data_type'):
+        for i in system_settings.ON_DATA_IMPORT:
+            i(data)
+
     return data
 
 
@@ -261,9 +279,33 @@ def get_instances_count(endpoint, **filters):
     return int(api_request('get', url=url, params=filters).json()['count'])
 
 
-def patch_analyses_status(primary_keys, status):
-    """Patch the `status` of multiple analyses given their `primary_keys`."""
+def patch_analyses_status(analyses, status):
+    """
+    Patch the `status` of multiple `analyses`.
+
+    Arguments:
+        analyses (list): dicts of analyses instances.
+        status (str): status to be updated to.
+
+    Raises:
+        AssertionError: if status not in {'SUBMITTED', 'STAGED'}.
+
+    Returns:
+        list: of updated analyses.
+    """
+    data = {'ids': [], 'status': status, 'ran_by': system_settings.api_username}
     url = f'{system_settings.API_BASE_URL}/analyses/bulk_update/'
-    ran_by = system_settings.api_username
-    data = {'ids': primary_keys, 'status': status, 'ran_by': ran_by}
+    assert status in {'SUBMITTED', 'STAGED'}, f'status not supported: {status}'
+
+    for i in analyses:
+        i['status'] = status
+        i['ran_by'] = data.get('ran_by', i['ran_by'])
+        data['ids'].append(i['pk'])
+
     api_request('patch', url=url, json=data)
+
+    for analysis in analyses:
+        for i in system_settings.ON_STATUS_CHANGE:
+            i(analysis)
+
+    return analyses

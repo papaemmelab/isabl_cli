@@ -45,8 +45,8 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         """Get job name given an analysis dict."""
         targets = analysis['targets']
         references = analysis['references']
-        methods = ' '.join({i['technique']['method'] for i in targets})
-        projects = ' '.join({str(j) for i in targets for j in i['projects']})
+        methods = {i['technique']['method'] for i in targets}
+        projects = {str(j['pk']) for i in targets for j in i['projects']}
 
         if len(targets) > 2 or not targets:
             targets = f'{len(targets)} samples.'
@@ -58,11 +58,14 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         else:
             references = ' '.join([i['system_id'] for i in references])
 
-        return (
-            f'targets: {targets} | references: {references} | '
-            f'methods: {methods} | analysis: {analysis["pk"]} | '
-            f'projects: {projects} | rundir: {analysis["storage_url"]} | '
-            f'pipeline: {analysis["pipeline"]["pk"]}')
+        return ' | '.join([
+            f'analysis: {analysis["pk"]}',
+            f'targets: {targets}',
+            f'references: {references} |',
+            f'methods: {" ".join(methods)}',
+            f'projects: {" ".join(projects)}',
+            f'rundir: {analysis["storage_url"]}',
+            f'pipeline: {analysis["pipeline"]["pk"]}'])
 
     def submit_analyses(self, command_tuples):
         """
@@ -82,13 +85,14 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         # execute analyses on a methods basis
         for methods, command_tuples in groups.items():
             click.echo(f"Sumbitting {len(command_tuples)} {methods} jobs...")
-            commands, analyses_keys, projects = [], [], set()
+            commands, analyses, projects = [], [], set()
 
             for i, cmd in command_tuples:
                 exit_cmd = f'cli patch_status --key {i["pk"]} --status FAILED'
-                analyses_keys.append(i['pk'])
+                analyses.append(i)
                 commands.append((cmd, exit_cmd))
-                projects.update(j for k in i['targets'] for j in k['projects'])
+                projects.update(
+                    j['pk'] for k in i['targets'] for j in k['projects'])
 
             jobname = (
                 f"Array | pipeline: {self.pipeline['pk']} | "
@@ -96,10 +100,10 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
 
             try:
                 requirements = self.get_requirements(methods)  # pylint: disable=E1111
-                api.patch_analyses_status(analyses_keys, 'SUBMITTED')
+                api.patch_analyses_status(analyses, 'SUBMITTED')
                 self._submit_array(commands, requirements, jobname)
             except Exception:  # pylint: disable=broad-except
-                api.patch_analyses_status(analyses_keys, 'STAGED')
+                api.patch_analyses_status(analyses, 'STAGED')
                 raise Exception("Error during submission...")
 
     def _submit_array(self, commands, requirements, jobname):

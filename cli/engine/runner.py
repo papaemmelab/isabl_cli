@@ -190,7 +190,7 @@ class Runner(Creator):
             keys = set()
             for i in targets:
                 for j in i['projects']:  # pragma: no cover
-                    keys.add(f"{j} {i['technique']['method']}")
+                    keys.add(f"{j['pk']} {i['technique']['method']}")
             return f"Projects {' '.join(keys)}" if keys else '0 projects'
 
         def _style_workflows(workflows, relation='targets'):
