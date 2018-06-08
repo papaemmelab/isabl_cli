@@ -1,18 +1,16 @@
 import os
 import re
 
+from click.testing import CliRunner
 import click
 import pytest
 
 from cli import _DEFAULTS
 from cli import api
+from cli import cli
 from cli import data
 
 from . import factories
-
-from click.testing import CliRunner
-
-from cli import cli
 
 
 def test_trash_analysis_storage():
@@ -35,20 +33,20 @@ def test_import_bed(tmpdir):
     technique = api.create_instance('techniques', **factories.TechniqueFactory())
     bed = tmpdir.join('test.bed')
     bed.write('2\t1\t2\n1\t1\t2\n')
-    technique = data.import_bed(technique['pk'], bed.strpath)
+    technique = data.LocalBedImporter.import_bed(technique['pk'], bed.strpath, 'AnAssembly')
 
-    assert technique['bed_url']
-    assert os.path.isfile(technique['bed_url'])
-    assert os.path.isfile(technique['bed_url'] + '.gz')
-    assert os.path.isfile(technique['bed_url'] + '.gz.tbi')
+    assert os.path.isfile(technique['data']['bedfiles']['AnAssembly']['uncompressed'])
+    assert os.path.isfile(technique['data']['bedfiles']['AnAssembly']['gzipped'])
+    assert os.path.isfile(technique['data']['bedfiles']['AnAssembly']['gzipped'] + '.tbi')
 
-    with open(technique['bed_url'], 'r') as f:  # test bed is sorted
+    with open(technique['data']['bedfiles']['AnAssembly']['uncompressed'], 'r') as f:  # test bed is sorted
         assert next(f).startswith('1')
 
-    with pytest.raises(click.UsageError) as error:
-        data.import_bed(technique['pk'], bed.strpath)
-
-    assert 'as a bed registered' in str(error.value)
+    command = data.LocalBedImporter.as_cli_command()
+    runner = CliRunner()
+    args = ['--bedfile', bed.strpath, '--key', technique['pk'], '--assembly', 'AnAssembly']
+    result = runner.invoke(command, args, catch_exceptions=False)
+    assert 'has a bed registered' in result.output
 
 
 def test_local_data_import(tmpdir):

@@ -7,10 +7,9 @@ import subprocess
 
 import click
 
-from cli import system_settings
 from cli import api
-from cli import data
 from cli import options
+from cli import system_settings
 from cli import utils
 
 
@@ -78,11 +77,3 @@ def get_paths(endpoint, pattern, filters):
                 click.echo('\n'.join(glob(join(i['storage_url'], pattern))))
             else:
                 click.echo(i['storage_url'])
-
-
-@click.command()
-@options.PRIMARY_KEY
-@options.BEDFILE
-def import_bed(primary_key, bedfile):  # pragma: no cover
-    """Import a technique bedfile."""
-    data.import_bed(primary_key, bedfile)

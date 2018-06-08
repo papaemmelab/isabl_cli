@@ -9,6 +9,7 @@ from . import factories
 def test_commands(tmpdir):
     analysis = api.create_instance(
         'analyses',
+        project_level_analysis=factories.ProjectFactory(),
         storage_url=tmpdir.strpath,
         status='FINISHED',
         **factories.AnalysisFactory(ran_by=None))

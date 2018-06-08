@@ -28,7 +28,8 @@ _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
     'GET_STORAGE_DIRECTORY': 'cli.data.get_storage_directory',
     'TRASH_ANALYSIS_STORAGE': 'cli.data.trash_analysis_storage',
-    'DATA_IMPORTER_CLASS': 'cli.data.LocalDataImporter',
+    'DATA_IMPORTER': 'cli.data.LocalDataImporter',
+    'BED_IMPORTER': 'cli.data.LocalBedImporter',
     'BASE_STORAGE_DIRECTORY': join(expanduser('~'), 'bee_storage'),
     'FASTQ_READ_PREFIX': '',
     'ADMIN_USER': getpass.getuser(),
@@ -39,7 +40,6 @@ _DEFAULTS = {
     'ON_DATA_IMPORT': ['cli.data.symlink_workflow_to_projects'],
     'ON_STATUS_CHANGE': ['cli.data.symlink_analysis_to_targets'],
     'ADMIN_COMMANDS': [
-        'cli.commands.import_bed',
         'cli.commands.processed_finished',
         ],
     'SYSTEM_COMMANDS': [
@@ -58,7 +58,8 @@ _IMPORT_STRINGS = {
     'SYSTEM_COMMANDS',
     'CUSTOM_COMMANDS',
     'INSTALLED_PIPELINES',
-    'DATA_IMPORTER_CLASS',
+    'DATA_IMPORTER',
+    'BED_IMPORTER',
     }
 
 _PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}

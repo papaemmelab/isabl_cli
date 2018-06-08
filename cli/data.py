@@ -21,36 +21,32 @@ from cli import utils
 def symlink_workflow_to_projects(workflow):
     """Create symlink from workflow directory and projects directories."""
     for i in workflow['projects']:
-        storage_url = i['storage_url']
-
-        if not storage_url:
-            get_dir = system_settings.GET_STORAGE_DIRECTORY
-            storage_url = get_dir('projects', i['pk'], use_hash=False)
-            os.makedirs(storage_url, exist_ok=True)
-            api.patch_instance('projects', i['pk'], storage_url=storage_url)
+        if not i['storage_url']:
+            i = make_storage_diectory('projects', i['pk'])
 
         utils.force_symlink(
             workflow['storage_url'],
-            join(storage_url, workflow['system_id']))
+            join(i['storage_url'], workflow['system_id']))
 
 
 def symlink_analysis_to_targets(analysis):
     """Create symlink from workflow directory and projects directories."""
+    src = analysis['storage_url']
+    dst = '__'.join([
+        analysis['pipeline']['name'].lower().replace(' ', '_'),
+        analysis['pipeline']['version'].lower().replace(' ', '_'),
+        str(analysis['pk'])])
+
     for i in analysis['targets']:
-        storage_url = i['storage_url']
+        if not i['storage_url']:
+            i = make_storage_diectory('workflows', i['pk'])
+        utils.force_symlink(src, join(i['storage_url'], dst))
 
-        if not storage_url:
-            get_dir = system_settings.GET_STORAGE_DIRECTORY
-            storage_url = get_dir('workflows', i['pk'])
-            os.makedirs(storage_url, exist_ok=True)
-            api.patch_instance('workflows', i['pk'], storage_url=storage_url)
-
-        dst = '__'.join([
-            analysis['pipeline']['name'].lower().replace(' ', '_'),
-            analysis['pipeline']['version'].lower().replace(' ', '_'),
-            str(analysis['pk'])])
-
-        utils.force_symlink(analysis['storage_url'], join(storage_url, dst))
+    if analysis['project_level_analysis']:
+        i = analysis['project_level_analysis']
+        if not i['storage_url']:
+            i = make_storage_diectory('projects', i['pk'])
+        utils.force_symlink(src, join(i['storage_url'], dst))
 
 
 def trash_analysis_storage(analysis):
@@ -107,54 +103,99 @@ def get_storage_directory(endpoint, primary_key, root=None, use_hash=True):
     return os.path.join(root, path, str(primary_key))
 
 
-def import_bed(technique_primary_key, input_bed_path):
-    """
-    Register input_bed_path in technique data directory.
+def make_storage_diectory(endpoint, primary_key):
+    """Make storage directory and return patched instance."""
+    get_dir = system_settings.GET_STORAGE_DIRECTORY
+    storage_url = get_dir(endpoint, primary_key, use_hash=False)
+    os.makedirs(storage_url, exist_ok=True)
+    return api.patch_instance(endpoint, primary_key, storage_url=storage_url)
 
-    This method will sort the bed and compress + tabix it. Both gzipped and
-    uncompressed versions are kept.
 
-    Instance's `storage_url`, `storage_usage`, `bed_url` are updated, setting
-    the latter to the path to the uncompressed bedfile.
+class LocalBedImporter():
 
-    Arguments:
-        technique_primary_key (int): technique primary key.
-        input_bed_path (str): path to incoming bedfile.
+    """An import engine for techniques' bedfiles."""
 
-    Returns:
-        dict: updated technique instance as retrieved from API.
-    """
-    if not input_bed_path.endswith('.bed'):  # pragma: no cover
-        raise click.UsageError(f'No .bed suffix: {input_bed_path}')
+    @classmethod
+    def as_cli_command(cls):
+        """Get bed importer as click command line interface."""
+        @click.command(name='import_bed')
+        @options.PRIMARY_KEY
+        @options.BEDFILE
+        @click.option('--assembly', help='name of reference genome')
+        def command(key, bedfile, assembly):
+            """
+            Register a `bedfile` in technique`s data directory.
 
-    instance = api.get_instance('techniques', technique_primary_key)
-    data_dir_fn = system_settings.GET_STORAGE_DIRECTORY
-    data_dir = data_dir_fn('techniques', instance['pk'])
+            The incoming bedfile will be compressed and tabixed.
+            Both gzipped and uncompressed versions are kept.
 
-    if instance['bed_url']:
-        raise click.UsageError(
-            f'{instance["slug"]} has a bed registered: {instance["bed_url"]}')
+            Instance's `storage_url`, `storage_usage`, `data` are updated,
+            setting the latter's `bedfiles` key to:
 
-    os.makedirs(data_dir, exist_ok=True)
-    bed_path = join(data_dir, f"{instance['slug']}.bed")
-    sorted_bed = subprocess.check_output(
-        ['sort', '-k1,1V', '-k2,2n', input_bed_path])
+                'bedfiles': {
+                    <assembly>: {
+                        'uncompressed': path/to/bedfile.bed,
+                        'gzipped': path/to/bedfile.bed.gz
+                    }
+                }
+            """
+            cls().import_bed(key, bedfile, assembly)
+        return command
 
-    with open(bed_path, '+w') as f:
-        f.write(sorted_bed.decode('utf-8'))
+    @staticmethod
+    def import_bed(technique_primary_key, input_bed_path, assembly):
+        """
+        Register input_bed_path in technique's storage dir and update `data`.
 
-    subprocess.check_call(['bgzip', bed_path])
-    subprocess.check_call(['tabix', '-p', 'bed', bed_path + '.gz'])
+        Arguments:
+            technique_primary_key (int): technique primary key.
+            input_bed_path (str): path to incoming bedfile.
+            assembly (str): name of reference genome for bedfile.
 
-    with open(bed_path, '+w') as f:  # write uncompressed file again
-        f.write(sorted_bed.decode('utf-8'))
+        Returns:
+            dict: updated technique instance as retrieved from API.
+        """
+        utils.check_admin()
+        instance = api.get_instance('techniques', technique_primary_key)
 
-    return api.patch_instance(
-        endpoint='techniques',
-        identifier=instance['pk'],
-        storage_url=data_dir,
-        storage_usage=utils.get_tree_size(data_dir),
-        bed_url=bed_path)
+        if not input_bed_path.endswith('.bed'):  # pragma: no cover
+            raise click.UsageError(f'No .bed suffix: {input_bed_path}')
+
+        if not instance['storage_url']:
+            instance = make_storage_diectory('techniques', instance['pk'])
+
+        if instance['data'].get('bedfiles', {}).get(assembly):
+            raise click.UsageError(
+                f'{instance["slug"]} has a bed registered for {assembly}: '
+                f'{instance["data"]["bedfiles"][assembly]}')
+
+        if not instance['data'].get('bedfiles'):
+            instance['data']['bedfiles'] = {}
+
+        bed_dir = join(instance['storage_url'], assembly)
+        bed_path = join(bed_dir, f"{instance['slug']}.bed")
+        os.makedirs(bed_dir, exist_ok=True)
+        sorted_bed = subprocess.check_output(
+            ['sort', '-k1,1V', '-k2,2n', input_bed_path])
+
+        with open(bed_path, '+w') as f:
+            f.write(sorted_bed.decode('utf-8'))
+
+        subprocess.check_call(['bgzip', bed_path])
+        subprocess.check_call(['tabix', '-p', 'bed', bed_path + '.gz'])
+
+        with open(bed_path, '+w') as f:  # write uncompressed file again
+            f.write(sorted_bed.decode('utf-8'))
+
+        instance['data']['bedfiles'][assembly] = {}
+        instance['data']['bedfiles'][assembly]['uncompressed'] = bed_path
+        instance['data']['bedfiles'][assembly]['gzipped'] = bed_path + '.gz'
+
+        return api.patch_instance(
+            endpoint='techniques',
+            identifier=instance['pk'],
+            storage_usage=utils.get_tree_size(instance['storage_url']),
+            data=instance['data'])
 
 
 class LocalDataImporter():
@@ -273,7 +314,7 @@ class LocalDataImporter():
 
     @classmethod
     def as_cli_command(cls):
-        """Get data importerls as click command line interface."""
+        """Get data importer as a click command line interface."""
         @click.command(help='local data import', name='import_data')
         @options.DIRECTORIES
         @options.IDENTIFIER

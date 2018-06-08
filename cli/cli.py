@@ -40,5 +40,8 @@ for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
 for i in system_settings.INSTALLED_PIPELINES:  # pragma: no cover
     main.add_command(i.as_cli_command())
 
-if system_settings.DATA_IMPORTER_CLASS:
-    main.add_command(system_settings.DATA_IMPORTER_CLASS.as_cli_command())
+if system_settings.DATA_IMPORTER:
+    main.add_command(system_settings.DATA_IMPORTER.as_cli_command())
+
+if system_settings.BED_IMPORTER:
+    main.add_command(system_settings.BED_IMPORTER.as_cli_command())
