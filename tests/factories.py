@@ -36,10 +36,15 @@ class DiseaseFactory(BaseFactory):
     name = fuzzy.FuzzyText(length=6, chars=string.ascii_letters)
 
 
+class AssemblyFactory(BaseFactory):
+    name = 'GRCh37'
+
+
 class PipelineFactory(BaseFactory):
     description = fuzzy.FuzzyText(length=10, chars=string.ascii_letters)
     name = fuzzy.FuzzyText(length=10, chars=string.ascii_letters)
     version = fuzzy.FuzzyText(length=10, chars=string.ascii_letters)
+    assembly = factory.SubFactory(AssemblyFactory)
 
 
 class AnalysisFactory(BaseFactory):

@@ -12,6 +12,7 @@ class TestPipeline(AbstractPipeline):
 
     NAME = 'A Test Pipeline'
     VERSION = 'A Test Version'
+    ASSEMBLY = 'GRCh4000'
 
     @staticmethod
     def get_cli_help():

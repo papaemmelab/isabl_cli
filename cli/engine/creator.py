@@ -19,18 +19,22 @@ class Creator(Validator):
 
     NAME = None
     VERSION = None
+    ASSEMBLY = None
 
     @cached_property
     def pipeline(self):
         """Get pipeline database object."""
-        if not self.NAME or not self.VERSION:
-            raise NotImplementedError("NAME and VERSION attributes not set.")
+        created_by = system_settings.api_username
+
+        if not self.NAME or not self.VERSION or not self.ASSEMBLY:
+            raise NotImplementedError("NAME, VERSION and ASSEMBLY must be set.")
 
         return api.create_instance(
             endpoint='pipelines',
             name=self.NAME,
             version=self.VERSION,
-            created_by=system_settings.api_username)
+            created_by=created_by,
+            assembly={'name': self.ASSEMBLY, 'created_by': created_by})
 
     @staticmethod
     def validate_tuple(targets, references, analyses):
