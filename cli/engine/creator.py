@@ -24,8 +24,6 @@ class Creator(Validator):
     @cached_property
     def pipeline(self):
         """Get pipeline database object."""
-        created_by = system_settings.api_username
-
         if not self.NAME or not self.VERSION or not self.ASSEMBLY:
             raise NotImplementedError("NAME, VERSION and ASSEMBLY must be set.")
 
@@ -33,8 +31,7 @@ class Creator(Validator):
             endpoint='pipelines',
             name=self.NAME,
             version=self.VERSION,
-            created_by=created_by,
-            assembly={'name': self.ASSEMBLY, 'created_by': created_by})
+            assembly={'name': self.ASSEMBLY})
 
     @staticmethod
     def validate_tuple(targets, references, analyses):
@@ -65,8 +62,7 @@ class Creator(Validator):
                         pipeline=self.pipeline,
                         targets=i[0],
                         references=i[1],
-                        analyses=i[2],
-                        created_by=system_settings.api_username)
+                        analyses=i[2])
 
                     storage_url = system_settings.GET_STORAGE_DIRECTORY(
                         endpoint='analyses',

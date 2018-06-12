@@ -5,7 +5,6 @@ from factory import fuzzy
 import factory
 
 class BaseFactory(factory.DictFactory):
-    created_by = 'admin'
     notes = fuzzy.FuzzyText(length=100, chars=string.ascii_letters)
     tags = [{'name': 'tag 1'}, {'name': 'tag 2'}]
 
