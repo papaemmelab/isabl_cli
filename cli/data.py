@@ -3,6 +3,7 @@
 from datetime import datetime
 from getpass import getuser
 from os.path import basename
+from os.path import getsize
 from os.path import isdir
 from os.path import join
 import os
@@ -262,18 +263,27 @@ class LocalDataImporter():
             with click.progressbar(self.cache.values(), label=label) as bar:
                 for i in sorted(bar, key=lambda x: x['workflow']['pk']):
                     if i['src_dst_tuples']:
+                        sequencing_data = []
+
                         for src, dst in i['src_dst_tuples']:
                             if symlink:
                                 self.symlink(src, dst)
                             else:
                                 self.move(src, dst)
 
+                            sequencing_data.append(dict(
+                                file_url=dst,
+                                file_type=i['data_type'],
+                                file_data={},
+                                hash_value=getsize(dst),
+                                hash_method="Python's os.path.getsize"))
+
                         workflows_matched.append(api.patch_instance(
                             endpoint='workflows',
                             identifier=i['workflow']['pk'],
                             storage_url=i['storage_url'],
                             storage_usage=utils.get_tree_size(i['storage_url']),
-                            data_type=i['data_type']))
+                            sequencing_data=sequencing_data))
 
         elif files_matched:  # pragma: no cover
             for i in self.cache.values():

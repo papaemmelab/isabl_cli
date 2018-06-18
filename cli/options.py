@@ -31,7 +31,14 @@ ENDPOINT = click.option(
     help='API endpoint to be queried',
     default='analyses',
     show_default=True,
-    type=click.Choice(['workflows', 'analyses', 'projects', 'techniques']),
+    type=click.Choice([
+        'workflows',
+        'analyses',
+        'projects',
+        'techniques',
+        'specimens',
+        'individuals',
+        'assemblies']),
     required=True)
 
 PRIMARY_KEY = click.option(

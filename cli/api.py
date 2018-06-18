@@ -180,12 +180,10 @@ def patch_instance(endpoint, identifier, **data):
     data = api_request('patch', url=url, json=data).json()
 
     if endpoint == 'analyses' and data.get('status'):
-        for i in system_settings.ON_STATUS_CHANGE:
-            i(data)
+        _run_signals('analyses', data, system_settings.ON_STATUS_CHANGE)
 
-    if endpoint == 'workflows' and data.get('data_type'):
-        for i in system_settings.ON_DATA_IMPORT:
-            i(data)
+    if endpoint == 'workflows' and data.get('sequencing_data'):
+        _run_signals('workflows', data, system_settings.ON_DATA_IMPORT)
 
     return data
 
@@ -297,15 +295,30 @@ def patch_analyses_status(analyses, status):
     url = f'{system_settings.API_BASE_URL}/analyses/bulk_update/'
     assert status in {'SUBMITTED', 'STAGED'}, f'status not supported: {status}'
 
-    for i in analyses:
+    for i in analyses:  # change locally, bulk_update doesn't return instances
         i['status'] = status
         i['ran_by'] = data.get('ran_by', i['ran_by'])
         data['ids'].append(i['pk'])
 
     api_request('patch', url=url, json=data)
 
-    for analysis in analyses:
-        for i in system_settings.ON_STATUS_CHANGE:
-            i(analysis)
+    for i in analyses:
+        _run_signals('analyses', i, system_settings.ON_STATUS_CHANGE)
 
     return analyses
+
+
+def _run_signals(endpoint, instance, signals):
+    errors = []
+    on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda **_: None)
+
+    for signal in signals:
+        try:
+            signal(instance)
+        except Exception as error:  # pragma: no cover pylint: disable=W0703
+            errors.append(error)
+
+            try:
+                on_failure(endpoint, instance, signal, error)
+            except Exception as on_failure_error:  # pylint: disable=W0703
+                errors.append(on_failure_error)

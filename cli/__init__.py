@@ -39,17 +39,17 @@ _DEFAULTS = {
     'CUSTOM_COMMANDS': [],
     'ON_DATA_IMPORT': ['cli.data.symlink_workflow_to_projects'],
     'ON_STATUS_CHANGE': ['cli.data.symlink_analysis_to_targets'],
+    'ON_SIGNAL_FAILURE': None,
     'ADMIN_COMMANDS': [
-        'cli.commands.processed_finished',
-        ],
+        'cli.commands.processed_finished'],
     'SYSTEM_COMMANDS': [
         'cli.commands.patch_status',
         'cli.commands.get_attributes',
-        'cli.commands.get_paths',
-        ],
+        'cli.commands.get_paths'],
     }
 
 _IMPORT_STRINGS = {
+    'ON_SIGNAL_FAILURE',
     'ON_DATA_IMPORT',
     'ON_STATUS_CHANGE',
     'GET_STORAGE_DIRECTORY',
@@ -60,7 +60,7 @@ _IMPORT_STRINGS = {
     'INSTALLED_PIPELINES',
     'DATA_IMPORTER',
     'BED_IMPORTER',
-    }
+}
 
 _PATH_STRINGS = {'BASE_STORAGE_DIRECTORY'}
 
