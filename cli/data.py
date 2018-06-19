@@ -1,5 +1,6 @@
 """Data import logic."""
 
+from collections import defaultdict
 from datetime import datetime
 from getpass import getuser
 from os.path import basename
@@ -12,6 +13,7 @@ import shutil
 import subprocess
 
 import click
+import yaml
 
 from cli import api
 from cli import options
@@ -209,16 +211,13 @@ class LocalDataImporter():
         BAM_REGEX (str): a regex pattern to match bams.
     """
 
-    BAM_REGEX = r'\.bam(\.[a-z0-9]+)?$'
+    BAM_REGEX = r'\.bam$'
+    CRAM_REGEX = r'\.cram$'
     FASTQ_REGEX = r'(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$'
-
-    def __init__(self):
-        """Initialize cache to None."""
-        self.cache = None
 
     def import_data(
             self, directories, symlink=False, commit=False,
-            key=lambda x: x['system_id'], **filters):
+            key=lambda x: x['system_id'], files_data={}, **filters):
         """
         Import raw data for multiple workflows.
 
@@ -231,6 +230,8 @@ class LocalDataImporter():
             commit (bool): if True perform import operation.
             key (function): given a workflow dict returns id to match.
             filters (dict): key value pairs to use as API query params.
+            files_data (dict): keys are files basenames and values are
+                dicts with extra annotations such as PL, LB, or any other.
 
         Raises:
             click.UsageError: if `key` returns the same identifier for multiple
@@ -238,128 +239,63 @@ class LocalDataImporter():
                 if cant determine read 1 or read 2 from matched fastq files.
 
         Returns:
-            list: of workflows dicts for which data has been matched.
+            list, str: list of workflows for which data has been matched and a
+                summary of the operation.
         """
         utils.check_admin()
-        workflows_matched, files_matched = [], 0
-        data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
-        pattern = self._build_cache(key, filters)
+        workflows_matched = []
+        cache = defaultdict(dict)
+        patterns = []
+        identifiers = {}
 
-        if pattern:
+        for i in api.get_instances('workflows', verbose=True, **filters):
+            index = f"primary_key_{i['pk']}"
+            using_id = f"{i['system_id']} (Skipped, identifier is NULL)"
+            identifier = key(i)
+
+            if identifier in identifiers:  # duplicated identifiers not valid
+                raise click.UsageError(
+                    f"Can't use same identifier for {i['system_id']} "
+                    f'and {identifiers[identifier]}: {identifier}')
+
+            if identifier and not i['sequencing_data']:
+                identifiers[identifier] = i['system_id']
+                patterns.append(self.get_regex_pattern(index, identifier))
+                using_id = f"{i['system_id']} (using {identifier})"
+
+            cache[index]['using_id'] = using_id
+            cache[index]['instance'] = i
+            cache[index]['files'] = []
+
+        if patterns:
+            # see http://stackoverflow.com/questions/8888567
+            data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
+            pattern = re.compile('|'.join(patterns))
             label = f'Exploring directories...'
             for directory in directories:
                 with click.progressbar(os.walk(directory), label=label) as bar:
                     for root, _, files in bar:
-                        if root.startswith(data_storage_dir):
-                            continue
+                        if not root.startswith(data_storage_dir):
+                            for i in files:
+                                path = join(root, i)
+                                index = self.match_path(path, pattern)
+                                if index:
+                                    cache[index]['files'].append(path)
 
-                        for i in files:
-                            path = join(root, i)
-                            matched = self._update_src_dst(path, pattern)
-                            files_matched += 1 if matched else 0
+            label = 'Processing...'
+            bar = sorted(cache.values(), key=lambda x: x['instance']['pk'])
+            with click.progressbar(bar, label=label) as bar:
+                for i in bar:
+                    if commit and i['files']:
+                        workflows_matched.append(self.import_files(
+                            instance=i['instance'],
+                            files=i['files'],
+                            symlink=symlink,
+                            files_data=files_data))
+                    elif i['files']:  # pragma: no cover
+                        workflows_matched.append(i['instance'])
 
-        if commit and files_matched:
-            label = f'Processing {files_matched} matched files...'
-            with click.progressbar(self.cache.values(), label=label) as bar:
-                for i in sorted(bar, key=lambda x: x['workflow']['pk']):
-                    if i['src_dst_tuples']:
-                        sequencing_data = []
-
-                        for src, dst in i['src_dst_tuples']:
-                            if symlink:
-                                self.symlink(src, dst)
-                            else:
-                                self.move(src, dst)
-
-                            sequencing_data.append(dict(
-                                file_url=dst,
-                                file_type=i['data_type'],
-                                file_data={},
-                                hash_value=getsize(dst),
-                                hash_method="Python's os.path.getsize"))
-
-                        workflows_matched.append(api.patch_instance(
-                            endpoint='workflows',
-                            identifier=i['workflow']['pk'],
-                            storage_url=i['storage_url'],
-                            storage_usage=utils.get_tree_size(i['storage_url']),
-                            sequencing_data=sequencing_data))
-
-        elif files_matched:  # pragma: no cover
-            for i in self.cache.values():
-                if i['src_dst_tuples']:
-                    workflows_matched.append(i['workflow'])
-
-        click.echo(self.get_summary())
-        return workflows_matched
-
-    def get_summary(self):
-        """Get a summary of the matched, skipped, and missing files."""
-        skipped, missing, matched, total_matched, nl = [], [], [], 0, '\n'
-
-        for i in self.cache.values():
-            if i['workflow']['data_type']:
-                msg = click.style(f"skipped {i['uid']}\t", fg='cyan')
-                msg += f"{i['workflow']['data_type']} exists"
-                skipped.append(msg)
-            elif i['src_dst_tuples']:
-                msg = click.style(f"found {i['uid']}\n\t\t", fg='green')
-                msg += '\n\t\t'.join(src for src, _ in i['src_dst_tuples'])
-                total_matched += len(i['src_dst_tuples'])
-                matched.append(msg)
-            else:
-                msg = click.style(f"missing {i['uid']}\t", fg='red')
-                msg += 'no files matched'
-                missing.append(msg)
-
-        return (
-            f"{nl.join([nl] + skipped) if skipped else ''}"
-            f"{nl.join([nl] + missing) if missing else ''}"
-            f"{nl.join([nl] + matched) if matched else ''}"
-            f'\n\ntotal samples: {len(self.cache)}'
-            f'\nsamples skipped: {len(skipped)}'
-            f'\nsamples missing: {len(missing)}'
-            f'\nsamples matched: {len(matched)}'
-            f'\ntotal files matched: {total_matched}')
-
-    @classmethod
-    def as_cli_command(cls):
-        """Get data importer as a click command line interface."""
-        @click.command(help='local data import', name='import_data')
-        @options.DIRECTORIES
-        @options.IDENTIFIER
-        @options.FILTERS
-        @options.COMMIT
-        @options.SYMLINK
-        def command(identifier, commit, filters, directories, symlink):
-            """Click command to be used in the CLI."""
-            def key(workflow):
-                value, types = workflow, (int, str, type(None))
-                for i in identifier:
-                    value = value.get(i)
-                if not isinstance(value, types):
-                    raise click.UsageError(
-                        f'invalid type for identifier '
-                        f'`{".".join(identifier)}`: {type(value)}')
-                return value
-
-            matched = cls().import_data(
-                directories, symlink, commit, key, **filters)
-
-            if not commit and matched:  # pragma: no cover
-                utils.echo_add_commit_message()
-
-        return command
-
-    @staticmethod
-    def symlink(src, dst):
-        """Create symlink from `src` to `dst`."""
-        return utils.force_symlink(os.path.realpath(src), dst)
-
-    @staticmethod
-    def move(src, dst):
-        """Rename `src` to `dst`."""
-        return os.rename(os.path.realpath(src), dst)
+        return workflows_matched, self.get_summary(cache)
 
     @staticmethod
     def get_regex_pattern(group_name, identifier):
@@ -378,117 +314,212 @@ class LocalDataImporter():
         pattern = re.sub(r'[-_.]', r'[-_.]', identifier)
         return r'(?P<{}>[-_.]?{}[-_.])'.format(group_name, pattern)
 
-    def _build_cache(self, key, filters):
-        """
-        Build cache dictionary and return a regex pattern to match identifiers.
-
-        Workflows for which `data_type` is set will not be included in the
-        regex pattern.
-
-        Set self.cache to a dict that looks like:
-
-            {
-                "primary_key_1": {
-                    "workflow": workflow dict as returned from API,
-                    "src_dst_tuples": list of src, dst tuples to store matches,
-                    "dtype": key used to store data type matched,
-                    "data_dir": data dir assigned to workflow,
-                    },
-
-                "primary_key_2": ...
-            }
-
-        Arguments:
-            key (function): given a workflow dict returns id to match.
-            filters (dict): key value pairs to use as API query params.
-
-        Returns:
-            str: compiled regex pattern to match identifiers to workflows.
-        """
-        self.cache = {}
-        patterns = []
-        identifiers = {}
-        get_dir = system_settings.GET_STORAGE_DIRECTORY
-
-        for i in api.get_instances('workflows', verbose=True, **filters):
-            index = f"primary_key_{i['pk']}"
-            identifier = key(i) or 'IDENTIFIER IS NULL'
-            storage_url = i['storage_url'] or get_dir('workflows', i['pk'])
-            data_dir = join(storage_url, 'data')
-
-            if not i['storage_url']:
-                os.makedirs(data_dir, exist_ok=True)
-
-            if identifier in identifiers:  # duplicated identifiers not valid
-                raise click.UsageError(
-                    f"Can't use same identifier for {i['system_id']} "
-                    f'and {identifiers[identifier]}: {identifier}')
-            elif identifier != 'IDENTIFIER IS NULL':
-                identifiers[identifier] = i['system_id']
-
-            self.cache[index] = {}
-            self.cache[index]['workflow'] = i
-            self.cache[index]['identifier'] = identifier
-            self.cache[index]['src_dst_tuples'] = []
-            self.cache[index]['data_type'] = None
-            self.cache[index]['storage_url'] = storage_url
-            self.cache[index]['data_dir'] = data_dir
-            self.cache[index]['uid'] = f"{i['system_id']} (using {identifier})"
-
-            if not i['data_type']:
-                patterns.append(self.get_regex_pattern(index, identifier))
-
-        # see http://stackoverflow.com/questions/8888567
-        return re.compile('|'.join(patterns))
-
-    def _update_src_dst(self, path, pattern):
+    def match_path(self, path, pattern):
         """Match `path` with `pattern` and update cache if fastq or bam."""
         try:
             matches = pattern.finditer(path)
             index = next(matches).lastgroup
             assert index is not None  # happens when pattern is empty
-            uid = self.cache[index]['uid']
-            data_dir = self.cache[index]['data_dir']
-            system_id = self.cache[index]['workflow']['system_id']
-            src_dst_tuples = self.cache[index]['src_dst_tuples']
+
+            # check if valid data type
+            valid = True if re.search(self.BAM_REGEX, path) else False
+            valid |= True if re.search(self.CRAM_REGEX, path) else False
+
+            for i in [1, 2]:
+                if re.search(self.FASTQ_REGEX.format(i), path):
+                    valid = True
+
+            if re.search(r'\.f(ast)?q(\.gz)?$', path) and not valid:
+                msg = f'cant determine if read 1 or read 2 from: {path}'
+                raise click.UsageError(msg)
+
+            assert valid
         except (StopIteration, AssertionError):  # pragma: no cover
             return None
 
-        dst = None
-        bam_dst = path if re.search(self.BAM_REGEX, path) else None
-        fastq_dst = self._format_fastq_path(path)
+        return index
 
-        if bam_dst or fastq_dst:
-            dst = basename(bam_dst or fastq_dst)
-            dst = dst if dst.startswith(system_id) else f'{system_id}_{dst}'
-            data_type = 'BAM' if bam_dst else 'FASTQ'
-            src_dst_tuples.append((path, join(data_dir, dst)))
+    def import_files(self, instance, files, files_data, symlink):
+        """
+        Move/link files into instance's `storage_url` and update database.
 
-            if self.cache[index]['data_type'] in {None, data_type}:
-                self.cache[index]['data_type'] = data_type
+        Arguments:
+            instance (dict): workflow instance.
+            files (dict): list of files to be imported.
+            symlink (dict): whether to symlink or move the data.
+            files_data (dict): keys are files basenames and values are
+                dicts with extra annotations such as PL, LB, or any other.
+
+        Raises:
+            click.UsageError: if multiple data formats are found.
+
+        Returns:
+            dict: patched workflow instance.
+        """
+        sequencing_data = []
+        src_dst = []
+        get_dir = system_settings.GET_STORAGE_DIRECTORY
+
+        if not instance['storage_url']:
+            instance['storage_url'] = get_dir('workflows', instance['pk'])
+
+        data_dir = join(instance['storage_url'], 'data')
+        os.makedirs(data_dir, exist_ok=True)
+
+        for src in files:
+            file_name = basename(src)
+
+            if re.search(self.BAM_REGEX, src):
+                file_type = 'BAM'
+            elif re.search(self.CRAM_REGEX, src):
+                file_type = 'CRAM'
             else:
-                raise click.UsageError(
-                    f'{uid} matched different data types: '
-                    f"{', '.join(i for i, _ in src_dst_tuples)}")
+                file_type = 'FASTQ'
+                file_name = self.format_fastq_name(file_name)
 
-        return dst is not None
+            if not file_name.startswith(instance['system_id']):
+                file_name = f'{instance["system_id"]}__{file_name}'
 
-    def _format_fastq_path(self, path):
-        """Format fastq file name if `path` is valid fastq path."""
+            dst = join(data_dir, file_name)
+            src_dst.append((src, dst))
+            sequencing_data.append(dict(
+                file_url=dst,
+                file_type=file_type,
+                file_data=files_data.get(basename(src), {}),
+                hash_value=getsize(src),
+                hash_method="os.path.getsize"))
+
+        if len({i['file_type'] for i in sequencing_data}) > 1:
+            raise click.UsageError(
+                'We should have catched this earlier, but multiple formats are '
+                f'not supported, these were found for {instance["system_id"]}: '
+                f'{",".join(i["file_url"] for i in sequencing_data)}')
+
+        for src, dst in src_dst:
+            if symlink:
+                self.symlink(src, dst)
+            else:
+                self.move(src, dst)
+
+        return api.patch_instance(
+            endpoint='workflows',
+            identifier=instance['pk'],
+            storage_url=instance['storage_url'],
+            storage_usage=utils.get_tree_size(instance['storage_url']),
+            sequencing_data=sequencing_data)
+
+    def format_fastq_name(self, file_name):
+        """Return destination file name."""
+        suffix = None
+
         for i in [1, 2]:
-            letter_index_fastq = r'[_.]R{}([_.])?\.f(ast)?q'.format(i)
-            number_index_fastq = r'[_.]{}([_.])?\.f(ast)?q'.format(i)
-            letter_index_anyix = r'[_.]R{}[_.]'.format(i)
-
-            if re.search(self.FASTQ_REGEX.format(i), path):
+            if re.search(self.FASTQ_REGEX.format(i), file_name):
                 suffix = f'_{system_settings.FASTQ_READ_PREFIX}{i}.fastq'
-                dst = re.sub(letter_index_fastq, '.fastq', path)
-                dst = re.sub(number_index_fastq, '.fastq', dst)
-                dst = re.sub(letter_index_anyix, '_', dst)
-                return re.sub(r'[_.]f(ast)?q', suffix, dst)
+                break
 
-        if re.search(r'\.f(ast)?q(\.gz)?$', path):
-            msg = f'cant determine if read 1 or read 2 from: {path}'
-            raise click.UsageError(msg)
+        assert suffix, f"Couldn't determine read 1 or read 2 from {file_name}"
+        letter_index_fastq = r'[_.]R{}([_.])?\.f(ast)?q'.format(i)
+        number_index_fastq = r'[_.]{}([_.])?\.f(ast)?q'.format(i)
+        letter_index_any_location = r'[_.]R{}[_.]'.format(i)
+        file_name = re.sub(letter_index_fastq, '.fastq', file_name)
+        file_name = re.sub(number_index_fastq, '.fastq', file_name)
+        file_name = re.sub(letter_index_any_location, '_', file_name)
+        return re.sub(r'[_.]f(ast)?q', suffix, file_name)
 
-        return None
+    @staticmethod
+    def symlink(src, dst):
+        """Create symlink from `src` to `dst`."""
+        return utils.force_symlink(os.path.realpath(src), dst)
+
+    @staticmethod
+    def move(src, dst):
+        """Rename `src` to `dst`."""
+        return os.rename(os.path.realpath(src), dst)
+
+    @staticmethod
+    def get_summary(cache):
+        """Get a summary of the matched, skipped, and missing files."""
+        skipped, missing, matched, total_matched, nl = [], [], [], 0, '\n'
+
+        for i in cache.values():
+            if i['instance']['sequencing_data']:
+                msg = click.style(f"skipped {i['using_id']}\t", fg='cyan')
+                skipped.append(msg)
+            elif i['files']:
+                msg = click.style(f"found {i['using_id']}\n\t\t", fg='green')
+                total_matched += len(i['files'])
+                matched.append(msg + '\n\t\t'.join(i['files']))
+            else:
+                msg = click.style(f"missing {i['using_id']}\t", fg='red')
+                missing.append(msg + 'no files matched')
+
+        return (
+            f"{nl.join([nl] + skipped) if skipped else ''}"
+            f"{nl.join([nl] + missing) if missing else ''}"
+            f"{nl.join([nl] + matched) if matched else ''}"
+            f'\n\ntotal samples: {len(cache)}'
+            f'\nsamples skipped: {len(skipped)}'
+            f'\nsamples missing: {len(missing)}'
+            f'\nsamples matched: {len(matched)}'
+            f'\ntotal files matched: {total_matched}')
+
+    @classmethod
+    def as_cli_command(cls):
+        """Get data importer as a click command line interface."""
+        @click.command(name='import_data')
+        @options.DIRECTORIES
+        @options.IDENTIFIER
+        @options.FILTERS
+        @options.COMMIT
+        @options.SYMLINK
+        @options.FILES_DATA
+        def command(
+                identifier, commit, filters, directories, symlink, files_data):
+            """
+            Find and import data for multiple workflows from many directories.
+
+            Search is recursive and any cram, bam or fastq file that matches
+            the workflow identifier will be imported.
+
+            Its possible to provide custom annotation per file (e.g. PL, PU, or
+            LB in the case of fastq data). In order to do so, provide a yaml
+            file using the `--files-data` argument. Such file must look
+            like this, please note that keys are file names, not full paths:
+
+            \b
+                1.fq:
+                    ID: 9
+                    LB: Library_id
+                    PL: ILLUMINA
+                    PM: HiSeq-XTen
+                    PU: MICHELLE
+                2.fq:
+                    LB: Library2
+                    ...
+            """
+            def key(workflow):
+                value, types = workflow, (int, str, type(None))
+                for i in identifier:
+                    value = value.get(i)
+                if not isinstance(value, types):
+                    raise click.UsageError(
+                        f'invalid type for identifier '
+                        f'`{".".join(identifier)}`: {type(value)}')
+                return value
+
+            if files_data:
+                with open(files_data) as f:
+                    files_data = yaml.load(f.read())
+            else:
+                files_data = {}
+
+            matched, summary = cls().import_data(
+                directories=directories, symlink=symlink, commit=commit,
+                key=key, files_data=files_data, **filters)
+
+            click.echo(summary)
+
+            if not commit and matched:  # pragma: no cover
+                utils.echo_add_commit_message()
+
+        return command

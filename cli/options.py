@@ -2,6 +2,7 @@
 
 import click
 
+
 IDENTIFIER = click.option(
     '--identifier', '-id',
     show_default=True,
@@ -108,3 +109,16 @@ BEDFILE = click.option(
         writable=False,
         readable=True),
     help='path to bedfile')
+
+FILES_DATA = click.option(
+    '--files-data',
+    help='a yaml file with extra annotation for imported files.',
+    show_default=True,
+    default=None,
+    type=click.Path(
+        resolve_path=True,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        writable=False,
+        readable=True))

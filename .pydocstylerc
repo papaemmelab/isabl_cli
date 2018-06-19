@@ -8,6 +8,7 @@ add_select =
     D204,  # 1 blank line required after class docstring
 
 ignore =
+    D301,  # We need to be able to include back slashes in docstrings for click
     D101,  # Missing docstring in public class (its ok for toil pipelines)
     D413,  # Missing blank line after last section
     D211,  # No blank lines allowed before class docstring

@@ -40,8 +40,7 @@ _DEFAULTS = {
     'ON_DATA_IMPORT': ['cli.data.symlink_workflow_to_projects'],
     'ON_STATUS_CHANGE': ['cli.data.symlink_analysis_to_targets'],
     'ON_SIGNAL_FAILURE': None,
-    'ADMIN_COMMANDS': [
-        'cli.commands.processed_finished'],
+    'ADMIN_COMMANDS': ['cli.commands.processed_finished'],
     'SYSTEM_COMMANDS': [
         'cli.commands.patch_status',
         'cli.commands.get_attributes',

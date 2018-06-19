@@ -4,10 +4,10 @@ import re
 from click.testing import CliRunner
 import click
 import pytest
+import yaml
 
 from cli import _DEFAULTS
 from cli import api
-from cli import cli
 from cli import data
 
 from . import factories
@@ -58,12 +58,9 @@ def test_local_data_import(tmpdir):
     workflows = [api.create_instance('workflows', **i) for i in workflows]
     keys = [i['pk'] for i in workflows]
 
-    for i in workflows:
-        api.patch_instance('workflows', i['pk'], data_type=None, projects=projects)
-
     importer = data.LocalDataImporter()
-    importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
-    obtained = len(importer.get_summary().rsplit('no files matched'))
+    _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
+    obtained = len(summary.rsplit('no files matched'))
     assert obtained == 3 + 1
 
     with pytest.raises(click.UsageError) as error:
@@ -79,19 +76,19 @@ def test_local_data_import(tmpdir):
     path_1.write('foo')
     path_2.write('foo')
 
-    importer.import_data(directories=[tmpdir.strpath], pk__in=keys, commit=True)
-    assert 'samples matched: 1' in importer.get_summary()
+    _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys, commit=True)
+    assert 'samples matched: 1' in summary
 
     with pytest.raises(click.UsageError) as error:
         path_1 = tmpdir.join(f'{workflows[1]["system_id"]}_1.fastq')
         path_2 = tmpdir.join(f'{workflows[1]["system_id"]}.bam')
         path_1.write('foo')
         path_2.write('foo')
-        importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
+        importer.import_data(directories=[tmpdir.strpath], pk__in=keys, commit=True)
 
     path_1.remove()
     path_2.remove()
-    assert 'matched different data types' in str(error.value)
+    assert 'multiple formats' in str(error.value)
 
     with pytest.raises(click.UsageError) as error:
         api.patch_instance('workflows', workflows[1]['pk'], center_id='dup_id')
@@ -103,17 +100,17 @@ def test_local_data_import(tmpdir):
 
     assert 'same identifier for' in str(error.value)
 
-    path_1 = tmpdir.join(f'{workflows[1]["system_id"]}_R1_foo.fastq')
-    path_2 = tmpdir.join(f'{workflows[1]["system_id"]}_R2_foo.fastq')
-    path_3 = tmpdir.join(f'{workflows[2]["system_id"]}_bam1_.bam')
-    path_4 = tmpdir.join(f'{workflows[2]["system_id"]}_bam2_.bam')
+    path_1 = tmpdir.join(f'_{workflows[1]["system_id"]}_cram1_.cram')
+    path_2 = tmpdir.join(f'_{workflows[1]["system_id"]}_cram2_.cram')
+    path_3 = tmpdir.join(f'_{workflows[2]["system_id"]}_bam1_.bam')
+    path_4 = tmpdir.join(f'_{workflows[2]["system_id"]}_bam2_.bam')
 
     path_1.write('foo')
     path_2.write('foo')
     path_3.write('foo')
     path_4.write('foo')
 
-    imported = importer.import_data(
+    imported, summary = importer.import_data(
         directories=[tmpdir.strpath],
         commit=True,
         symlink=True,
@@ -122,18 +119,33 @@ def test_local_data_import(tmpdir):
     project = api.get_instance('projects', projects[0]['pk'])
     assert project['storage_url']
     assert imported[0]['storage_usage'] > 0
-    assert imported[0]['data_type'] == 'FASTQ'
-    assert imported[1]['data_type'] == 'BAM'
+    assert imported[0]['sequencing_data']
+    assert imported[1]['sequencing_data']
     assert 'workflows' in imported[1]['storage_url']
     assert len(os.listdir(os.path.join(imported[1]['storage_url'], 'data'))) == 2
-    assert 'samples matched: 2' in importer.get_summary()
-    assert 'samples skipped: 1' in importer.get_summary()
+    assert 'samples matched: 2' in summary
+    assert 'samples skipped: 1' in summary
+
+    api.patch_instance('workflows', workflows[1]['pk'], sequencing_data=None)
+    file_data = tmpdir.join('file_data.yaml')
+
+    with open(file_data.strpath, 'w') as f:
+        yaml.dump({
+            os.path.basename(path_1.strpath): {'PU': 'TEST_PU'},
+            os.path.basename(path_2.strpath): {'PU': 'TEST_PU'},
+            }, f, default_flow_style=False)
 
     command = data.LocalDataImporter.as_cli_command()
     runner = CliRunner()
-    args = ['-di', tmpdir.strpath, '-id', 'system_id', '-fi', 'pk__in', keys]
+    args = [
+        '-di', tmpdir.strpath, '-id', 'system_id', '-fi', 'pk__in', keys,
+        '--files-data', file_data.strpath, '--commit']
+
     result = runner.invoke(command, args, catch_exceptions=False)
-    assert 'samples skipped: 3' in result.output
+    assert 'samples matched: 1' in result.output
+    workflows[1] = api.get_instance('workflows', workflows[1]['pk'])
+    assert workflows[1]['sequencing_data'][0]['file_data']['PU'] == 'TEST_PU'
+    assert workflows[1]['sequencing_data'][1]['file_data']['PU'] == 'TEST_PU'
 
     args = ['-di', tmpdir.strpath, '-id', 'specimen', '-fi', 'pk__in', keys]
     result = runner.invoke(command, args)
@@ -142,13 +154,8 @@ def test_local_data_import(tmpdir):
 
 def test_get_dst():
     importer = data.LocalDataImporter()
-
-    bam_test = [
-        'sample.bam',
-        'sample.bam.bai',
-        'sample.bam.md5',
-        ]
-
+    bam_test = ['sample.bam']
+    cram_test = ['sample.cram']
     fastq_test = [
         ('sample_R{}_moretext', 'sample_moretext_{}'),
         ('sample_R{}_', 'sample_{}'),
@@ -159,16 +166,18 @@ def test_get_dst():
         ('sample_{}', 'sample_{}'),
         ]
 
-    assert importer._format_fastq_path('not a fastq') is None
-
     for i in bam_test:
         assert re.search(importer.BAM_REGEX, i)
         assert not re.search(importer.BAM_REGEX, i + 'not a bam')
+
+    for i in cram_test:
+        assert re.search(importer.CRAM_REGEX, i)
+        assert not re.search(importer.CRAM_REGEX, i + 'not a cram')
 
     for test, expected in fastq_test:
         for index in [1, 2]:
             for fastq in ['.fastq', '.fq']:
                 for gzipped in ['', '.gz']:
                     path = test.format(index) + fastq + gzipped
-                    obtained = importer._format_fastq_path(path)
+                    obtained = importer.format_fastq_name(path)
                     assert obtained == expected.format(index) + '.fastq' + gzipped
