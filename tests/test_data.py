@@ -27,26 +27,40 @@ def test_get_storage_directory():
     assert j == '/test/12345'
 
 
-def test_import_bed(tmpdir):
+def test_import_bedfiles(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
     _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)
     technique = api.create_instance('techniques', **factories.TechniqueFactory())
-    bed = tmpdir.join('test.bed')
-    bed.write('2\t1\t2\n1\t1\t2\n')
-    technique = data.LocalBedImporter.import_bed(technique['pk'], bed.strpath, 'AnAssembly')
+    targets = tmpdir.join('targets.bed')
+    baits = tmpdir.join('baits.bed')
+    targets.write('2\t1\t2\n1\t1\t2\n')
+    baits.write('2\t1\t2\n1\t1\t2\n')
 
-    assert os.path.isfile(technique['data']['bedfiles']['AnAssembly']['uncompressed'])
-    assert os.path.isfile(technique['data']['bedfiles']['AnAssembly']['gzipped'])
-    assert os.path.isfile(technique['data']['bedfiles']['AnAssembly']['gzipped'] + '.tbi')
+    technique = data.LocalBedImporter.import_bedfiles(
+        technique_key=technique['pk'],
+        targets_path=targets.strpath,
+        baits_path=baits.strpath,
+        assembly='AnAssembly',
+        description='This are test bedfiles')
 
-    with open(technique['data']['bedfiles']['AnAssembly']['uncompressed'], 'r') as f:  # test bed is sorted
-        assert next(f).startswith('1')
+    for i in 'targets', 'baits':
+        for j in '', '.gz', '.gz.tbi':
+            assert os.path.isfile(technique['bedfiles']['AnAssembly'][i] + j)
+
+        with open(technique['bedfiles']['AnAssembly'][i], 'r') as f:  # test bed is sorted
+            assert next(f).startswith('1')
 
     command = data.LocalBedImporter.as_cli_command()
     runner = CliRunner()
-    args = ['--bedfile', bed.strpath, '--key', technique['pk'], '--assembly', 'AnAssembly']
+    args = [
+        '--targets-path', targets.strpath,
+        '--baits-path', baits.strpath,
+        '--key', technique['pk'],
+        '--assembly', 'AnAssembly',
+        '--description', 'Test',
+        ]
     result = runner.invoke(command, args, catch_exceptions=False)
-    assert 'has a bed registered' in result.output
+    assert 'has registered bedfiles for' in result.output
 
 
 def test_local_data_import(tmpdir):

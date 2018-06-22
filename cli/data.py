@@ -7,6 +7,7 @@ from os.path import basename
 from os.path import getsize
 from os.path import isdir
 from os.path import join
+
 import os
 import re
 import shutil
@@ -121,84 +122,108 @@ class LocalBedImporter():
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        @click.command(name='import_bed')
-        @options.PRIMARY_KEY
-        @options.BEDFILE
+        @click.command()
+        @options.TECHNIQUE_PRIMARY_KEY
+        @options.TARGETS_PATH
+        @options.BAITS_PATH
         @click.option('--assembly', help='name of reference genome')
-        def command(key, bedfile, assembly):
+        @click.option('--description', help='name of reference genome')
+        def import_bedfiles(
+                key, assembly, targets_path, baits_path, description):
             """
-            Register a `bedfile` in technique`s data directory.
+            Register targets and baits bedfiles in technique's data directory.
 
-            The incoming bedfile will be compressed and tabixed.
+            Incoming bedfiles will be compressed and tabixed.
             Both gzipped and uncompressed versions are kept.
 
-            Instance's `storage_url`, `storage_usage`, `data` are updated,
-            setting the latter's `bedfiles` key to:
+            Instance's `storage_url`, `storage_usage` and `bedfiles` fields
+            are updated, setting the latter to:
 
                 'bedfiles': {
-                    <assembly>: {
-                        'uncompressed': path/to/bedfile.bed,
-                        'gzipped': path/to/bedfile.bed.gz
+                    <assembly name>: {
+                        'targets': path/to/targets_bedfile.bed,
+                        'baits': path/to/baits_bedfile.bed
+                        },
                     }
-                }
             """
-            cls().import_bed(key, bedfile, assembly)
-        return command
+            cls().import_bedfiles(
+                technique_key=key,
+                targets_path=targets_path,
+                baits_path=baits_path,
+                assembly=assembly,
+                description=description)
+
+        return import_bedfiles
 
     @staticmethod
-    def import_bed(technique_primary_key, input_bed_path, assembly):
+    def process_bedfile(path):
+        """Sort, tabix and gzip a bedfile."""
+        command = ['sort', '-k1,1V', '-k2,2n', path]
+        sorted_bed = subprocess.check_output(command)
+
+        with open(path, '+w') as f:
+            f.write(sorted_bed.decode('utf-8'))
+
+        subprocess.check_call(['bgzip', path])
+        subprocess.check_call(['tabix', '-p', 'bed', path + '.gz'])
+
+        with open(path, '+w') as f:  # write uncompressed file again
+            f.write(sorted_bed.decode('utf-8'))
+
+    @classmethod
+    def import_bedfiles(
+            cls, technique_key, targets_path, baits_path,
+            assembly, description=None):
         """
         Register input_bed_path in technique's storage dir and update `data`.
 
         Arguments:
-            technique_primary_key (int): technique primary key.
-            input_bed_path (str): path to incoming bedfile.
+            technique_key (int): technique primary key.
+            targets_path (str): path to targets bedfile.
+            baits_path (str): path to baits bedfile.
             assembly (str): name of reference genome for bedfile.
+            description (str): a description of the bedfiles.
 
         Returns:
             dict: updated technique instance as retrieved from API.
         """
         utils.check_admin()
-        instance = api.get_instance('techniques', technique_primary_key)
+        technique = api.get_instance('techniques', technique_key)
 
-        if not input_bed_path.endswith('.bed'):  # pragma: no cover
-            raise click.UsageError(f'No .bed suffix: {input_bed_path}')
-
-        if not instance['storage_url']:
-            instance = make_storage_diectory('techniques', instance['pk'])
-
-        if instance['data'].get('bedfiles', {}).get(assembly):
+        if assembly in technique['bedfiles']:
             raise click.UsageError(
-                f'{instance["slug"]} has a bed registered for {assembly}: '
-                f'{instance["data"]["bedfiles"][assembly]}')
+                f"Technique '{technique['slug']}' "
+                f"has registered bedfiles for '{assembly}':\n"
+                f'\n\t{technique["bedfiles"][assembly]["targets"]}'
+                f'\n\t{technique["bedfiles"][assembly]["baits"]}')
 
-        if not instance['data'].get('bedfiles'):
-            instance['data']['bedfiles'] = {}
+        if not technique['storage_url']:
+            technique = make_storage_diectory('techniques', technique['pk'])
 
-        bed_dir = join(instance['storage_url'], assembly)
-        bed_path = join(bed_dir, f"{instance['slug']}.bed")
-        os.makedirs(bed_dir, exist_ok=True)
-        sorted_bed = subprocess.check_output(
-            ['sort', '-k1,1V', '-k2,2n', input_bed_path])
+        api.create_instance('assemblies', name=assembly)
+        beds_dir = join(technique['storage_url'], 'bedfiles', assembly)
+        base_name = f'{technique["slug"]}.{assembly}'
+        targets_dst = join(beds_dir, f'{base_name}.targets.bed')
+        baits_dst = join(beds_dir, f'{base_name}.baits.bed')
+        os.makedirs(beds_dir, exist_ok=True)
 
-        with open(bed_path, '+w') as f:
-            f.write(sorted_bed.decode('utf-8'))
+        for src, dst in [(targets_path, targets_dst), (baits_path, baits_dst)]:
+            click.echo(f'\nCopying:\n\t{src}\n\tto {dst}')
+            shutil.copy(src, dst)
+            click.secho(f'\nProcessing {basename(dst)}...', fg='blue')
+            cls.process_bedfile(dst)
 
-        subprocess.check_call(['bgzip', bed_path])
-        subprocess.check_call(['tabix', '-p', 'bed', bed_path + '.gz'])
-
-        with open(bed_path, '+w') as f:  # write uncompressed file again
-            f.write(sorted_bed.decode('utf-8'))
-
-        instance['data']['bedfiles'][assembly] = {}
-        instance['data']['bedfiles'][assembly]['uncompressed'] = bed_path
-        instance['data']['bedfiles'][assembly]['gzipped'] = bed_path + '.gz'
+        click.secho(f'\nSuccess! patching {technique["slug"]}...', fg='green')
+        technique['bedfiles'][assembly] = {}
+        technique['bedfiles'][assembly]['targets'] = targets_dst
+        technique['bedfiles'][assembly]['baits'] = baits_dst
+        technique['bedfiles'][assembly]['description'] = description
 
         return api.patch_instance(
             endpoint='techniques',
-            identifier=instance['pk'],
-            storage_usage=utils.get_tree_size(instance['storage_url']),
-            data=instance['data'])
+            identifier=technique['pk'],
+            storage_usage=utils.get_tree_size(technique['storage_url']),
+            bedfiles=technique['bedfiles'])
 
 
 class LocalDataImporter():
@@ -217,12 +242,12 @@ class LocalDataImporter():
 
     def import_data(
             self, directories, symlink=False, commit=False,
-            key=lambda x: x['system_id'], files_data={}, **filters):
+            key=lambda x: x['system_id'], files_data=None, **filters):
         """
         Import raw data for multiple workflows.
 
-        Workflows's `storage_url`, `storage_usage`, `data_type` are updated,
-        setting the latter to the data type found (e.g. FASTQ, BAM).
+        Workflows's `storage_url`, `storage_usage`, `sequencing_data` are
+        updated.
 
         Arguments:
             directories (list): list of directories to be recursively explored.
@@ -239,15 +264,23 @@ class LocalDataImporter():
                 if cant determine read 1 or read 2 from matched fastq files.
 
         Returns:
-            list, str: list of workflows for which data has been matched and a
+            tuple: list of workflows for which data has been matched and a
                 summary of the operation.
         """
         utils.check_admin()
+        files_data = files_data or {}
         workflows_matched = []
         cache = defaultdict(dict)
         patterns = []
         identifiers = {}
 
+        # validate files_data
+        for i, j in files_data.items():
+            if not isinstance(j, dict):  # pragma: no cover
+                raise click.UsageError(
+                    f'Invalid file data, expected dict {i}: {j}')
+
+        # get workflows and load cache dictionary
         for i in api.get_instances('workflows', verbose=True, **filters):
             index = f"primary_key_{i['pk']}"
             using_id = f"{i['system_id']} (Skipped, identifier is NULL)"
@@ -268,10 +301,12 @@ class LocalDataImporter():
             cache[index]['files'] = []
 
         if patterns:
-            # see http://stackoverflow.com/questions/8888567
-            data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
+            # see http://stackoverflow.com/questions/8888567 for pattern
             pattern = re.compile('|'.join(patterns))
+            data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
             label = f'Exploring directories...'
+
+            # explore dirs
             for directory in directories:
                 with click.progressbar(os.walk(directory), label=label) as bar:
                     for root, _, files in bar:
@@ -282,6 +317,7 @@ class LocalDataImporter():
                                 if index:
                                     cache[index]['files'].append(path)
 
+            # process files if needed
             label = 'Processing...'
             bar = sorted(cache.values(), key=lambda x: x['instance']['pk'])
             with click.progressbar(bar, label=label) as bar:
@@ -296,23 +332,6 @@ class LocalDataImporter():
                         workflows_matched.append(i['instance'])
 
         return workflows_matched, self.get_summary(cache)
-
-    @staticmethod
-    def get_regex_pattern(group_name, identifier):
-        """
-        Get regex pattern for `identifier` group as `group_name`.
-
-        This pattern treats dashes, underscores and dots equally.
-
-        Arguments:
-            group_name (str): regex pattern group name.
-            identifier (str): identifier to be matched by regex.
-
-        Returns:
-            str: a regex pattern.
-        """
-        pattern = re.sub(r'[-_.]', r'[-_.]', identifier)
-        return r'(?P<{}>[-_.]?{}[-_.])'.format(group_name, pattern)
 
     def match_path(self, path, pattern):
         """Match `path` with `pattern` and update cache if fastq or bam."""
@@ -368,6 +387,7 @@ class LocalDataImporter():
 
         for src in files:
             file_name = basename(src)
+            file_data = files_data.get(file_name, {})
 
             if re.search(self.BAM_REGEX, src):
                 file_type = 'BAM'
@@ -385,7 +405,7 @@ class LocalDataImporter():
             sequencing_data.append(dict(
                 file_url=dst,
                 file_type=file_type,
-                file_data=files_data.get(basename(src), {}),
+                file_data=file_data,
                 hash_value=getsize(src),
                 hash_method="os.path.getsize"))
 
@@ -425,6 +445,23 @@ class LocalDataImporter():
         file_name = re.sub(number_index_fastq, '.fastq', file_name)
         file_name = re.sub(letter_index_any_location, '_', file_name)
         return re.sub(r'[_.]f(ast)?q', suffix, file_name)
+
+    @staticmethod
+    def get_regex_pattern(group_name, identifier):
+        """
+        Get regex pattern for `identifier` group as `group_name`.
+
+        This pattern treats dashes, underscores and dots equally.
+
+        Arguments:
+            group_name (str): regex pattern group name.
+            identifier (str): identifier to be matched by regex.
+
+        Returns:
+            str: a regex pattern.
+        """
+        pattern = re.sub(r'[-_.]', r'[-_.]', identifier)
+        return r'(?P<{}>(^|[-_.])?{}[-_.])'.format(group_name, pattern)
 
     @staticmethod
     def symlink(src, dst):
@@ -479,7 +516,8 @@ class LocalDataImporter():
             Find and import data for multiple workflows from many directories.
 
             Search is recursive and any cram, bam or fastq file that matches
-            the workflow identifier will be imported.
+            the workflow identifier will be imported. Multiple data types for
+            same workflow is not currently supported.
 
             Its possible to provide custom annotation per file (e.g. PL, PU, or
             LB in the case of fastq data). In order to do so, provide a yaml

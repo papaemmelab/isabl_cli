@@ -42,9 +42,16 @@ ENDPOINT = click.option(
         'assemblies']),
     required=True)
 
-PRIMARY_KEY = click.option(
+ANALYSIS_PRIMARY_KEY = click.option(
     '--key',
-    help='database primary key',
+    help='analysis primary key',
+    show_default=True,
+    type=click.INT,
+    required=True)
+
+TECHNIQUE_PRIMARY_KEY = click.option(
+    '--key',
+    help='technique primary key',
     show_default=True,
     type=click.INT,
     required=True)
@@ -98,8 +105,8 @@ SYMLINK = click.option(
     show_default=True,
     is_flag=True)
 
-BEDFILE = click.option(
-    '--bedfile',
+TARGETS_PATH = click.option(
+    '--targets-path',
     show_default=True,
     type=click.Path(
         resolve_path=True,
@@ -108,7 +115,19 @@ BEDFILE = click.option(
         dir_okay=False,
         writable=False,
         readable=True),
-    help='path to bedfile')
+    help='path to targets bedfile')
+
+BAITS_PATH = click.option(
+    '--baits-path',
+    show_default=True,
+    type=click.Path(
+        resolve_path=True,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        writable=False,
+        readable=True),
+    help='path to baits bedfile')
 
 FILES_DATA = click.option(
     '--files-data',

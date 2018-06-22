@@ -35,7 +35,7 @@ def processed_finished(filters):
 
 
 @click.command()
-@options.PRIMARY_KEY
+@options.ANALYSIS_PRIMARY_KEY
 @options.ANALYSIS_STATUS
 def patch_status(key, status):
     """Patch status of a given analysis."""
