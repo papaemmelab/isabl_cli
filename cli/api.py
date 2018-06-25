@@ -1,16 +1,16 @@
 """Logic to interact with API."""
 
 from itertools import islice
-import time
 import collections
+import time
 
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import click
 import requests
 
+from cli import utils
 from cli.settings import system_settings
 from cli.settings import user_settings
-from cli import utils
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # pylint: disable=E1101
 

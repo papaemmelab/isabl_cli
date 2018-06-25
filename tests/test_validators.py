@@ -1,6 +1,7 @@
 """cli validators tests."""
 
 from os.path import join
+
 import pytest
 
 from cli import exceptions

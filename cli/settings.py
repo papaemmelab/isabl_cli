@@ -1,18 +1,18 @@
 """System and user settings."""
 
+from getpass import getuser
 from importlib import import_module
 from os import environ
 from os.path import abspath
 from os.path import expanduser
 from os.path import join
-from getpass import getuser
+import getpass
 import json
 import os
-import getpass
-import six
 
 from cached_property import cached_property
 import pytz
+import six
 import yaml
 
 _DEFAULTS = {

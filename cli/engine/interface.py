@@ -1,11 +1,11 @@
 """Pipeline engine command line interface logic."""
 
+from slugify import slugify
 import click
 
 from cli import utils
-from .runner import Runner
-from slugify import slugify
 
+from .runner import Runner
 
 COMMIT = click.option(
     "--commit",

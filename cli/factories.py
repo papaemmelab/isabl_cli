@@ -1,7 +1,7 @@
 """Instance factories used for testing."""
 
-import string
 import random
+import string
 
 from factory import fuzzy
 import factory

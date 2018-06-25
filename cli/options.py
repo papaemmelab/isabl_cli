@@ -2,7 +2,6 @@
 
 import click
 
-
 IDENTIFIER = click.option(
     '--identifier', '-id',
     show_default=True,

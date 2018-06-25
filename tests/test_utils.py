@@ -6,8 +6,8 @@ import tarfile
 
 import pytest
 
-from cli.settings import _DEFAULTS
 from cli import utils
+from cli.settings import _DEFAULTS
 
 
 def test_force_symlink(tmpdir):

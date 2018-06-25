@@ -9,8 +9,8 @@ import click
 
 from cli import api
 from cli import options
-from cli.settings import system_settings
 from cli import utils
+from cli.settings import system_settings
 
 
 @click.command()

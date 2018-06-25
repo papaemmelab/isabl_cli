@@ -1,8 +1,7 @@
 from click.testing import CliRunner
 
-from cli import commands
 from cli import api
-
+from cli import commands
 from cli import factories
 
 

@@ -1,5 +1,7 @@
 from os import environ
+
 from cli.settings import system_settings
+
 
 def test_assert_read_settings_from_yaml(tmpdir):
     settings_yml = tmpdir.join('test.yml')

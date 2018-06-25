@@ -2,10 +2,10 @@ from click.testing import CliRunner
 import click
 import pytest
 
-from cli.settings import _DEFAULTS
 from cli import api
 from cli import factories
 from cli.engine import AbstractPipeline
+from cli.settings import _DEFAULTS
 
 
 class TestPipeline(AbstractPipeline):

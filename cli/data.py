@@ -18,8 +18,8 @@ import yaml
 
 from cli import api
 from cli import options
-from cli.settings import system_settings
 from cli import utils
+from cli.settings import system_settings
 
 
 def symlink_workflow_to_projects(workflow):

@@ -1,10 +1,10 @@
 """cli utils."""
 
 import getpass
+import json
 import os
 import sys
 import tarfile
-import json
 
 import click
 

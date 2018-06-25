@@ -7,10 +7,10 @@ import subprocess
 from click import progressbar
 import click
 
-from cli import exceptions
-from cli.settings import system_settings
-from cli import utils
 from cli import api
+from cli import exceptions
+from cli import utils
+from cli.settings import system_settings
 
 from .creator import Creator
 

@@ -4,10 +4,9 @@ import pytest
 import requests
 
 from cli import api
-from cli.settings import user_settings
-from cli.settings import system_settings
-
 from cli import factories
+from cli.settings import system_settings
+from cli.settings import user_settings
 
 
 def test_get_token_headers():
