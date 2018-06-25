@@ -8,8 +8,8 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import click
 import requests
 
-from cli import system_settings
-from cli import user_settings
+from cli.settings import system_settings
+from cli.settings import user_settings
 from cli import utils
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # pylint: disable=E1101

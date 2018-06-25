@@ -7,18 +7,18 @@ from os.path import basename
 from os.path import getsize
 from os.path import isdir
 from os.path import join
-
 import os
 import re
 import shutil
 import subprocess
 
+from slugify import slugify
 import click
 import yaml
 
 from cli import api
 from cli import options
-from cli import system_settings
+from cli.settings import system_settings
 from cli import utils
 
 
@@ -26,7 +26,7 @@ def symlink_workflow_to_projects(workflow):
     """Create symlink from workflow directory and projects directories."""
     for i in workflow['projects']:
         if not i['storage_url']:
-            i = make_storage_diectory('projects', i['pk'])
+            i = update_storage_url('projects', i['pk'])
 
         utils.force_symlink(
             workflow['storage_url'],
@@ -43,13 +43,13 @@ def symlink_analysis_to_targets(analysis):
 
     for i in analysis['targets']:
         if not i['storage_url']:
-            i = make_storage_diectory('workflows', i['pk'])
+            i = update_storage_url('workflows', i['pk'])
         utils.force_symlink(src, join(i['storage_url'], dst))
 
     if analysis['project_level_analysis']:
         i = analysis['project_level_analysis']
         if not i['storage_url']:
-            i = make_storage_diectory('projects', i['pk'])
+            i = update_storage_url('projects', i['pk'])
         utils.force_symlink(src, join(i['storage_url'], dst))
 
 
@@ -61,99 +61,176 @@ def trash_analysis_storage(analysis):
     if isdir(analysis['storage_url']):
         slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
         slug += datetime.now(system_settings.TIME_ZONE).isoformat()
-        trash_dir = get_storage_directory('.analyses_trash', analysis['pk'])
-        os.makedirs(trash_dir, exist_ok=True)
+
+        trash_dir = system_settings.MAKE_STORAGE_DIRECTORY(
+            base='.analyses_trash',
+            identifier=analysis["pk"],
+            use_hash=True)
+
         dst = join(trash_dir, slug)
         click.echo(f"\ntrashing: {analysis['storage_url']} -> {dst}\n")
         shutil.move(analysis['storage_url'], dst)
 
 
-def get_storage_directory(endpoint, primary_key, root=None, use_hash=True):
+def make_storage_directory(
+        base,
+        identifier,
+        use_hash=False,
+        root=system_settings.BASE_STORAGE_DIRECTORY):
     """
-    Get path to instance's data directory.
+    Get and create path to a data directory.
 
-    If `use_hash` a naming system using the primay key is used. For example
-    given `endpoint` analyses with primary keys 12345 and 2345:
+    The path is set to:
 
-        {root}/analyses/23/45/2345
-        {root}/analyses/23/45/12345
+        <root>/<base>/<identifier>
 
-    If `use_hash` is False:
+    If `use_hash`, identifier must be integer and path is build using the
+    four last digits of the identifier. Say identifiers is 12345, then path is:
 
-        {root}/projects/100
-        {root}/techniques/2
+        <root>/<base>/23/45/12345
 
     Arguments:
-        endpoint (str): instance's API endpoint.
-        primary_key (str): instance's primary key.
+        base (str): instance's API base.
+        identifier (str): instance's primary key.
         root (str): default is system_settings.BASE_STORAGE_DIRECTORY.
-        use_hash (bool): hash primary key for directories.
+        use_hash (bool): hash integer identifier for directories.
 
     Returns:
         str: path to instance's data directory.
     """
-    root = root or system_settings.BASE_STORAGE_DIRECTORY
-    hash_1 = f'{primary_key:04d}' [-4:-2]
-    hash_2 = f'{primary_key:04d}' [-2:]
-
     if not root:  # pragma: no cover
         raise click.UsageError('Setting `BASE_STORAGE_DIRECTORY` not defined.')
 
     if use_hash:
-        path = os.path.join(endpoint, hash_1, hash_2)
+        if not str(identifier).isdigit():  # pragma: no cover
+            raise click.UsageError('`use_hash` only supported for integers.')
+
+        hash_1 = f'{identifier:04d}'[-4:-2]
+        hash_2 = f'{identifier:04d}'[-2:]
+        path = join(base, hash_1, hash_2)
     else:
-        path = os.path.join(endpoint)
+        path = join(base)
 
-    return os.path.join(root, path, str(primary_key))
+    storage_directory = join(root, path, str(identifier))
+    os.makedirs(storage_directory, exist_ok=True)
+    return storage_directory
 
 
-def make_storage_diectory(endpoint, primary_key):
+def update_storage_url(endpoint, identifier, use_hash=False, **data):
     """Make storage directory and return patched instance."""
-    get_dir = system_settings.GET_STORAGE_DIRECTORY
-    storage_url = get_dir(endpoint, primary_key, use_hash=False)
-    os.makedirs(storage_url, exist_ok=True)
-    return api.patch_instance(endpoint, primary_key, storage_url=storage_url)
+    get_dir = system_settings.MAKE_STORAGE_DIRECTORY
+    data['storage_url'] = get_dir(endpoint, identifier, use_hash=use_hash)
+    return api.patch_instance(endpoint, identifier, **data)
 
 
-class LocalBedImporter():
+class BaseImporter():
 
-    """An import engine for techniques' bedfiles."""
+    @staticmethod
+    def symlink(src, dst):
+        """Create symlink from `src` to `dst`."""
+        return utils.force_symlink(os.path.realpath(src), dst)
+
+    @staticmethod
+    def move(src, dst):
+        """Rename `src` to `dst`."""
+        return os.rename(os.path.realpath(src), dst)
+
+
+class ReferenceDataImporter(BaseImporter):
+
+    """An import engine for assemblies' `reference_data`."""
+
+    @classmethod
+    def import_data(cls, assembly, data_src, data_id, symlink, description):
+        """
+        Register input_bed_path in technique's storage dir and update `data`.
+
+        Arguments:
+            assembly (str): name of assembly.
+            data_src (str): path to reference data.
+            data_id (str): identifier that will be used for reference data.
+            symlink (str): symlink instead of move.
+            description (str): reference data description.
+
+        Returns:
+            dict: updated assembly instance as retrieved from API.
+        """
+        utils.check_admin()
+        assembly = api.create_instance('assemblies', name=assembly)
+        data_id = slugify(data_id, separator='_')
+        click.echo(f'`data_id` set to: {click.style(data_id, fg="green")}')
+
+        if data_id in assembly['reference_data']:
+            raise click.UsageError(
+                f"Assembly '{assembly['name']}' "
+                f"has already reference data registered with id '{data_id}':\n"
+                f'\n\t{assembly["reference_data"][data_id]}')
+
+        if not assembly['storage_url']:
+            assembly = update_storage_url('assemblies', assembly['name'])
+
+        data_dir = join(assembly['storage_url'], data_id)
+        data_dst = join(data_dir, basename(data_src))
+        os.makedirs(data_dir, exist_ok=True)
+
+        if symlink:
+            click.echo(f'\nLinking:\n\t{data_src}\n\tto {data_dst}')
+            cls.symlink(data_src, data_dst)
+        else:
+            click.echo(f'\nMoving:\n\t{data_src}\n\tto {data_dst}')
+            cls.move(data_src, data_dst)
+
+        click.secho(f'\nSuccess! patching {assembly["name"]}...', fg='green')
+        assembly['reference_data'][data_id] = {}
+        assembly['reference_data'][data_id]['url'] = data_dst
+        assembly['reference_data'][data_id]['description'] = description
+
+        return api.patch_instance(
+            endpoint='assemblies',
+            identifier=assembly['pk'],
+            storage_usage=utils.get_tree_size(assembly['storage_url']),
+            reference_data=assembly['reference_data'])
 
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        @click.command()
-        @options.TECHNIQUE_PRIMARY_KEY
-        @options.TARGETS_PATH
-        @options.BAITS_PATH
+        @click.command(name='import_reference_data')
         @click.option('--assembly', help='name of reference genome')
-        @click.option('--description', help='name of reference genome')
-        def import_bedfiles(
-                key, assembly, targets_path, baits_path, description):
+        @click.option('--description', help='reference data description')
+        @click.option('--data-id', help='data identifier (will be slugified)')
+        @options.REFERENCE_DATA_SOURCE
+        @options.SYMLINK
+        def cmd(assembly, data_id, symlink, description, data_src):
             """
-            Register targets and baits bedfiles in technique's data directory.
+            Register reference data in assembly's data directory.
 
-            Incoming bedfiles will be compressed and tabixed.
-            Both gzipped and uncompressed versions are kept.
+            Incoming data (files or directories) will moved unless `--symlink`
+            is provided.
 
-            Instance's `storage_url`, `storage_usage` and `bedfiles` fields
-            are updated, setting the latter to:
+            Assembly's `storage_url`, `storage_usage` and `reference_data`
+            fields are updated, setting the latter to:
 
-                'bedfiles': {
-                    <assembly name>: {
-                        'targets': path/to/targets_bedfile.bed,
-                        'baits': path/to/baits_bedfile.bed
+                'reference_data': {
+                    <data identifier>: {
+                        'url': path/to/targets_bedfile.bed,
+                        'description': path/to/baits_bedfile.bed
                         },
+                    ...
                     }
             """
-            cls().import_bedfiles(
-                technique_key=key,
-                targets_path=targets_path,
-                baits_path=baits_path,
+            cls().import_data(
+                data_id=data_id,
+                symlink=symlink,
+                data_src=data_src,
                 assembly=assembly,
                 description=description)
 
-        return import_bedfiles
+        return cmd
+
+
+class BedImporter():
+
+    """An import engine for techniques' bedfiles."""
 
     @staticmethod
     def process_bedfile(path):
@@ -198,7 +275,7 @@ class LocalBedImporter():
                 f'\n\t{technique["bedfiles"][assembly]["baits"]}')
 
         if not technique['storage_url']:
-            technique = make_storage_diectory('techniques', technique['pk'])
+            technique = update_storage_url('techniques', technique['pk'])
 
         api.create_instance('assemblies', name=assembly)
         beds_dir = join(technique['storage_url'], 'bedfiles', assembly)
@@ -225,8 +302,44 @@ class LocalBedImporter():
             storage_usage=utils.get_tree_size(technique['storage_url']),
             bedfiles=technique['bedfiles'])
 
+    @classmethod
+    def as_cli_command(cls):
+        """Get bed importer as click command line interface."""
+        @click.command(name='import_bedfiles')
+        @options.TECHNIQUE_PRIMARY_KEY
+        @options.TARGETS_PATH
+        @options.BAITS_PATH
+        @click.option('--assembly', help='name of reference genome')
+        @click.option('--description', help='bedfiles description')
+        def cmd(key, assembly, targets_path, baits_path, description):
+            """
+            Register targets and baits bedfiles in technique's data directory.
 
-class LocalDataImporter():
+            Incoming bedfiles will be compressed and tabixed.
+            Both gzipped and uncompressed versions are kept.
+
+            Instance's `storage_url`, `storage_usage` and `bedfiles` fields
+            are updated, setting the latter to:
+
+                'bedfiles': {
+                    <assembly name>: {
+                        'targets': path/to/targets_bedfile.bed,
+                        'baits': path/to/baits_bedfile.bed
+                        },
+                    ...
+                    }
+            """
+            cls().import_bedfiles(
+                technique_key=key,
+                targets_path=targets_path,
+                baits_path=baits_path,
+                assembly=assembly,
+                description=description)
+
+        return cmd
+
+
+class DataImporter(BaseImporter):
 
     """
     A Data import engine for workflows.
@@ -234,6 +347,7 @@ class LocalDataImporter():
     Attributes:
         FASTQ_REGEX (str): a regex pattern used to match fastq files.
         BAM_REGEX (str): a regex pattern to match bams.
+        CRAM_REGEX (str): a regex pattern to match crams.
     """
 
     BAM_REGEX = r'\.bam$'
@@ -377,10 +491,12 @@ class LocalDataImporter():
         """
         sequencing_data = []
         src_dst = []
-        get_dir = system_settings.GET_STORAGE_DIRECTORY
 
         if not instance['storage_url']:
-            instance['storage_url'] = get_dir('workflows', instance['pk'])
+            instance = update_storage_url(
+                endpoint='workflows',
+                identifier=instance['pk'],
+                use_hash=True)
 
         data_dir = join(instance['storage_url'], 'data')
         os.makedirs(data_dir, exist_ok=True)
@@ -464,16 +580,6 @@ class LocalDataImporter():
         return r'(?P<{}>(^|[-_.])?{}[-_.])'.format(group_name, pattern)
 
     @staticmethod
-    def symlink(src, dst):
-        """Create symlink from `src` to `dst`."""
-        return utils.force_symlink(os.path.realpath(src), dst)
-
-    @staticmethod
-    def move(src, dst):
-        """Rename `src` to `dst`."""
-        return os.rename(os.path.realpath(src), dst)
-
-    @staticmethod
     def get_summary(cache):
         """Get a summary of the matched, skipped, and missing files."""
         skipped, missing, matched, total_matched, nl = [], [], [], 0, '\n'
@@ -510,8 +616,7 @@ class LocalDataImporter():
         @options.COMMIT
         @options.SYMLINK
         @options.FILES_DATA
-        def command(
-                identifier, commit, filters, directories, symlink, files_data):
+        def cmd(identifier, commit, filters, directories, symlink, files_data):
             """
             Find and import data for multiple workflows from many directories.
 
@@ -560,4 +665,4 @@ class LocalDataImporter():
             if not commit and matched:  # pragma: no cover
                 utils.echo_add_commit_message()
 
-        return command
+        return cmd

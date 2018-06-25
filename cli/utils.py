@@ -8,7 +8,7 @@ import json
 
 import click
 
-from cli import system_settings
+from cli.settings import system_settings
 
 
 def traverse_dict(dictionary, keys, serialize=False):

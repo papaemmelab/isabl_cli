@@ -1,8 +1,11 @@
+"""Instance factories used for testing."""
+
 import string
 import random
 
 from factory import fuzzy
 import factory
+
 
 class BaseFactory(factory.DictFactory):
     notes = fuzzy.FuzzyText(length=100, chars=string.ascii_letters)

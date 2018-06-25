@@ -3,7 +3,7 @@ from click.testing import CliRunner
 from cli import commands
 from cli import api
 
-from . import factories
+from cli import factories
 
 
 def test_commands(tmpdir):

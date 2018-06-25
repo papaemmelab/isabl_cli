@@ -6,7 +6,7 @@ import tarfile
 
 import pytest
 
-from cli import _DEFAULTS
+from cli.settings import _DEFAULTS
 from cli import utils
 
 

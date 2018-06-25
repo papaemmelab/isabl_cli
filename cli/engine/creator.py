@@ -1,14 +1,13 @@
 """Engine analysis creator."""
 
 from collections import defaultdict
-import os
 import sys
 
 from cached_property import cached_property
 import click
 
-from cli import system_settings
 from cli import api
+from cli import data
 
 from .validator import Validator
 
@@ -64,18 +63,11 @@ class Creator(Validator):
                         references=i[1],
                         analyses=i[2])
 
-                    storage_url = system_settings.GET_STORAGE_DIRECTORY(
-                        endpoint='analyses',
-                        primary_key=analysis['pk'])
-
-                    analysis = api.patch_instance(
-                        endpoint='analyses',
-                        identifier=analysis['pk'],
-                        storage_url=storage_url,
-                        storage_usage=0)
-
-                    os.makedirs(storage_url, exist_ok=True)
-                    created_analyses.append(analysis)
+                    created_analyses.append(
+                        data.update_storage_url(
+                            endpoint='analyses',
+                            identifier=analysis['pk'],
+                            use_hash=True))
                 except click.UsageError as error:
                     invalid_tuples.append((i, error))
 

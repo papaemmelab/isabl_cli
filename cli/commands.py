@@ -9,7 +9,7 @@ import click
 
 from cli import api
 from cli import options
-from cli import system_settings
+from cli.settings import system_settings
 from cli import utils
 
 

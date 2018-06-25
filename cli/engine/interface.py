@@ -4,6 +4,7 @@ import click
 
 from cli import utils
 from .runner import Runner
+from slugify import slugify
 
 
 COMMIT = click.option(
@@ -70,7 +71,8 @@ class Interface(Runner):
         return command
 
     def _get_cmd_name(self):
-        return f"run_{self.pipeline['name']}_{self.pipeline['pk']}".lower()
+        name = f"{self.NAME} {self.VERSION} {self.ASSEMBLY}"
+        return slugify(name, separator='_')
 
     def _get_cli_options(self):
         """Add default options."""

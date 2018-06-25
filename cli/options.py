@@ -1,4 +1,4 @@
-"""click options."""
+"""Click options decorators."""
 
 import click
 
@@ -104,6 +104,15 @@ SYMLINK = click.option(
     help='use symlink',
     show_default=True,
     is_flag=True)
+
+REFERENCE_DATA_SOURCE = click.option(
+    '--data-src',
+    show_default=True,
+    type=click.Path(
+        resolve_path=True,
+        exists=True,
+        readable=True),
+    help='path to reference data')
 
 TARGETS_PATH = click.option(
     '--targets-path',

@@ -18,7 +18,7 @@ Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 import click
 
 from cli import __version__
-from cli import system_settings
+from cli.settings import system_settings
 
 
 @click.group()
@@ -28,8 +28,13 @@ def main():  # pragma: no cover
     pass
 
 
-for i in system_settings.ADMIN_COMMANDS:
-    main.add_command(i)
+@click.group()
+def pipelines():  # pragma: no cover
+    """Run registered pipelines."""
+    pass
+
+
+main.add_command(pipelines)
 
 for i in system_settings.SYSTEM_COMMANDS:
     main.add_command(i)
@@ -38,10 +43,18 @@ for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
 for i in system_settings.INSTALLED_PIPELINES:  # pragma: no cover
-    main.add_command(i.as_cli_command())
+    pipelines.add_command(i.as_cli_command())
 
-if system_settings.DATA_IMPORTER:
-    main.add_command(system_settings.DATA_IMPORTER.as_cli_command())
+if system_settings.is_admin_user:
+    for i in system_settings.ADMIN_COMMANDS:
+        main.add_command(i)
 
-if system_settings.BED_IMPORTER:
-    main.add_command(system_settings.BED_IMPORTER.as_cli_command())
+    if system_settings.REFERENCE_DATA_IMPORTER:
+        main.add_command(
+            system_settings.REFERENCE_DATA_IMPORTER.as_cli_command())
+
+    if system_settings.DATA_IMPORTER:
+        main.add_command(system_settings.DATA_IMPORTER.as_cli_command())
+
+    if system_settings.BED_IMPORTER:
+        main.add_command(system_settings.BED_IMPORTER.as_cli_command())

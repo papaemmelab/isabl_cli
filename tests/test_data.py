@@ -1,16 +1,17 @@
 import os
 import re
+import uuid
 
 from click.testing import CliRunner
 import click
 import pytest
 import yaml
 
-from cli import _DEFAULTS
+from cli.settings import _DEFAULTS
 from cli import api
 from cli import data
 
-from . import factories
+from cli import factories
 
 
 def test_trash_analysis_storage():
@@ -20,11 +21,52 @@ def test_trash_analysis_storage():
     assert "You can't wipe a succeeded analysis" in str(error.value)
 
 
-def test_get_storage_directory():
-    i = data.get_storage_directory('test', 12345, root='/', use_hash=True)
-    j = data.get_storage_directory('test', 12345, root='/', use_hash=False)
-    assert i == '/test/23/45/12345'
-    assert j == '/test/12345'
+def test_make_storage_directory(tmpdir):
+    i = data.make_storage_directory('test', 12345, root=tmpdir.strpath, use_hash=True)
+    j = data.make_storage_directory('test', 12345, root=tmpdir.strpath, use_hash=False)
+    assert '/test/23/45/12345' in i
+    assert '/test/12345' in j
+
+
+def test_import_reference_data(tmpdir):
+    data_storage_directory = tmpdir.mkdir('data_storage_directory')
+    _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)
+    assembly_name = uuid.uuid4().hex
+    reference_test = tmpdir.join('test.fasta')
+    reference_test.write('foo')
+
+    assembly = data.ReferenceDataImporter.import_data(
+        assembly=assembly_name,
+        data_src=reference_test.strpath,
+        description='test description',
+        data_id='reference_link',
+        symlink=True)
+
+    assert os.path.islink(assembly['reference_data']['reference_link']['url'])
+    assert assembly['reference_data']['reference_link']['description'] == 'test description'
+
+    assembly = data.ReferenceDataImporter.import_data(
+        assembly=assembly_name,
+        data_src=reference_test.strpath,
+        description='test description',
+        data_id='reference_move',
+        symlink=False)
+
+    assert os.path.isfile(assembly['reference_data']['reference_move']['url'])
+    assert not os.path.islink(assembly['reference_data']['reference_move']['url'])
+
+    reference_test.write('foo')
+    command = data.ReferenceDataImporter.as_cli_command()
+    runner = CliRunner()
+    args = [
+        '--assembly', assembly_name,
+        '--data-src', reference_test.strpath,
+        '--data-id', 'reference_move',
+        '--description', 'Test',
+        ]
+
+    result = runner.invoke(command, args, catch_exceptions=False)
+    assert 'has already reference data registered' in result.output
 
 
 def test_import_bedfiles(tmpdir):
@@ -36,7 +78,7 @@ def test_import_bedfiles(tmpdir):
     targets.write('2\t1\t2\n1\t1\t2\n')
     baits.write('2\t1\t2\n1\t1\t2\n')
 
-    technique = data.LocalBedImporter.import_bedfiles(
+    technique = data.BedImporter.import_bedfiles(
         technique_key=technique['pk'],
         targets_path=targets.strpath,
         baits_path=baits.strpath,
@@ -50,7 +92,7 @@ def test_import_bedfiles(tmpdir):
         with open(technique['bedfiles']['AnAssembly'][i], 'r') as f:  # test bed is sorted
             assert next(f).startswith('1')
 
-    command = data.LocalBedImporter.as_cli_command()
+    command = data.BedImporter.as_cli_command()
     runner = CliRunner()
     args = [
         '--targets-path', targets.strpath,
@@ -72,7 +114,7 @@ def test_local_data_import(tmpdir):
     workflows = [api.create_instance('workflows', **i) for i in workflows]
     keys = [i['pk'] for i in workflows]
 
-    importer = data.LocalDataImporter()
+    importer = data.DataImporter()
     _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
     obtained = len(summary.rsplit('no files matched'))
     assert obtained == 3 + 1
@@ -149,7 +191,7 @@ def test_local_data_import(tmpdir):
             os.path.basename(path_2.strpath): {'PU': 'TEST_PU'},
             }, f, default_flow_style=False)
 
-    command = data.LocalDataImporter.as_cli_command()
+    command = data.DataImporter.as_cli_command()
     runner = CliRunner()
     args = [
         '-di', tmpdir.strpath, '-id', 'system_id', '-fi', 'pk__in', keys,
@@ -167,7 +209,7 @@ def test_local_data_import(tmpdir):
 
 
 def test_get_dst():
-    importer = data.LocalDataImporter()
+    importer = data.DataImporter()
     bam_test = ['sample.bam']
     cram_test = ['sample.cram']
     fastq_test = [

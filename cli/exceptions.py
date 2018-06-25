@@ -1,4 +1,4 @@
-"""cli specific exceptions."""
+"""Package exceptions."""
 
 
 class PackageBaseException(Exception):
