@@ -4,8 +4,8 @@ from slugify import slugify
 import click
 
 from cli import utils
-
 from .runner import Runner
+
 
 COMMIT = click.option(
     "--commit",
@@ -31,15 +31,8 @@ class Interface(Runner):
 
     """An abstract class to run pipelines."""
 
-    @staticmethod
-    def get_cli_options():
-        """Must return CLI options, see pipeline.py for documentation."""
-        raise NotImplementedError
-
-    @staticmethod
-    def get_cli_help():
-        """Must return CLI help, see pipeline.py for documentation."""
-        raise NotImplementedError
+    cli_help = ""
+    cli_options = []
 
     @staticmethod
     def get_tuples(**cli_options):
@@ -51,7 +44,7 @@ class Interface(Runner):
         """Get pipeline as click command line interface."""
         pipe = cls()
 
-        @click.command(help=pipe.get_cli_help(), name=pipe._get_cmd_name())
+        @click.command(help=cls.cli_help, name=pipe._get_cmd_name())
         @utils.apply_decorators(pipe._get_cli_options())
         def command(commit, force, verbose, **cli_options):
             """Click command to be used in the CLI."""
@@ -76,4 +69,4 @@ class Interface(Runner):
 
     def _get_cli_options(self):
         """Add default options."""
-        return self.get_cli_options() + [COMMIT, FORCE, VERBOSE]
+        return self.cli_options + [COMMIT, FORCE, VERBOSE]

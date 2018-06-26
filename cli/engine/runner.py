@@ -5,14 +5,48 @@ import os
 import subprocess
 
 from click import progressbar
+from cached_property import cached_property
 import click
 
 from cli import api
 from cli import exceptions
 from cli import utils
+from cli.settings import BaseSettings
 from cli.settings import system_settings
 
 from .creator import Creator
+
+
+class PipelineSettings(BaseSettings):
+
+    def __init__(self, pipeline, *args, **kwargs):
+        self._key = f'{pipeline.NAME} {pipeline.VERSION} {pipeline.ASSEMBLY}'
+        self.reference_data = pipeline.assembly['reference_data'] or {}
+        super().__init__(*args, **kwargs)
+
+    @property
+    def system_settings(self):
+        """Return dictionary with settings."""
+        return system_settings
+
+    @property
+    def _settings(self):
+        """Return dictionary with settings."""
+        return system_settings.PIPELINES_SETTINGS.get(self._key, {})
+
+    def __getattr__(self, attr):
+        """Check if present in user settings or fall back to defaults."""
+        val = super().__getattr__(attr)
+
+        if isinstance(val, str) and 'reference_data_id:' in val:
+            val = self.reference_data.get(val.split(':', 1)[1], NotImplemented)
+            val = val['url']
+
+        if isinstance(val, type(NotImplemented)):
+            raise exceptions.MissingRequirementError(
+                f"Setting '{attr}' is required, contact an engineer.")
+
+        return val
 
 
 class Runner(Creator):
@@ -27,6 +61,10 @@ class Runner(Creator):
         _skip_exceptions (bool): expected exceptions that may occur.
     """
 
+    import_strings = {}
+    engine_settings = {'raise_error': False}
+    pipeline_settings = {}
+
     _skip_status = {'FAILED', 'FINISHED', 'STARTED', 'SUBMITTED', 'SUCCEEDED'}
     _skip_exceptions = (
         click.UsageError,
@@ -34,47 +72,38 @@ class Runner(Creator):
         exceptions.ConfigurationError,
         exceptions.MissingOutputError)
 
-    @staticmethod
-    def get_command(analysis, settings):
-        """Must return string with command to be run."""
-        raise NotImplementedError
+    @cached_property
+    def settings(self):
+        """Return the pipeline settings."""
+        defaults = self.pipeline_settings.copy()
 
-    @staticmethod
-    def get_status(analysis):  # pylint: disable=W0613
-        """Possible values are FINISHED and IN_PROGRESS."""
-        raise NotImplementedError
+        for i, j in self.engine_settings.items():
+            if i in self.pipeline_settings:
+                msg = f"System setting '{i}' can't be used, pick other name"
+                raise exceptions.ConfigurationError(msg)
+            defaults[i] = j
+
+        return PipelineSettings(
+            pipeline=self,
+            defaults=defaults,
+            import_strings=self.import_strings)
 
     @staticmethod
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
         return f'cli patch_status --key {key} --status {status}'
 
-    @staticmethod
-    def submit_analyses(command_tuples):
-        """
-        Submit pipelines as arrays grouped by the target methods.
+    def get_command(self, analysis, settings):
+        """Must return string with command to be run."""
+        raise NotImplementedError
 
-        Arguments:
-            command_tuples (list): of (analysis, command) tuples.
-        """
-        label = f'Running {len(command_tuples)} analyses...'
-        with progressbar(command_tuples, label=label) as bar:
-            for i, j in bar:
-                try:
-                    log = join(i['storage_url'], 'head_job.log')
-                    err = join(i['storage_url'], 'head_job.err')
-                    with open(log, 'w') as stdout, open(err, 'w') as stderr:
-                        subprocess.check_call(
-                            args=['bash', j],
-                            stdout=stdout,
-                            stderr=stderr)
+    def get_status(self, analysis):  # pylint: disable=W0613
+        """Possible values are FINISHED and IN_PROGRESS."""
+        raise NotImplementedError
 
-                except subprocess.CalledProcessError:
-                    api.patch_instance(
-                        endpoint='analyses',
-                        identifier=i['pk'],
-                        storage_usage=utils.get_tree_size(i['storage_url']),
-                        status='FAILED')
+    def validate_settings(self, settings):
+        """Validate settings."""
+        return
 
     def run_tuples(self, tuples, commit, force=False, verbose=True):
         """
@@ -98,8 +127,34 @@ class Runner(Creator):
         if not tuples:  # pragma: no cover
             return None
 
+        # make sure required settings are set before building commands
+        for i in self.pipeline_settings:
+            getattr(self.settings, i)
+
+        # run extra settings validation
+        self.validate_settings(self.settings)
+
+        # create and run analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
-        command_tuples, skipped_tuples = [], []
+        command_tuples, skipped_tuples = self.run_analyses(
+            analyses=analyses,
+            commit=commit,
+            force=force)
+
+        if verbose:
+            self._echo_summary(command_tuples, skipped_tuples, invalid_tuples)
+
+        click.echo(
+            f"RAN {len(command_tuples)} | "
+            f"SKIPPED {len(skipped_tuples)} | "
+            f"INVALID {len(invalid_tuples)}\n")
+
+        return command_tuples, skipped_tuples, invalid_tuples
+
+    def run_analyses(self, analyses, commit, force):
+        """Run a list of analyses."""
+        skipped_tuples = []
+        command_tuples = []
 
         with progressbar(analyses, label='Building commands...\t\t') as bar:
             for i in bar:
@@ -116,18 +171,41 @@ class Runner(Creator):
                 except self._skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
-        if verbose:
-            self._echo_summary(command_tuples, skipped_tuples, invalid_tuples)
-
-        click.echo(
-            f"RUNNING {len(command_tuples)} | "
-            f"SKIPPED {len(skipped_tuples)} | "
-            f"INVALID {len(invalid_tuples)}\n")
-
         if commit:
             self.submit_analyses(command_tuples)
 
-        return command_tuples, skipped_tuples, invalid_tuples
+        return command_tuples, skipped_tuples
+
+    def submit_analyses(self, command_tuples):
+        """
+        Submit pipelines as arrays grouped by the target methods.
+
+        Arguments:
+            command_tuples (list): of (analysis, command) tuples.
+        """
+        label = f'Running {len(command_tuples)} analyses...'
+        with progressbar(command_tuples, label=label) as bar:
+            for i, j in bar:
+                try:
+                    log = join(i['storage_url'], 'head_job.log')
+                    err = join(i['storage_url'], 'head_job.err')
+                    with open(log, 'w') as stdout, open(err, 'w') as stderr:
+                        subprocess.check_call(
+                            args=['bash', j],
+                            stdout=stdout,
+                            stderr=stderr)
+
+                except subprocess.CalledProcessError as error:
+                    api.patch_instance(
+                        endpoint='analyses',
+                        identifier=i['pk'],
+                        storage_usage=utils.get_tree_size(i['storage_url']),
+                        status='FAILED')
+
+                    if self.settings.raise_error:
+                        raise error
+                    else:
+                        click.secho(f'\n\t{error}', fg='red')
 
     def _build_command_script(self, analysis):
         """
@@ -139,7 +217,7 @@ class Runner(Creator):
         Returns:
             str: analysis command as a path to a bash script.
         """
-        command = self.get_command(analysis, system_settings.PIPELINES_SETTINGS)
+        command = self.get_command(analysis, self.settings)
         status = self.get_status(analysis)
         command_path = join(analysis['storage_url'], 'head_job.sh')
         assert status in {'IN_PROGRESS', 'FINISHED'}
@@ -149,7 +227,7 @@ class Runner(Creator):
             status = 'SUCCEEDED'
 
         command = (
-            f'cd {analysis["storage_url"]} && umask g+wrx && '
+            f'set -e; cd {analysis["storage_url"]} && umask g+wrx && '
             f'{self.get_patch_status_command(analysis["pk"], "STARTED")} '
             f'&& date && {command} && '
             f'{self.get_patch_status_command(analysis["pk"], status)}')
@@ -174,9 +252,9 @@ class Runner(Creator):
         """
         summary_keys = ['PK', 'PROJECTS', 'TARGETS', 'REFERENCES', 'MESSAGE']
         summary = ['\n']
-        command_tuples.sort(key=lambda i: i[1])
-        invalid_tuples.sort(key=lambda i: i[1])
-        skipped_tuples.sort(key=lambda i: i[1])
+        command_tuples.sort(key=lambda i: str(i[1]))
+        invalid_tuples.sort(key=lambda i: str(i[1]))
+        skipped_tuples.sort(key=lambda i: str(i[1]))
 
         def _style_msg(msg):
             color = 'blue'

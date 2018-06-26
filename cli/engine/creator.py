@@ -8,6 +8,7 @@ import click
 
 from cli import api
 from cli import data
+from cli import exceptions
 
 from .validator import Validator
 
@@ -16,21 +17,37 @@ class Creator(Validator):
 
     """Analysis creation logic."""
 
-    NAME = None
-    VERSION = None
-    ASSEMBLY = None
-
     @cached_property
     def pipeline(self):
         """Get pipeline database object."""
-        if not self.NAME or not self.VERSION or not self.ASSEMBLY:
-            raise NotImplementedError("NAME, VERSION and ASSEMBLY must be set.")
+        pipeline_class = f'{self.__module__}.{self.__class__.__name__}'
 
-        return api.create_instance(
+        if not all([self.NAME, self.VERSION, self.ASSEMBLY, self.SPECIES]):
+            raise NotImplementedError(
+                f"NAME must be set: {self.NAME}\n"
+                f"VERSION must be set: {self.VERSION}\n"
+                f"ASSEMBLY must be set: {self.ASSEMBLY}\n"
+                f"SPECIES must be set: {self.SPECIES}\n")
+
+        pipeline = api.create_instance(
             endpoint='pipelines',
             name=self.NAME,
             version=self.VERSION,
-            assembly={'name': self.ASSEMBLY})
+            assembly={'name': self.ASSEMBLY, 'species': self.SPECIES},
+            pipeline_class=pipeline_class)
+
+        if pipeline['pipeline_class'] != pipeline_class:
+            api.patch_instance(
+                endpoint='pipelines',
+                identifier=pipeline['pk'],
+                pipeline_class=pipeline_class)
+
+        return pipeline
+
+    @cached_property
+    def assembly(self):
+        """Get assembly database object."""
+        return self.pipeline['assembly']
 
     @staticmethod
     def validate_tuple(targets, references, analyses):
@@ -55,7 +72,7 @@ class Creator(Validator):
         with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
             for i in bar:
                 try:
-                    assert self.validate_tuple(*i)
+                    self._validate_tuple(*i)
                     analysis = api.create_instance(
                         endpoint='analyses',
                         pipeline=self.pipeline,
@@ -68,7 +85,7 @@ class Creator(Validator):
                             endpoint='analyses',
                             identifier=analysis['pk'],
                             use_hash=True))
-                except click.UsageError as error:
+                except exceptions.ValidationError as error:
                     invalid_tuples.append((i, error))
 
         return existing_analyses + created_analyses, invalid_tuples
@@ -114,3 +131,7 @@ class Creator(Validator):
                 missing.append((targets, references, analyses))
 
         return existing, missing
+
+    def _validate_tuple(self, targets, references, analyses):
+        self.validate_species(targets, references, analyses)
+        self.validate_tuple(targets, references, analyses)

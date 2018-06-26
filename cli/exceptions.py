@@ -1,12 +1,14 @@
 """Package exceptions."""
 
+from click import UsageError
+
 
 class PackageBaseException(Exception):
 
     """A base exception for cli."""
 
 
-class ValidationError(PackageBaseException):
+class ValidationError(PackageBaseException, UsageError):
 
     """A class to raise when a validation error occurs."""
 

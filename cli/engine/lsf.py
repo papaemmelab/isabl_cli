@@ -25,15 +25,20 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
 
     """Submit jobs as job array throttled by `THROTTLE` argument."""
 
-    THROTTLE = 50
+    engine_settings = {
+        'lsf_args': '',
+        'use_lsf': True,
+        'throttle_by': 50,
+        }
 
     @staticmethod
-    def get_requirements(sequencing_methods):
+    def get_requirements(targets_methods, settings):
         """
         Get submission requirements given a set of targets' methods.
 
         Arguments:
-            sequencing_methods (set): targets sequencing methods.
+            targets_methods (set): targets sequencing methods.
+            settings (object): pipeline settings.
 
         Returns:
             str: lsf requirements (e.g. -q test).
@@ -74,37 +79,40 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         Arguments:
             command_tuples (list): list of (analysis, command) tuples.
         """
-        groups = defaultdict(list)
+        if self.settings.use_lsf:
+            groups = defaultdict(list)
 
-        # group analyses by the methods of its targets
-        for analysis, command in command_tuples:
-            targets = analysis['targets']
-            key = tuple(sorted({i['technique']['method'] for i in targets}))
-            groups[key].append((analysis, command))
+            # group analyses by the methods of its targets
+            for analysis, command in command_tuples:
+                targets = analysis['targets']
+                key = tuple(sorted({i['technique']['method'] for i in targets}))
+                groups[key].append((analysis, command))
 
-        # execute analyses on a methods basis
-        for methods, command_tuples in groups.items():
-            click.echo(f"Sumbitting {len(command_tuples)} {methods} jobs...")
-            commands, analyses, projects = [], [], set()
+            # execute analyses on a methods basis
+            for methods, cmd_tuples in groups.items():
+                click.echo(f"Sumbitting {len(cmd_tuples)} {methods} jobs.")
+                commands, analyses, projects = [], [], set()
 
-            for i, cmd in command_tuples:
-                exit_cmd = f'cli patch_status --key {i["pk"]} --status FAILED'
-                analyses.append(i)
-                commands.append((cmd, exit_cmd))
-                projects.update(
-                    j['pk'] for k in i['targets'] for j in k['projects'])
+                for i, cmd in cmd_tuples:
+                    exit_cmd = self.get_patch_status_command(i["pk"], 'FAILED')
+                    analyses.append(i)
+                    commands.append((cmd, exit_cmd))
+                    projects.update(
+                        j['pk'] for k in i['targets'] for j in k['projects'])
 
-            jobname = (
-                f"Array | pipeline: {self.pipeline['pk']} | "
-                f"methods: {methods} | projects: {projects}")
+                jobname = (
+                    f"Array | pipeline: {self.pipeline['pk']} | "
+                    f"methods: {methods} | projects: {projects}")
 
-            try:
-                requirements = self.get_requirements(methods)  # pylint: disable=E1111
-                api.patch_analyses_status(analyses, 'SUBMITTED')
-                self._submit_array(commands, requirements, jobname)
-            except Exception:  # pylint: disable=broad-except
-                api.patch_analyses_status(analyses, 'STAGED')
-                raise Exception("Error during submission...")
+                try:
+                    requirements = self.get_requirements(methods, self.settings)  # pylint: disable=E1111
+                    api.patch_analyses_status(analyses, 'SUBMITTED')
+                    self._submit_array(commands, requirements, jobname)
+                except Exception:  # pylint: disable=broad-except
+                    api.patch_analyses_status(analyses, 'STAGED')
+                    raise Exception("Error during submission...")
+        else:
+            super().submit_analyses(command_tuples)
 
     def _submit_array(self, commands, requirements, jobname):
         """
@@ -153,7 +161,8 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
 
         # submit array of commands
         cmd = (
-            f'bsub -J "{jobname}[1-{total}]%{self.THROTTLE}" {requirements} '
+            f'bsub {requirements} {self.settings.lsf_args} '
+            f'-J "{jobname}[1-{total}]%{self.settings.throttle_by}" '
             f'-oo "{root}/log.%I" -eo "{root}/err.%I" -i "{root}/in.%I" bash')
 
         jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")

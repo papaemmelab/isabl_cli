@@ -21,8 +21,8 @@ def test_trash_analysis_storage():
 
 
 def test_make_storage_directory(tmpdir):
-    i = data.make_storage_directory('test', 12345, root=tmpdir.strpath, use_hash=True)
-    j = data.make_storage_directory('test', 12345, root=tmpdir.strpath, use_hash=False)
+    i = data.make_storage_directory(tmpdir.strpath, 'test', 12345, use_hash=True)
+    j = data.make_storage_directory(tmpdir.strpath, 'test', 12345, use_hash=False)
     assert '/test/23/45/12345' in i
     assert '/test/12345' in j
 
@@ -31,11 +31,13 @@ def test_import_reference_data(tmpdir):
     data_storage_directory = tmpdir.mkdir('data_storage_directory')
     _DEFAULTS['BASE_STORAGE_DIRECTORY'] = str(data_storage_directory)
     assembly_name = uuid.uuid4().hex
+    species = 'HUMAN'
     reference_test = tmpdir.join('test.fasta')
     reference_test.write('foo')
 
     assembly = data.ReferenceDataImporter.import_data(
         assembly=assembly_name,
+        species=species,
         data_src=reference_test.strpath,
         description='test description',
         data_id='reference_link',
@@ -46,6 +48,7 @@ def test_import_reference_data(tmpdir):
 
     assembly = data.ReferenceDataImporter.import_data(
         assembly=assembly_name,
+        species=species,
         data_src=reference_test.strpath,
         description='test description',
         data_id='reference_move',
@@ -59,6 +62,7 @@ def test_import_reference_data(tmpdir):
     runner = CliRunner()
     args = [
         '--assembly', assembly_name,
+        '--assembly', species,
         '--data-src', reference_test.strpath,
         '--data-id', 'reference_move',
         '--description', 'Test',
@@ -76,8 +80,10 @@ def test_import_bedfiles(tmpdir):
     baits = tmpdir.join('baits.bed')
     targets.write('2\t1\t2\n1\t1\t2\n')
     baits.write('2\t1\t2\n1\t1\t2\n')
+    species = 'HUMAN'
 
     technique = data.BedImporter.import_bedfiles(
+        species=species,
         technique_key=technique['pk'],
         targets_path=targets.strpath,
         baits_path=baits.strpath,
@@ -98,6 +104,7 @@ def test_import_bedfiles(tmpdir):
         '--baits-path', baits.strpath,
         '--key', technique['pk'],
         '--assembly', 'AnAssembly',
+        '--species', species,
         '--description', 'Test',
         ]
     result = runner.invoke(command, args, catch_exceptions=False)

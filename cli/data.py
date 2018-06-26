@@ -63,6 +63,7 @@ def trash_analysis_storage(analysis):
         slug += datetime.now(system_settings.TIME_ZONE).isoformat()
 
         trash_dir = system_settings.MAKE_STORAGE_DIRECTORY(
+            root=system_settings.BASE_STORAGE_DIRECTORY,
             base='.analyses_trash',
             identifier=analysis["pk"],
             use_hash=True)
@@ -72,11 +73,7 @@ def trash_analysis_storage(analysis):
         shutil.move(analysis['storage_url'], dst)
 
 
-def make_storage_directory(
-        base,
-        identifier,
-        use_hash=False,
-        root=system_settings.BASE_STORAGE_DIRECTORY):
+def make_storage_directory(root, base, identifier, use_hash=False):
     """
     Get and create path to a data directory.
 
@@ -92,14 +89,14 @@ def make_storage_directory(
     Arguments:
         base (str): instance's API base.
         identifier (str): instance's primary key.
-        root (str): default is system_settings.BASE_STORAGE_DIRECTORY.
+        root (str): root directory.
         use_hash (bool): hash integer identifier for directories.
 
     Returns:
         str: path to instance's data directory.
     """
     if not root:  # pragma: no cover
-        raise click.UsageError('Setting `BASE_STORAGE_DIRECTORY` not defined.')
+        raise click.UsageError('Base storage root directory is required.')
 
     if use_hash:
         if not str(identifier).isdigit():  # pragma: no cover
@@ -118,8 +115,12 @@ def make_storage_directory(
 
 def update_storage_url(endpoint, identifier, use_hash=False, **data):
     """Make storage directory and return patched instance."""
-    get_dir = system_settings.MAKE_STORAGE_DIRECTORY
-    data['storage_url'] = get_dir(endpoint, identifier, use_hash=use_hash)
+    data['storage_url'] = system_settings.MAKE_STORAGE_DIRECTORY(
+        root=system_settings.BASE_STORAGE_DIRECTORY,
+        base=endpoint,
+        identifier=identifier,
+        use_hash=use_hash)
+
     return api.patch_instance(endpoint, identifier, **data)
 
 
@@ -141,12 +142,14 @@ class ReferenceDataImporter(BaseImporter):
     """An import engine for assemblies' `reference_data`."""
 
     @classmethod
-    def import_data(cls, assembly, data_src, data_id, symlink, description):
+    def import_data(
+            cls, assembly, species, data_src, data_id, symlink, description):
         """
         Register input_bed_path in technique's storage dir and update `data`.
 
         Arguments:
             assembly (str): name of assembly.
+            species (str): name of species.
             data_src (str): path to reference data.
             data_id (str): identifier that will be used for reference data.
             symlink (str): symlink instead of move.
@@ -156,9 +159,12 @@ class ReferenceDataImporter(BaseImporter):
             dict: updated assembly instance as retrieved from API.
         """
         utils.check_admin()
-        assembly = api.create_instance('assemblies', name=assembly)
         data_id = slugify(data_id, separator='_')
         click.echo(f'`data_id` set to: {click.style(data_id, fg="green")}')
+        assembly = api.create_instance(
+            endpoint='assemblies',
+            name=assembly,
+            species=species)
 
         if data_id in assembly['reference_data']:
             raise click.UsageError(
@@ -196,11 +202,12 @@ class ReferenceDataImporter(BaseImporter):
         """Get bed importer as click command line interface."""
         @click.command(name='import_reference_data')
         @click.option('--assembly', help='name of reference genome')
+        @click.option('--species', help='species of reference genome')
         @click.option('--description', help='reference data description')
         @click.option('--data-id', help='data identifier (will be slugified)')
         @options.REFERENCE_DATA_SOURCE
         @options.SYMLINK
-        def cmd(assembly, data_id, symlink, description, data_src):
+        def cmd(assembly, data_id, symlink, description, data_src, species):
             """
             Register reference data in assembly's data directory.
 
@@ -223,6 +230,7 @@ class ReferenceDataImporter(BaseImporter):
                 symlink=symlink,
                 data_src=data_src,
                 assembly=assembly,
+                species=species,
                 description=description)
 
         return cmd
@@ -250,7 +258,7 @@ class BedImporter():
     @classmethod
     def import_bedfiles(
             cls, technique_key, targets_path, baits_path,
-            assembly, description=None):
+            assembly, species, description=None):
         """
         Register input_bed_path in technique's storage dir and update `data`.
 
@@ -259,6 +267,7 @@ class BedImporter():
             targets_path (str): path to targets bedfile.
             baits_path (str): path to baits bedfile.
             assembly (str): name of reference genome for bedfile.
+            species (str): name of genome species.
             description (str): a description of the bedfiles.
 
         Returns:
@@ -277,7 +286,7 @@ class BedImporter():
         if not technique['storage_url']:
             technique = update_storage_url('techniques', technique['pk'])
 
-        api.create_instance('assemblies', name=assembly)
+        api.create_instance('assemblies', name=assembly, species=species)
         beds_dir = join(technique['storage_url'], 'bedfiles', assembly)
         base_name = f'{technique["slug"]}.{assembly}'
         targets_dst = join(beds_dir, f'{base_name}.targets.bed')
@@ -310,8 +319,9 @@ class BedImporter():
         @options.TARGETS_PATH
         @options.BAITS_PATH
         @click.option('--assembly', help='name of reference genome')
+        @click.option('--species', help='name of species')
         @click.option('--description', help='bedfiles description')
-        def cmd(key, assembly, targets_path, baits_path, description):
+        def cmd(key, assembly, targets_path, baits_path, description, species):
             """
             Register targets and baits bedfiles in technique's data directory.
 
@@ -334,6 +344,7 @@ class BedImporter():
                 targets_path=targets_path,
                 baits_path=baits_path,
                 assembly=assembly,
+                species=species,
                 description=description)
 
         return cmd

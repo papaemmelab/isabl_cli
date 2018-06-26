@@ -119,15 +119,42 @@ class UserSettings(object):
         return data
 
 
-class SystemSettings(object):
+class BaseSettings(object):
 
-    """Obtained from drf-yasg."""
+    """Obtained from drf-yasg/rest_framework."""
 
     def __init__(self, defaults, import_strings=None, path_strings=None):
         """See: https://github.com/axnsan12/drf-yasg/."""
         self.defaults = defaults
         self.path_strings = path_strings or []
         self.import_strings = import_strings or []
+
+    @property
+    def _settings(self):
+        """Return dictionary system with settings."""
+        raise NotImplementedError
+
+    def __getattr__(self, attr):
+        """Check if present in user settings or fall back to defaults."""
+        if attr not in self.defaults:  # pragma: no cover
+            raise AttributeError("Invalid setting: '%s'" % attr)
+
+        try:
+            val = self._settings[attr]
+        except KeyError:
+            val = self.defaults[attr]
+
+        if attr in self.import_strings:  # coerce import strings into object
+            val = perform_import(val, attr)
+        elif val and attr in self.path_strings:
+            val = abspath(val)
+        elif attr == 'TIME_ZONE':
+            val = pytz.timezone(val)
+
+        return val
+
+
+class SystemSettings(BaseSettings):
 
     @cached_property
     def is_admin_user(self):
@@ -151,25 +178,6 @@ class SystemSettings(object):
                 settings = yaml.load(f.read())
 
         return settings
-
-    def __getattr__(self, attr):
-        """Check if present in user settings or fall back to defaults."""
-        if attr not in self.defaults:  # pragma: no cover
-            raise AttributeError("Invalid setting: '%s'" % attr)
-
-        try:
-            val = self._settings[attr]
-        except KeyError:
-            val = self.defaults[attr]
-
-        if attr in self.import_strings:  # coerce import strings into object
-            val = perform_import(val, attr)
-        elif val and attr in self.path_strings:
-            val = abspath(val)
-        elif attr == 'TIME_ZONE':
-            val = pytz.timezone(val)
-
-        return val
 
 
 # pylint: disable=C0103

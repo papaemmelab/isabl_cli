@@ -2,6 +2,8 @@
 
 import click
 
+from cli.api import get_instances
+
 IDENTIFIER = click.option(
     '--identifier', '-id',
     show_default=True,
@@ -84,9 +86,17 @@ FILTERS = click.option(
     callback=lambda _, __, i: dict(i),
     required=True)
 
+TARGETS = click.option(
+    '--targets-filters', '-fi', 'targets',
+    multiple=True,
+    help='API filters for target workflows',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: get_instances('workflows', **dict(i)),
+    required=True)
+
 DIRECTORIES = click.option(
-    '--directories',
-    '-di',
+    '--directories', '-di',
     show_default=True,
     type=click.Path(
         exists=True,

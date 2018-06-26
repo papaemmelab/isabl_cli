@@ -11,26 +11,8 @@ class AbstractPipeline(Interface):
     # pipeline's name and version must be set
     NAME = None
     VERSION = None
-
-    @staticmethod
-    def get_cli_help():
-        """
-        Get CLI command help message.
-
-        Returns:
-            str: a string with the CLI command help.
-        """
-        raise NotImplementedError()
-
-    @staticmethod
-    def get_cli_options():
-        """
-        Get list of CLI options decorators.
-
-        Returns:
-            list: of option decoratos (click.option).
-        """
-        raise NotImplementedError()
+    ASSEMBLY = None
+    CLI_OPTIONS = []
 
     @staticmethod
     def get_tuples(**cli_options):

@@ -40,6 +40,8 @@ class DiseaseFactory(BaseFactory):
 
 class AssemblyFactory(BaseFactory):
     name = 'GRCh37'
+    reference_data = {}
+    species = fuzzy.FuzzyChoice(['HUMAN', 'MOUSE'])
 
 
 class PipelineFactory(BaseFactory):
@@ -84,15 +86,15 @@ class SpecimenFactory(BaseFactory):
 
 
 class WorkflowFactory(BaseFactory):
-    projects = []
     cell_type = fuzzy.FuzzyChoice(['SINGLE', 'BULK'])
     center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     portion_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    raw_data = fuzzy.FuzzyChoice(['BAM', 'FASTQ'])
+    projects = []
     read_length = fuzzy.FuzzyChoice(["100", "150"])
     read_type = fuzzy.FuzzyChoice(['PAIR-END', 'SINGLE-END'])
+    research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     sequencing_center = factory.SubFactory(CenterFactory)
+    sequencing_data = None
     sequencing_platform = factory.SubFactory(PlatformFactory)
     specimen = factory.SubFactory(SpecimenFactory)
     technique = factory.SubFactory(TechniqueFactory)
-    research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
