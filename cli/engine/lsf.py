@@ -26,6 +26,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
     """Submit jobs as job array throttled by `THROTTLE` argument."""
 
     engine_settings = {
+        'raise_error': False,
         'lsf_args': '',
         'use_lsf': True,
         'throttle_by': 50,

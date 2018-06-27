@@ -15,6 +15,8 @@ import pytz
 import six
 import yaml
 
+from cli import exceptions
+
 _DEFAULTS = {
     'API_BASE_URL': 'http://0.0.0.0:8000/api/v1',
     'MAKE_STORAGE_DIRECTORY': 'cli.data.make_storage_directory',
@@ -178,6 +180,38 @@ class SystemSettings(BaseSettings):
                 settings = yaml.load(f.read())
 
         return settings
+
+
+class PipelineSettings(BaseSettings):
+    def __init__(self, pipeline, *args, **kwargs):
+        """Get pipeline settings from system settings."""
+        self._key = f'{pipeline.NAME} {pipeline.VERSION} {pipeline.ASSEMBLY}'
+        self.reference_data = pipeline.assembly['reference_data'] or {}
+        super().__init__(*args, **kwargs)
+
+    @property
+    def system_settings(self):
+        """Return dictionary with settings."""
+        return system_settings
+
+    @property
+    def _settings(self):
+        """Return dictionary with settings."""
+        return system_settings.PIPELINES_SETTINGS.get(self._key, {})
+
+    def __getattr__(self, attr):
+        """Check if present in user settings or fall back to defaults."""
+        val = super().__getattr__(attr)
+
+        if isinstance(val, str) and 'reference_data_id:' in val:
+            val = self.reference_data.get(val.split(':', 1)[1])
+            val = val['url'] if val else NotImplemented
+
+        if isinstance(val, type(NotImplemented)):
+            raise exceptions.MissingRequirementError(
+                f"Setting '{attr}' is required, contact an engineer.")
+
+        return val
 
 
 # pylint: disable=C0103

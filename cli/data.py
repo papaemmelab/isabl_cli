@@ -500,6 +500,7 @@ class DataImporter(BaseImporter):
         Returns:
             dict: patched workflow instance.
         """
+        dtypes = set()
         sequencing_data = []
         src_dst = []
 
@@ -518,11 +519,13 @@ class DataImporter(BaseImporter):
 
             if re.search(self.BAM_REGEX, src):
                 file_type = 'BAM'
+                dtypes.add(file_type)
             elif re.search(self.CRAM_REGEX, src):
                 file_type = 'CRAM'
+                dtypes.add(file_type)
             else:
-                file_type = 'FASTQ'
-                file_name = self.format_fastq_name(file_name)
+                file_name, file_type = self.format_fastq_name(file_name)
+                dtypes.add('FASTQ')
 
             if not file_name.startswith(instance['system_id']):
                 file_name = f'{instance["system_id"]}__{file_name}'
@@ -536,7 +539,7 @@ class DataImporter(BaseImporter):
                 hash_value=getsize(src),
                 hash_method="os.path.getsize"))
 
-        if len({i['file_type'] for i in sequencing_data}) > 1:
+        if len(dtypes) > 1:
             raise click.UsageError(
                 'We should have catched this earlier, but multiple formats are '
                 f'not supported, these were found for {instance["system_id"]}: '
@@ -560,6 +563,8 @@ class DataImporter(BaseImporter):
         suffix = None
 
         for i in [1, 2]:
+            file_type = f'FASTQ_R{i}'
+
             if re.search(self.FASTQ_REGEX.format(i), file_name):
                 suffix = f'_{system_settings.FASTQ_READ_PREFIX}{i}.fastq'
                 break
@@ -571,7 +576,7 @@ class DataImporter(BaseImporter):
         file_name = re.sub(letter_index_fastq, '.fastq', file_name)
         file_name = re.sub(number_index_fastq, '.fastq', file_name)
         file_name = re.sub(letter_index_any_location, '_', file_name)
-        return re.sub(r'[_.]f(ast)?q', suffix, file_name)
+        return re.sub(r'[_.]f(ast)?q', suffix, file_name), file_type
 
     @staticmethod
     def get_regex_pattern(group_name, identifier):

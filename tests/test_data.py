@@ -241,5 +241,6 @@ def test_get_dst():
             for fastq in ['.fastq', '.fq']:
                 for gzipped in ['', '.gz']:
                     path = test.format(index) + fastq + gzipped
-                    obtained = importer.format_fastq_name(path)
+                    obtained, file_type = importer.format_fastq_name(path)
+                    assert file_type == f'FASTQ_R{index}'
                     assert obtained == expected.format(index) + '.fastq' + gzipped
