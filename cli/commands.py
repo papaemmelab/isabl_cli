@@ -8,9 +8,52 @@ import subprocess
 import click
 
 from cli import api
+from cli import data
 from cli import options
 from cli import utils
 from cli.settings import system_settings
+from cli.settings import import_from_string
+
+
+@click.command()
+@click.option('--project', help='primary key of project to merge by', type=int)
+@click.option('--pipeline', help='analyses pipeline primary key', type=int)
+def merge_analyses(project, pipeline):
+    """Merge analyses by project primary key."""
+    project = api.get_instance('projects', project)
+    pipeline = api.get_instance('pipelines', pipeline)
+    analyses = api.get_instances(
+        endpoint='analyses',
+        pipeline=pipeline['pk'],
+        project=project['pk'],
+        status='SUCCEEDED')
+
+    if analyses:
+        pipeline_class = import_from_string(pipeline['pipeline_class'])()
+        merge_function = pipeline_class.merge_analyses_by_project
+
+        try:
+            merge_function.__isabstractmethod__  # pylint: disable=W0104
+            raise NotImplementedError('No merging logic available!')
+        except AttributeError:
+            pass
+
+        analysis = api.create_instance(
+            endpoint='analyses',
+            project_level_analysis=project,
+            pipeline=pipeline)
+
+        if not analysis['storage_url']:
+            analysis = data.update_storage_url(
+                endpoint='analyses',
+                identifier=analysis['pk'],
+                use_hash=True)
+
+        try:
+            merge_function(analysis['storage_url'], analyses)
+        except Exception as error:
+            api.patch_instance('analyses', analysis['pk'], status='FAILED')
+            raise error
 
 
 @click.command()

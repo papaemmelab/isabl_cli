@@ -20,11 +20,15 @@ from cli import api
 from cli import options
 from cli import utils
 from cli.settings import system_settings
+from cli.settings import import_from_string
 
 
 def symlink_workflow_to_projects(workflow):
     """Create symlink from workflow directory and projects directories."""
+    click.secho(f'Linking {workflow["system_id"]}', fg='green')
+
     for i in workflow['projects']:
+
         if not i['storage_url']:
             i = update_storage_url('projects', i['pk'])
 
@@ -35,6 +39,9 @@ def symlink_workflow_to_projects(workflow):
 
 def symlink_analysis_to_targets(analysis):
     """Create symlink from workflow directory and projects directories."""
+    if analysis['status'] != 'SUCCEEDED':
+        return
+
     src = analysis['storage_url']
     dst = '__'.join([
         analysis['pipeline']['name'].lower().replace(' ', '_'),
@@ -51,6 +58,39 @@ def symlink_analysis_to_targets(analysis):
         if not i['storage_url']:
             i = update_storage_url('projects', i['pk'])
         utils.force_symlink(src, join(i['storage_url'], dst))
+
+
+def trigger_analyses_merge(analysis):
+    """Submit project level analyses merge if neccessary."""
+    if analysis['status'] != 'SUCCEEDED':
+        return
+
+    try:
+        key = analysis['pipeline']['pk']
+        pipeline = import_from_string(analysis['pipeline']['pipeline_class'])()
+        projects = [j['pk'] for i in analysis['targets'] for j in i['projects']]
+        command = 'cli merge_analyses --project {} --key {}'
+
+        implemented = not getattr(
+            pipeline.merge_analyses_by_project,
+            '__isabstractmethod__', False)
+
+        if implemented:
+            for i in projects:
+                for j in 'STARTED', 'SUBMITTED':
+                    stop = api.get_instances_count(
+                        endpoint='analyses',
+                        pipeline=key,
+                        projects=i,
+                        status=j)
+
+                    if stop:
+                        return
+
+                command = f'cli merge_analyses --project {i} --pipeline {key}'
+                pipeline.submit_analyses_merge_command(command.split())
+    except ImportError:
+        pass
 
 
 def trash_analysis_storage(analysis):

@@ -138,8 +138,7 @@ def get_instance(endpoint, identifier):
         types.SimpleNamespace: loaded with data returned from the API.
     """
     url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
-    data = api_request('get', url=url).json()
-    return data
+    return api_request('get', url=url).json()
 
 
 def create_instance(endpoint, **data):
@@ -154,8 +153,7 @@ def create_instance(endpoint, **data):
         types.SimpleNamespace: loaded with data returned from the API.
     """
     url = f'{system_settings.API_BASE_URL}/{endpoint}'
-    data = api_request('post', url=url, json=data).json()
-    return data
+    return api_request('post', url=url, json=data).json()
 
 
 def patch_instance(endpoint, identifier, **data):
@@ -177,15 +175,15 @@ def patch_instance(endpoint, identifier, **data):
         assert data.get('storage_usage') is not None, msg
         utils.check_admin()
 
-    data = api_request('patch', url=url, json=data).json()
+    instance = api_request('patch', url=url, json=data).json()
 
-    if endpoint == 'analyses' and data.get('status'):
-        _run_signals('analyses', data, system_settings.ON_STATUS_CHANGE)
+    if endpoint == 'analyses' and instance.get('status'):
+        _run_signals('analyses', instance, system_settings.ON_STATUS_CHANGE)
 
-    if endpoint == 'workflows' and data.get('sequencing_data'):
-        _run_signals('workflows', data, system_settings.ON_DATA_IMPORT)
+    if endpoint == 'workflows' and instance.get('sequencing_data'):
+        _run_signals('workflows', instance, system_settings.ON_DATA_IMPORT)
 
-    return data
+    return instance
 
 
 def delete_instance(endpoint, identifier):
@@ -310,7 +308,7 @@ def patch_analyses_status(analyses, status):
 
 def _run_signals(endpoint, instance, signals):
     errors = []
-    on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda **_: None)
+    on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda *_, **__: None)
 
     for signal in signals:
         try:
@@ -322,3 +320,7 @@ def _run_signals(endpoint, instance, signals):
                 on_failure(endpoint, instance, signal, error)
             except Exception as on_failure_error:  # pylint: disable=W0703
                 errors.append(on_failure_error)
+
+    if errors:
+        errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
+        raise RuntimeError('Errors occurred during signals run:\n' + errors)

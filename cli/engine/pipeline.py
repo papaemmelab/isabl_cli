@@ -5,6 +5,7 @@ from collections import defaultdict
 from os.path import isdir
 from os.path import isfile
 from os.path import join
+import abc
 import os
 import subprocess
 import sys
@@ -83,12 +84,7 @@ class AbstractPipeline:
     # USER REQUIRED IMPLEMENTATIONS
     # -----------------------------
 
-    def validate_settings(self, settings):
-        """Validate settings."""
-        return
-
-    @staticmethod
-    def get_tuples(**cli_options):  # pylint: disable=W9008
+    def get_tuples(self, **cli_options):  # pylint: disable=W9008
         """
         Must return list of tuples given the parsed options.
 
@@ -117,8 +113,7 @@ class AbstractPipeline:
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def get_command(analysis, settings):  # pylint: disable=W9008
+    def get_command(self, analysis, settings):  # pylint: disable=W9008
         """
         Must return command and final analysis status.
 
@@ -133,10 +128,46 @@ class AbstractPipeline:
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def get_status(analysis):  # pylint: disable=W0613
+    def validate_settings(self, settings):
+        """Validate settings."""
+        return
+
+    def get_status(self, analysis):  # pylint: disable=W0613
         """Possible values are FINISHED and IN_PROGRESS."""
         return 'FINISHED'
+
+    # ------------------------------
+    # MERGE BY PROJECT CONFIGURATION
+    # ------------------------------
+
+    @abc.abstractmethod  # add __isabstractmethod__ property to method
+    def merge_analyses_by_project(self, storage_url, analyses):
+        """
+        Merge analyses on a project level basis.
+
+        If implemented, a new project level analyses will be created. This
+        function will only be called if no other analysis of the same pipeline
+        is currently running or submitted.
+
+        Arguments:
+            storage_url (str): path of the project level analysis directory.
+            analyses (list): list of succeeded analyses instances.
+        """
+        raise NotImplementedError('No merging logic available!')
+
+    def submit_analyses_merge_command(self, command):
+        """
+        Merge analyses on a project level basis.
+
+        `merge_analyses_by_project` is run using a CLI command given that
+        merge requirements may exceed those than the analysis triggering
+        the merge. By default this command is executed using subprocess,
+        but engine implementations can submit to their scheduler.
+
+        Arguments:
+            command (list): command used to perform merge.
+        """
+        subprocess.check_call(command)
 
     # ----------
     # PROPERTIES
@@ -310,7 +341,11 @@ class AbstractPipeline:
         Arguments:
             command_tuples (list): of (analysis, command) tuples.
         """
+        # make sure analyses are in submitted status to avoid
+        # merging project level analyses in every success
+        api.patch_analyses_status([i for i, _ in command_tuples], 'SUBMITTED')
         label = f'Running {len(command_tuples)} analyses...'
+
         with progressbar(command_tuples, label=label) as bar:
             for i, j in bar:
                 try:
@@ -321,7 +356,6 @@ class AbstractPipeline:
                             args=['bash', j],
                             stdout=stdout,
                             stderr=stderr)
-
                 except subprocess.CalledProcessError as error:
                     api.patch_instance(
                         endpoint='analyses',
@@ -329,9 +363,9 @@ class AbstractPipeline:
                         storage_usage=utils.get_tree_size(i['storage_url']),
                         status='FAILED')
 
-                    if self.settings.raise_error:
-                        raise error
-                    else:
+                    if error and self.settings.raise_error:
+                        raise error or Exception
+                    elif error:
                         click.secho(f'\n\t{error}', fg='red')
 
     def build_command_script(self, analysis):
@@ -446,15 +480,16 @@ class AbstractPipeline:
         with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
             for i in bar:
                 try:
-                    self.validate_species(*i)
-                    self.validate_tuple(*i)
+                    targets, references, analyses = i
+                    self.validate_species(targets, references)
+                    self.validate_tuple(targets, references, analyses)
 
                     analysis = api.create_instance(
                         endpoint='analyses',
                         pipeline=self.pipeline,
-                        targets=i[0],
-                        references=i[1],
-                        analyses=i[2])
+                        targets=targets,
+                        references=references,
+                        analyses=analyses)
 
                     created_analyses.append(
                         data.update_storage_url(
@@ -479,6 +514,9 @@ class AbstractPipeline:
         Returns:
             tuple: list of existing analyses, list of tuples without analysis
         """
+        for i in tuples:
+            if len(i) == 2:
+                print(i)
         click.echo("Checking for existing analyses...", file=sys.stderr)
         projects = {j['pk'] for i, _, __ in tuples for j in i[0]['projects']}
         filters = dict(pipeline=self.pipeline['pk'], projects__pk__in=projects)
@@ -537,7 +575,7 @@ class AbstractPipeline:
                 f'samtools dict -a {self.ASSEMBLY} -s {self.SPECIES} '
                 f'{reference} > {reference + ".dict"}')
 
-    def validate_has_raw_sequencing_data(self, targets, references, analyses):
+    def validate_has_raw_sequencing_data(self, targets, references):
         """Validate targets and references have sequencing data."""
         msg = []
 
@@ -548,9 +586,9 @@ class AbstractPipeline:
         if msg:
             raise ValidationError('\n'.join(msg))
 
-    def validate_single_data_type(self, targets, references, analyses):
+    def validate_single_data_type(self, targets, references):
         """Validate targets and references have sequencing data."""
-        self.validate_has_raw_sequencing_data(targets, references, analyses)
+        self.validate_has_raw_sequencing_data(targets, references)
         types = set()
 
         for i in targets + references:
@@ -567,30 +605,29 @@ class AbstractPipeline:
 
         return types.pop()
 
-    def validate_fastq_only(self, targets, references, analyses):
+    def validate_fastq_only(self, targets, references):
         """Validate sequencing data is only fastq."""
-        dtype = self.validate_single_data_type(targets, references, analyses)
+        dtype = self.validate_single_data_type(targets, references)
 
         if dtype != 'FASTQ':
             raise ValidationError(f'Only {dtype} supported, found: {dtype}')
 
-    def validate_tuple_is_pair(self, targets, references, analyses):
+    def validate_tuple_is_pair(self, targets, references):
         """Validate targets, references tuple is a pair."""
         if len(targets) != 1 or len(references) != 1:
             raise ValidationError('Target, reference pairs required.')
 
-    def validate_one_target_no_references(self, targets, references, analyses):
+    def validate_one_target_no_references(self, targets, references):
         """Test only one sample is passed targets and none on references."""
         if len(targets) != 1 or references:
             raise ValidationError('References not allowed.')
 
-    def validate_atleast_onetarget_onereference(
-            self, targets, references, analyses):
+    def validate_at_least_one_target_one_reference(self, targets, references):
         """Validate that at least one reference and target are passed."""
         if not references or not targets:
             raise ValidationError('References and targets required.')
 
-    def validate_targets_not_in_references(self, targets, references, analyses):
+    def validate_targets_not_in_references(self, targets, references):
         """Make sure targets are not passed as references also."""
         refset = set(i['pk'] for i in references)
         msg = []
@@ -602,7 +639,31 @@ class AbstractPipeline:
         if msg:
             raise ValidationError('\n'.join(msg))
 
-    def validate_dna_only(self, targets, references, analyses):
+    def validate_methods(self, targets, references, methods):
+        """Make sure all targets and references are come from PDX samples."""
+        msg = []
+
+        for i in targets + references:
+            if i['technique']['method'] not in methods:
+                msg.append(
+                    f"Only {methods} allowed, "
+                    f"found {i['technique']['method']} for {i['system_id']}.")
+
+        if msg:
+            raise ValidationError('\n'.join(msg))
+
+    def validate_pdx_only(self, targets, references):
+        """Make sure all targets and references are come from PDX samples."""
+        msg = []
+
+        for i in targets + references:
+            if not i['specimen']['is_pdx']:
+                msg.append(f"{i['system_id']} specimen is not PDX derived")
+
+        if msg:
+            raise ValidationError('\n'.join(msg))
+
+    def validate_dna_only(self, targets, references):
         """Make sure all targets and references are DNA data."""
         msg = []
 
@@ -613,7 +674,7 @@ class AbstractPipeline:
         if msg:
             raise ValidationError('\n'.join(msg))
 
-    def validate_rna_only(self, targets, references, analyses):
+    def validate_rna_only(self, targets, references):
         """Make sure all targets and references are DNA data."""
         msg = []
 
@@ -624,12 +685,12 @@ class AbstractPipeline:
         if msg:
             raise ValidationError('\n'.join(msg))
 
-    def validate_dna_pairs(self, targets, references, analyses):
+    def validate_dna_pairs(self, targets, references):
         """Validate targets, references tuples for base dna pipelines."""
-        self.validate_tuple_is_pair(targets, references, analyses)
-        self.validate_dna_only(targets, references, analyses)
+        self.validate_tuple_is_pair(targets, references)
+        self.validate_dna_only(targets, references)
 
-    def validate_same_technique(self, targets, references, analyses):
+    def validate_same_technique(self, targets, references):
         """Validate targets and references have same bedfile."""
         techniques = {i['technique']['slug'] for i in references}
 
@@ -648,7 +709,7 @@ class AbstractPipeline:
         if msg:
             raise ValidationError('\n'.join(msg))
 
-    def validate_species(self, targets, references, analyses):
+    def validate_species(self, targets, references):
         """Validate targets and references have sequencing data."""
         msg = []
 

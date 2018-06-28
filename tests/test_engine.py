@@ -20,11 +20,14 @@ class TestPipeline(AbstractPipeline):
     cli_help = "This is a test pipeline"
     cli_options = [options.TARGETS]
 
+    def merge_analyses_by_project(self, storage_url, analyses):
+        pass
+
     def get_tuples(self, targets):
         return [([i], [], []) for i in targets]
 
     def validate_tuple(self, targets, references, analyses):
-        self.validate_one_target_no_references(targets, references, analyses)
+        self.validate_one_target_no_references(targets, references)
 
         if targets[0]['center_id'] == '0':
             raise exceptions.ValidationError('Invalid Center ID')
@@ -43,7 +46,12 @@ def test_engine(tmpdir):
 
     individual = factories.IndividualFactory(species='HUMAN')
     specimen = factories.SpecimenFactory(individual=individual)
-    workflows = [factories.WorkflowFactory(center_id=str(i), specimen=specimen) for i in range(3)]
+    projects = [api.create_instance('projects', **factories.ProjectFactory())]
+
+    workflows = [
+        factories.WorkflowFactory(center_id=str(i), specimen=specimen, projects=projects)
+        for i in range(3)]
+
     workflows = [api.create_instance('workflows', **i) for i in workflows]
     tuples = [([i], [], []) for i in workflows]
     command = TestPipeline.as_cli_command()
@@ -80,11 +88,11 @@ def test_validate_tuple_is_pair():
     pipeline = AbstractPipeline()
     targets = [{}]
     references = [{}]
-    pipeline.validate_tuple_is_pair(targets, references, [])
+    pipeline.validate_tuple_is_pair(targets, references)
 
     with pytest.raises(click.UsageError) as error:
         targets.append({})
-        pipeline.validate_tuple_is_pair(targets, references, [])
+        pipeline.validate_tuple_is_pair(targets, references)
 
     assert 'Target, reference pairs required' in str(error.value)
 
@@ -93,11 +101,11 @@ def test_validate_one_target_no_references():
     pipeline = AbstractPipeline()
     targets = [{}]
     references = []
-    pipeline.validate_one_target_no_references(targets, references, [])
+    pipeline.validate_one_target_no_references(targets, references)
 
     with pytest.raises(click.UsageError) as error:
         references.append({})
-        pipeline.validate_one_target_no_references(targets, references, [])
+        pipeline.validate_one_target_no_references(targets, references)
 
     assert 'References not allowed' in str(error.value)
 
@@ -106,11 +114,11 @@ def test_validate_atleast_onetarget_onereference():
     pipeline = AbstractPipeline()
     targets = [{}]
     references = [{}]
-    pipeline.validate_atleast_onetarget_onereference(targets, references, [])
+    pipeline.validate_at_least_one_target_one_reference(targets, references)
 
     with pytest.raises(click.UsageError) as error:
         targets = []
-        pipeline.validate_atleast_onetarget_onereference(targets, references, [])
+        pipeline.validate_at_least_one_target_one_reference(targets, references)
 
     assert 'References and targets required' in str(error.value)
 
@@ -119,11 +127,11 @@ def test_validate_targets_not_in_references():
     pipeline = AbstractPipeline()
     targets = [{'pk': 1, 'system_id': 1}]
     references = [{'pk': 2, 'system_id': 2}]
-    pipeline.validate_targets_not_in_references(targets, references, [])
+    pipeline.validate_targets_not_in_references(targets, references)
 
     with pytest.raises(click.UsageError) as error:
         references = targets
-        pipeline.validate_targets_not_in_references(targets, references, [])
+        pipeline.validate_targets_not_in_references(targets, references)
 
     assert '1 was also used as reference' in str(error.value)
 
@@ -132,11 +140,11 @@ def test_validate_dna_tuples():
     pipeline = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
-    pipeline.validate_dna_only(targets, references, [])
+    pipeline.validate_dna_only(targets, references)
 
     with pytest.raises(click.UsageError) as error:
         targets[0]['technique']['analyte'] = 'RNA'
-        pipeline.validate_dna_only(targets, references, [])
+        pipeline.validate_dna_only(targets, references)
 
     assert 'analyte is not DNA' in str(error.value)
 
@@ -145,23 +153,23 @@ def test_validate_dna_pairs():
     pipeline = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
-    pipeline.validate_dna_pairs(targets, references, [])
+    pipeline.validate_dna_pairs(targets, references)
 
 
 def test_validate_same_technique():
     pipeline = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'slug': '1'}}]
     references = [{'system_id': 2, 'technique': {'slug': '1'}}]
-    pipeline.validate_same_technique(targets, references, [])
+    pipeline.validate_same_technique(targets, references)
 
     with pytest.raises(click.UsageError) as error:
         targets = [{'system_id': 1, 'technique': {'slug': '2'}}]
-        pipeline.validate_same_technique(targets, references, [])
+        pipeline.validate_same_technique(targets, references)
 
     assert 'References technique differ from' in str(error.value)
 
     with pytest.raises(click.UsageError) as error:
         references.append({'system_id': 3, 'technique': {'slug': '2'}})
-        pipeline.validate_same_technique(targets, references, [])
+        pipeline.validate_same_technique(targets, references)
 
     assert 'Multiple references techniques:' in str(error.value)

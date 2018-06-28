@@ -31,12 +31,16 @@ _DEFAULTS = {
     'PIPELINES_SETTINGS': {},
     'INSTALLED_PIPELINES': [],
     'CUSTOM_COMMANDS': [],
-    'ON_DATA_IMPORT': ['cli.data.symlink_workflow_to_projects'],
-    'ON_STATUS_CHANGE': ['cli.data.symlink_analysis_to_targets'],
+    'ON_DATA_IMPORT': [
+        'cli.data.symlink_workflow_to_projects'],
+    'ON_STATUS_CHANGE': [
+        'cli.data.symlink_analysis_to_targets',
+        'cli.data.trigger_analyses_merge'],
     'ON_SIGNAL_FAILURE': None,
     'ADMIN_COMMANDS': [
         'cli.commands.processed_finished'],
     'SYSTEM_COMMANDS': [
+        'cli.commands.merge_analyses',
         'cli.commands.patch_status',
         'cli.commands.get_attributes',
         'cli.commands.get_paths'],
@@ -69,7 +73,7 @@ def perform_import(val, setting_name):
     return val  # pragma: no cover
 
 
-def import_from_string(val, setting_name):
+def import_from_string(val, setting_name=None):
     """Attempt to import a class from a string representation."""
     try:
         module_path, class_name = val.rsplit('.', 1)
