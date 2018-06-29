@@ -62,35 +62,28 @@ def symlink_analysis_to_targets(analysis):
 
 def trigger_analyses_merge(analysis):
     """Submit project level analyses merge if neccessary."""
-    if analysis['status'] != 'SUCCEEDED':
+    if analysis['status'] not in {'SUCCEEDED', 'FAILED'}:
         return
 
     try:
-        key = analysis['pipeline']['pk']
         pipeline = import_from_string(analysis['pipeline']['pipeline_class'])()
-        projects = [j['pk'] for i in analysis['targets'] for j in i['projects']]
-        command = 'cli merge_analyses --project {} --key {}'
-
-        implemented = not getattr(
-            pipeline.merge_analyses_by_project,
-            '__isabstractmethod__', False)
-
-        if implemented:
-            for i in projects:
-                for j in 'STARTED', 'SUBMITTED':
-                    stop = api.get_instances_count(
-                        endpoint='analyses',
-                        pipeline=key,
-                        projects=i,
-                        status=j)
-
-                    if stop:
-                        return
-
-                command = f'cli merge_analyses --project {i} --pipeline {key}'
-                pipeline.submit_analyses_merge_command(command.split())
     except ImportError:
-        pass
+        return
+
+    if hasattr(pipeline.merge_analyses, '__isabstractmethod__'):
+        return
+
+    projects = {j['pk']: j for i in analysis['targets'] for j in i['projects']}
+
+    for i in projects.values():
+        pending = api.get_instances_count(
+            endpoint='analyses',
+            status__in='STARTED,SUBMITTED',
+            pipeline=analysis['pipeline']['pk'],
+            projects=i['pk'])
+
+        if not pending:
+            pipeline.submit_merge_project_analyses(i)
 
 
 def trash_analysis_storage(analysis):

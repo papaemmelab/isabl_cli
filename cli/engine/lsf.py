@@ -1,5 +1,5 @@
 """An LSF pipeline engine."""
-# pylint: disable=W9008
+# pylint: disable=W9008,R0201
 
 from collections import defaultdict
 from datetime import datetime
@@ -32,8 +32,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         'throttle_by': 50,
         }
 
-    @staticmethod
-    def get_requirements(targets_methods, settings):
+    def get_requirements(self, targets_methods, settings):
         """
         Get submission requirements given a set of targets' methods.
 
@@ -46,8 +45,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def get_job_name(analysis):
+    def get_job_name(self, analysis):
         """Get job name given an analysis dict."""
         targets = analysis['targets']
         references = analysis['references']
@@ -79,6 +77,9 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
 
         Arguments:
             command_tuples (list): list of (analysis, command) tuples.
+
+        Returns:
+            list: analysis, status tuples.
         """
         if self.settings.use_lsf:
             groups = defaultdict(list)
@@ -108,14 +109,15 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
                 try:
                     requirements = self.get_requirements(methods, self.settings)  # pylint: disable=E1111
                     api.patch_analyses_status(analyses, 'SUBMITTED')
-                    self._submit_array(commands, requirements, jobname)
+                    self.submit_array(commands, requirements, jobname)
                 except Exception:  # pylint: disable=broad-except
                     api.patch_analyses_status(analyses, 'STAGED')
                     raise Exception("Error during submission...")
-        else:
-            super().submit_analyses(command_tuples)
 
-    def _submit_array(self, commands, requirements, jobname):
+            return [(i, 'SUBMITTED') for i, _ in command_tuples]
+        return super().submit_analyses(command_tuples)
+
+    def submit_array(self, commands, requirements, jobname):
         """
         Submit an array of bash scripts.
 

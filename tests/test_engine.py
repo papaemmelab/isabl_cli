@@ -1,3 +1,5 @@
+from os.path import join
+from os.path import isfile
 from click.testing import CliRunner
 import click
 import pytest
@@ -12,16 +14,16 @@ from cli.settings import _DEFAULTS
 
 class TestPipeline(AbstractPipeline):
 
-    NAME = 'A Test Pipeline'
-    VERSION = 'A Test Version'
+    NAME = 'HELLO_WORLD'
+    VERSION = 'STILL_TESTING'
     ASSEMBLY = 'GRCh4000'
     SPECIES = 'HUMAN'
 
     cli_help = "This is a test pipeline"
     cli_options = [options.TARGETS]
 
-    def merge_analyses_by_project(self, storage_url, analyses):
-        pass
+    def merge_analyses(self, storage_url, analyses):
+        assert len(analyses) == 2, f'CARLOSSS {len(analyses)}'
 
     def get_tuples(self, targets):
         return [([i], [], []) for i in targets]
@@ -46,11 +48,13 @@ def test_engine(tmpdir):
 
     individual = factories.IndividualFactory(species='HUMAN')
     specimen = factories.SpecimenFactory(individual=individual)
-    projects = [api.create_instance('projects', **factories.ProjectFactory())]
+    project = api.create_instance('projects', **factories.ProjectFactory())
 
     workflows = [
-        factories.WorkflowFactory(center_id=str(i), specimen=specimen, projects=projects)
-        for i in range(3)]
+        factories.WorkflowFactory(
+            center_id=str(i), specimen=specimen, projects=[project])
+        for i in range(4)
+        ]
 
     workflows = [api.create_instance('workflows', **i) for i in workflows]
     tuples = [([i], [], []) for i in workflows]
@@ -69,10 +73,11 @@ def test_engine(tmpdir):
     pks = ','.join(str(i['pk']) for i in workflows)
     args = ['-fi', 'pk__in', pks, '--verbose']
     result = runner.invoke(command, args, catch_exceptions=False)
+    analysis = pipeline.get_project_level_analysis(project)
 
     assert 'FAILED' in result.output
     assert 'SUCCEEDED' in result.output
-    assert 'SKIPPED 2' in result.output
+    assert 'SKIPPED 3' in result.output
     assert 'INVALID 1' in result.output
 
     args = ['-fi', 'pk__in', pks, '--commit', '--force']
@@ -118,7 +123,8 @@ def test_validate_atleast_onetarget_onereference():
 
     with pytest.raises(click.UsageError) as error:
         targets = []
-        pipeline.validate_at_least_one_target_one_reference(targets, references)
+        pipeline.validate_at_least_one_target_one_reference(
+            targets, references)
 
     assert 'References and targets required' in str(error.value)
 

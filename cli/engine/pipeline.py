@@ -5,6 +5,7 @@ from collections import defaultdict
 from os.path import isdir
 from os.path import isfile
 from os.path import join
+from os import environ
 import abc
 import os
 import subprocess
@@ -128,20 +129,8 @@ class AbstractPipeline:
         """
         raise NotImplementedError()
 
-    def validate_settings(self, settings):
-        """Validate settings."""
-        return
-
-    def get_status(self, analysis):  # pylint: disable=W0613
-        """Possible values are FINISHED and IN_PROGRESS."""
-        return 'FINISHED'
-
-    # ------------------------------
-    # MERGE BY PROJECT CONFIGURATION
-    # ------------------------------
-
     @abc.abstractmethod  # add __isabstractmethod__ property to method
-    def merge_analyses_by_project(self, storage_url, analyses):
+    def merge_analyses(self, storage_url, analyses):
         """
         Merge analyses on a project level basis.
 
@@ -155,19 +144,66 @@ class AbstractPipeline:
         """
         raise NotImplementedError('No merging logic available!')
 
-    def submit_analyses_merge_command(self, command):
+    def validate_settings(self, settings):
+        """Validate settings."""
+        return
+
+    def get_status(self, analysis):  # pylint: disable=W0613
+        """Possible values are FINISHED and IN_PROGRESS."""
+        return 'FINISHED'
+
+    # ------------------------------
+    # MERGE BY PROJECT CONFIGURATION
+    # ------------------------------
+
+    def merge_project_analyses(self, project):
         """
         Merge analyses on a project level basis.
 
-        `merge_analyses_by_project` is run using a CLI command given that
-        merge requirements may exceed those than the analysis triggering
-        the merge. By default this command is executed using subprocess,
-        but engine implementations can submit to their scheduler.
+        Arguments:
+            project (dict): project instance.
+        """
+        analyses = api.get_instances(
+            endpoint='analyses',
+            pipeline=self.pipeline['pk'],
+            projects=project['pk'],
+            status='SUCCEEDED')
+
+        if analyses:
+            try:
+                analysis = self.get_project_level_analysis(project)
+                self.merge_analyses(analysis['storage_url'], analyses)
+            except NotImplementedError as error:
+                raise error
+            except Exception as error:
+                api.patch_instance('analyses', analysis['pk'], status='FAILED')
+                raise error
+
+    def get_project_level_analysis(self, project):
+        """
+        Get or create project level analysis.
 
         Arguments:
-            command (list): command used to perform merge.
+            project (dict): project instance.
+
+        Returns:
+            dict: analysis instance.
         """
-        subprocess.check_call(command)
+        analysis = api.create_instance(
+            endpoint='analyses',
+            project_level_analysis=project,
+            pipeline=self.pipeline)
+
+        if not analysis['storage_url']:
+            analysis = data.update_storage_url(
+                endpoint='analyses',
+                identifier=analysis['pk'],
+                use_hash=True)
+
+        return analysis
+
+    def submit_merge_project_analyses(self, project):
+        self.merge_project_analyses(project)
 
     # ----------
     # PROPERTIES
@@ -303,9 +339,9 @@ class AbstractPipeline:
             self.echo_summary(command_tuples, skipped_tuples, invalid_tuples)
 
         click.echo(
-            f"RAN {len(command_tuples)} | "
-            f"SKIPPED {len(skipped_tuples)} | "
-            f"INVALID {len(invalid_tuples)}\n")
+            f'RAN {len(command_tuples)} | '
+            f'SKIPPED {len(skipped_tuples)} | '
+            f'INVALID {len(invalid_tuples)}\n')
 
         return command_tuples, skipped_tuples, invalid_tuples
 
@@ -330,7 +366,7 @@ class AbstractPipeline:
                     skipped_tuples.append((i, error))
 
         if commit:
-            self.submit_analyses(command_tuples)
+            command_tuples = self.submit_analyses(command_tuples)
 
         return command_tuples, skipped_tuples
 
@@ -340,33 +376,30 @@ class AbstractPipeline:
 
         Arguments:
             command_tuples (list): of (analysis, command) tuples.
+
+        Returns:
+            list: analysis, status tuples.
         """
         # make sure analyses are in submitted status to avoid
         # merging project level analyses in every success
+        identifiers = []
         api.patch_analyses_status([i for i, _ in command_tuples], 'SUBMITTED')
         label = f'Running {len(command_tuples)} analyses...'
 
         with progressbar(command_tuples, label=label) as bar:
             for i, j in bar:
-                try:
-                    log = join(i['storage_url'], 'head_job.log')
-                    err = join(i['storage_url'], 'head_job.err')
-                    with open(log, 'w') as stdout, open(err, 'w') as stderr:
-                        subprocess.check_call(
-                            args=['bash', j],
-                            stdout=stdout,
-                            stderr=stderr)
-                except subprocess.CalledProcessError as error:
-                    api.patch_instance(
-                        endpoint='analyses',
-                        identifier=i['pk'],
-                        storage_usage=utils.get_tree_size(i['storage_url']),
-                        status='FAILED')
+                identifiers.append(i['pk'])
+                log = join(i['storage_url'], 'head_job.log')
+                err = join(i['storage_url'], 'head_job.err')
 
-                    if error and self.settings.raise_error:
-                        raise error or Exception
-                    elif error:
-                        click.secho(f'\n\t{error}', fg='red')
+                with open(log, 'w') as stdout, open(err, 'w') as stderr:
+                    subprocess.check_call(
+                        args=['bash', j],
+                        stdout=stdout,
+                        stderr=stderr)
+
+        analyses = api.get_instances('analyses', identifiers)
+        return [(i, i['status']) for i in analyses]
 
     def build_command_script(self, analysis):
         """
@@ -378,26 +411,33 @@ class AbstractPipeline:
         Returns:
             str: analysis command as a path to a bash script.
         """
+        template = '{{\n\n    {}\n\n}} | {{\n\n    {}\n\n}}'
         command = self.get_command(analysis, self.settings)
-        status = self.get_status(analysis)
+        outdir = analysis['storage_url']
         command_path = join(analysis['storage_url'], 'head_job.sh')
+
+        # check status, if not run by admin will be marked as succeeded later
+        status = self.get_status(analysis)
         assert status in {'IN_PROGRESS', 'FINISHED'}
 
-        # analyses not run but admin will be marked as succeeded after
         if system_settings.is_admin_user and status == 'FINISHED':
             status = 'SUCCEEDED'
 
+        # build command
+        failed = self.get_patch_status_command(analysis["pk"], "FAILED")
+        started = self.get_patch_status_command(analysis["pk"], "STARTED")
+        finished = self.get_patch_status_command(analysis["pk"], status)
+
         command = (
-            f'set -e; cd {analysis["storage_url"]} && umask g+wrx && '
-            f'{self.get_patch_status_command(analysis["pk"], "STARTED")} '
-            f'&& date && {command} && '
-            f'{self.get_patch_status_command(analysis["pk"], status)}')
+            f'umask g+wrx && date && cd {outdir} && '
+            f'{started} && {command} && {finished}')
 
         if system_settings.is_admin_user:
             command += f" && chmod -R a-w {analysis['storage_url']}"
 
+        # write command
         with open(command_path, "w") as f:
-            f.write(command)
+            f.write(template.format(command, failed))
 
         return command_path
 
@@ -423,6 +463,8 @@ class AbstractPipeline:
                 color = 'red'
             elif msg == 'SUCCEEDED':
                 color = 'green'
+            elif msg == 'FAILED':
+                color = 'red'
             return click.style(str(msg), fg=color)
 
         def _style_projects(targets):

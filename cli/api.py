@@ -321,6 +321,6 @@ def _run_signals(endpoint, instance, signals):
             except Exception as on_failure_error:  # pylint: disable=W0703
                 errors.append(on_failure_error)
 
-    if errors:
-        errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
-        raise RuntimeError('Errors occurred during signals run:\n' + errors)
+    # if errors:
+        # errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
+        # raise RuntimeError('Errors occurred during signals run:\n' + errors)

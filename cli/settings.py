@@ -148,7 +148,10 @@ class BaseSettings(object):
         try:
             val = self._settings[attr]
         except KeyError:
-            val = self.defaults[attr]
+            try:
+                val = environ[f'BEE_{attr}']
+            except KeyError:
+                val = self.defaults[attr]
 
         if attr in self.import_strings:  # coerce import strings into object
             val = perform_import(val, attr)
