@@ -96,6 +96,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
                 commands, analyses, projects = [], [], set()
 
                 for i, cmd in cmd_tuples:
+                    cmd = self.write_command_script(i, cmd)
                     exit_cmd = self.get_patch_status_command(i["pk"], 'FAILED')
                     analyses.append(i)
                     commands.append((cmd, exit_cmd))

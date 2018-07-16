@@ -9,6 +9,7 @@ from cli import factories
 from cli import exceptions
 from cli import options
 from cli.engine import AbstractPipeline
+from cli.settings import system_settings
 from cli.settings import _DEFAULTS
 
 
@@ -21,9 +22,13 @@ class TestPipeline(AbstractPipeline):
 
     cli_help = "This is a test pipeline"
     cli_options = [options.TARGETS]
+    pipeline_settings = {'foo': 'bar'}
 
     def merge_analyses(self, storage_url, analyses):
-        assert len(analyses) == 2, f'CARLOSSS {len(analyses)}'
+        assert len(analyses) == 2, f'Expected 2, got: {len(analyses)}'
+
+        with open(join(storage_url, 'test.merge'), 'w') as f:
+            f.write(str(len(analyses)))
 
     def get_tuples(self, targets):
         return [([i], [], []) for i in targets]
@@ -40,6 +45,31 @@ class TestPipeline(AbstractPipeline):
         if analysis['targets'][0]['center_id'] == '1':
             return 'exit 1'
         return f"echo {analysis['targets'][0]['system_id']}"
+
+
+def test_pipeline_settings():
+    pipeline = TestPipeline()
+    pipeline.pipeline_settings = {
+        'test_reference': 'reference_data_id:test_id',
+        'needs_to_be_implemented': NotImplemented,
+        'from_system_settings': None
+        }
+
+    _DEFAULTS['PIPELINES_SETTINGS'] = {
+        f'{pipeline.NAME} {pipeline.VERSION} {pipeline.ASSEMBLY}':{
+            'from_system_settings': 'BAR'
+        }
+    }
+
+    pipeline.assembly['reference_data']['test_id'] = dict(url='FOO')
+    assert pipeline.settings.test_reference == 'FOO'
+
+    with pytest.raises(exceptions.MissingRequirementError) as error:
+        pipeline.settings.needs_to_be_implemented
+
+    assert 'is required' in str(error.value)
+    assert pipeline.settings.system_settings == system_settings
+    assert pipeline.settings.from_system_settings == 'BAR'
 
 
 def test_engine(tmpdir):
@@ -74,11 +104,16 @@ def test_engine(tmpdir):
     args = ['-fi', 'pk__in', pks, '--verbose']
     result = runner.invoke(command, args, catch_exceptions=False)
     analysis = pipeline.get_project_level_analysis(project)
+    merged = join(analysis['storage_url'], 'test.merge')
 
     assert 'FAILED' in result.output
     assert 'SUCCEEDED' in result.output
     assert 'SKIPPED 3' in result.output
     assert 'INVALID 1' in result.output
+    assert isfile(merged)
+
+    with open(merged) as f:
+        assert f.read().strip() == '2'
 
     args = ['-fi', 'pk__in', pks, '--commit', '--force']
     result = runner.invoke(command, args)
@@ -100,6 +135,105 @@ def test_validate_tuple_is_pair():
         pipeline.validate_tuple_is_pair(targets, references)
 
     assert 'Target, reference pairs required' in str(error.value)
+
+
+def test_validate_reference_genome(tmpdir):
+    reference = tmpdir.join('reference.fasta')
+    required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
+    pipeline = AbstractPipeline()
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_reference_genome(reference.strpath)
+
+    assert 'Missing indexes please run' in str(error.value)
+
+    for i in required:
+        tmp = tmpdir.join('reference.fasta' + i)
+        tmp.write('foo')
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_reference_genome(reference.strpath)
+
+    assert 'samtools dict -a' in str(error.value)
+
+
+def test_validate_fastq_only():
+    pipeline = AbstractPipeline()
+    targets = [{'sequencing_data': [], 'system_id': 'FOO'}]
+    references = []
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_has_raw_sequencing_data(targets, references)
+
+    assert 'FOO' in str(error.value)
+
+    targets = [
+        {'sequencing_data': [{'file_type': 'BAM'}], 'system_id': 'FOO'},
+        {'sequencing_data': [{'file_type': 'FASTQ_R1'}], 'system_id': 'BAR'},
+        ]
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_single_data_type(targets, references)
+
+    assert 'FOO' in str(error.value)
+
+    targets = [{'sequencing_data': [{'file_type': 'BAM'}], 'system_id': 'FOO'}]
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_fastq_only(targets, references)
+
+    assert 'Only FASTQ supported' in str(error.value)
+
+
+def test_validate_methods():
+    pipeline = AbstractPipeline()
+    targets = [{'technique': {'method': 'FOO'}, 'system_id': 'FOO BAR'}]
+    references = []
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_methods(targets, references, 'BAR')
+
+    assert "Only 'BAR' sequencing method allowed" in str(error.value)
+
+
+def test_validate_pdx_only():
+    pipeline = AbstractPipeline()
+    targets = [{'specimen': {'is_pdx': False}, 'system_id': 'FOO'}]
+    references = []
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_pdx_only(targets, references)
+
+    assert 'is not PDX' in str(error.value)
+
+
+def test_validate_dna_rna_only():
+    pipeline = AbstractPipeline()
+    targets = [{'technique': {'analyte': 'DNA'}, 'system_id': 'FOO'}]
+    references = []
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_rna_only(targets, references)
+
+    assert 'is not RNA' in str(error.value)
+
+    targets = [{'technique': {'analyte': 'RNA'}, 'system_id': 'FOO'}]
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_dna_only(targets, references)
+
+    assert 'is not DNA' in str(error.value)
+
+
+def test_validate_species():
+    pipeline = AbstractPipeline()
+    targets = [{'specimen': {'individual': {'species': 'MOUSE'}}, 'system_id': 'FOO'}]
+    references = []
+
+    with pytest.raises(click.UsageError) as error:
+        pipeline.validate_species(targets, references)
+
+    assert 'species not supported' in str(error.value)
 
 
 def test_validate_one_target_no_references():

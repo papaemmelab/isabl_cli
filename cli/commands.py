@@ -17,7 +17,7 @@ from cli.settings import import_from_string
 @click.command()
 @click.option('--project', help='primary key of project to merge by', type=int)
 @click.option('--pipeline', help='analyses pipeline primary key', type=int)
-def merge_analyses(project, pipeline):
+def merge_analyses(project, pipeline):  # pragma: no cover
     """Merge analyses by project primary key."""
     project = api.get_instance('projects', project)
     pipeline = api.get_instance('pipelines', pipeline)
@@ -62,7 +62,7 @@ def patch_status(key, status):
 @click.command()
 @options.ENDPOINT
 @options.FIELDS
-@options.FILTERS
+@options.NULLABLE_FILTERS
 @options.NO_HEADERS
 def get_attributes(endpoint, field, filters, no_headers):
     """Get database attributes from API."""
@@ -74,6 +74,14 @@ def get_attributes(endpoint, field, filters, no_headers):
         result.append('\t'.join(values))
 
     click.echo('\n'.join(result).expandtabs(30))
+
+
+@click.command()
+@options.ENDPOINT
+@options.NULLABLE_FILTERS
+def get_count(endpoint, filters):
+    """Get count of database instances."""
+    click.echo(api.get_instances_count(endpoint, **filters))
 
 
 @click.command()

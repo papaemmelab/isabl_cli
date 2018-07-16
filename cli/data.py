@@ -25,11 +25,8 @@ from cli.settings import import_from_string
 
 def symlink_workflow_to_projects(workflow):
     """Create symlink from workflow directory and projects directories."""
-    click.secho(f'Linking {workflow["system_id"]}', fg='green')
-
     for i in workflow['projects']:
-
-        if not i['storage_url']:
+        if not i['storage_url']:  # pragma: no cover
             i = update_storage_url('projects', i['pk'])
 
         utils.force_symlink(
@@ -49,7 +46,7 @@ def symlink_analysis_to_targets(analysis):
         str(analysis['pk'])])
 
     for i in analysis['targets']:
-        if not i['storage_url']:
+        if not i['storage_url']:  # pragma: no cover
             i = update_storage_url('workflows', i['pk'])
         utils.force_symlink(src, join(i['storage_url'], dst))
 
@@ -71,7 +68,7 @@ def trigger_analyses_merge(analysis):
         return
 
     if hasattr(pipeline.merge_analyses, '__isabstractmethod__'):
-        return
+        return  # pragma: no cover
 
     projects = {j['pk']: j for i in analysis['targets'] for j in i['projects']}
 

@@ -86,6 +86,14 @@ FILTERS = click.option(
     callback=lambda _, __, i: dict(i),
     required=True)
 
+NULLABLE_FILTERS = click.option(
+    '--filters', '-fi',
+    multiple=True,
+    help='API filters',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: dict(i))
+
 TARGETS = click.option(
     '--targets-filters', '-fi', 'targets',
     multiple=True,

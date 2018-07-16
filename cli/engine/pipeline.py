@@ -5,7 +5,6 @@ from collections import defaultdict
 from os.path import isdir
 from os.path import isfile
 from os.path import join
-from os import environ
 import abc
 import os
 import subprocess
@@ -23,7 +22,6 @@ from cli import utils
 from cli.exceptions import ValidationError
 from cli.settings import PipelineSettings
 from cli.settings import system_settings
-
 
 COMMIT = click.option(
     "--commit",
@@ -49,6 +47,37 @@ class AbstractPipeline:
 
     """
     An Abstract pipeline.
+
+    Whilst this project becomes more mature, the size of `AbstractPipeline` is
+    expected to be reduced and split into components. As for now we will leave
+    all logic together so that functionality is transparent.
+
+    For instance, the analysis execution logic could be included in a backend,
+    same as data validation and analyses retrieval and creation.
+
+    **User Implementations**
+
+    TODO
+
+    **Project Level Merge**
+
+    TODO
+
+    **Command Line Interface**
+
+    TODO
+
+    **Analyses Execution**
+
+    TODO
+
+    **Analyses Creation**
+
+    TODO
+
+    **Data Validation**
+
+    TODO
 
     Attributes:
         NAME (object): TODO.
@@ -148,13 +177,13 @@ class AbstractPipeline:
         """Validate settings."""
         return
 
-    def get_status(self, analysis):  # pylint: disable=W0613
+    def get_after_completion_status(self, analysis):  # pylint: disable=W0613
         """Possible values are FINISHED and IN_PROGRESS."""
         return 'FINISHED'
 
-    # ------------------------------
-    # MERGE BY PROJECT CONFIGURATION
-    # ------------------------------
+    # ----------------------
+    # MERGE BY PROJECT LOGIC
+    # ----------------------
 
     def merge_project_analyses(self, project):
         """
@@ -171,13 +200,24 @@ class AbstractPipeline:
 
         if analyses:
             try:
+                error = None
+                status = 'SUCCEEDED'
                 analysis = self.get_project_level_analysis(project)
                 self.merge_analyses(analysis['storage_url'], analyses)
-            except NotImplementedError as error:
+            except NotImplementedError as error:  # pragma: no cover
                 raise error
-            except Exception as error:
-                api.patch_instance('analyses', analysis['pk'], status='FAILED')
-                raise error
+            except Exception as err:  # pragma: no cover pylint: disable=W0703
+                error = err
+                status = 'FAILED'
+
+            api.patch_instance(
+                endpoint='analyses',
+                identifier=analysis['pk'],
+                status=status,
+                storage_usage=utils.get_tree_size(analysis['storage_url']))
+
+            if error is not None:
+                raise error  # pylint: disable=E0702
 
     def get_project_level_analysis(self, project):
         """
@@ -203,6 +243,15 @@ class AbstractPipeline:
         return analysis
 
     def submit_merge_project_analyses(self, project):
+        """
+        Directly call `merge_project_analyses`.
+
+        Overwrite this method if the merge procedure should be submitted using
+        a scheduler, see `commands.merge_analyses`.
+
+        Arguments:
+            project (dict): a project instance.
+        """
         self.merge_project_analyses(project)
 
     # ----------
@@ -215,7 +264,7 @@ class AbstractPipeline:
         defaults = self.pipeline_settings.copy()
 
         for i, j in self.engine_settings.items():
-            if i in self.pipeline_settings:
+            if i in self.pipeline_settings:  # pragma: no cover
                 msg = f"System setting '{i}' can't be used, pick other name"
                 raise exceptions.ConfigurationError(msg)
             defaults[i] = j
@@ -244,7 +293,7 @@ class AbstractPipeline:
             assembly={'name': self.ASSEMBLY, 'species': self.SPECIES},
             pipeline_class=pipeline_class)
 
-        if pipeline['pipeline_class'] != pipeline_class:
+        if pipeline['pipeline_class'] != pipeline_class:  # pragma: no cover
             api.patch_instance(
                 endpoint='pipelines',
                 identifier=pipeline['pk'],
@@ -294,11 +343,6 @@ class AbstractPipeline:
     # ANALYSES EXECUTION LOGIC
     # ------------------------
 
-    @staticmethod
-    def get_patch_status_command(key, status):
-        """Return a command to patch the `status` of a given analysis `key`."""
-        return f'cli patch_status --key {key} --status {status}'
-
     def run_tuples(self, tuples, commit, force=False, verbose=True):
         """
         Run a list of tuples.
@@ -330,23 +374,28 @@ class AbstractPipeline:
 
         # create and run analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
-        command_tuples, skipped_tuples = self.run_analyses(
+        run_tuples, skipped_tuples = self.run_analyses(
             analyses=analyses,
             commit=commit,
             force=force)
 
         if verbose:
-            self.echo_summary(command_tuples, skipped_tuples, invalid_tuples)
+            self.echo_run_summary(run_tuples, skipped_tuples, invalid_tuples)
 
         click.echo(
-            f'RAN {len(command_tuples)} | '
+            f'RAN {len(run_tuples)} | '
             f'SKIPPED {len(skipped_tuples)} | '
             f'INVALID {len(invalid_tuples)}\n')
 
-        return command_tuples, skipped_tuples, invalid_tuples
+        return run_tuples, skipped_tuples, invalid_tuples
 
     def run_analyses(self, analyses, commit, force):
-        """Run a list of analyses."""
+        """
+        Run a list of analyses.
+
+        Returns:
+            list: tuple of
+        """
         skipped_tuples = []
         command_tuples = []
 
@@ -360,15 +409,18 @@ class AbstractPipeline:
                     continue
 
                 try:
-                    command = self.build_command_script(i)
+                    command = self.get_command(i, self.settings)
                     command_tuples.append((i, command))
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
         if commit:
-            command_tuples = self.submit_analyses(command_tuples)
+            run_tuples = self.submit_analyses(command_tuples)
+        else:
+            run_tuples = [(i, 'STAGED') for i, _ in command_tuples]
+            api.patch_analyses_status([i for i, _ in command_tuples], 'STAGED')
 
-        return command_tuples, skipped_tuples
+        return run_tuples, skipped_tuples
 
     def submit_analyses(self, command_tuples):
         """
@@ -382,43 +434,57 @@ class AbstractPipeline:
         """
         # make sure analyses are in submitted status to avoid
         # merging project level analyses in every success
-        identifiers = []
+        ret = []
         api.patch_analyses_status([i for i, _ in command_tuples], 'SUBMITTED')
         label = f'Running {len(command_tuples)} analyses...'
 
         with progressbar(command_tuples, label=label) as bar:
             for i, j in bar:
-                identifiers.append(i['pk'])
+                self.write_command_script(i, j)
                 log = join(i['storage_url'], 'head_job.log')
                 err = join(i['storage_url'], 'head_job.err')
+                api.patch_instance('analyses', i['pk'], status='STARTED')
+                status = 'SUCCEEDED'
+                os.umask(0o007)
 
                 with open(log, 'w') as stdout, open(err, 'w') as stderr:
-                    subprocess.check_call(
-                        args=['bash', j],
-                        stdout=stdout,
-                        stderr=stderr)
+                    try:
+                        subprocess.check_call(
+                            args=j,
+                            cwd=i['storage_url'],
+                            stdout=stdout,
+                            stderr=stderr,
+                            shell=True)
+                    except subprocess.CalledProcessError:
+                        status = 'FAILED'
 
-        analyses = api.get_instances('analyses', identifiers)
-        return [(i, i['status']) for i in analyses]
+                i = api.patch_instance(
+                    endpoint='analyses',
+                    identifier=i['pk'],
+                    status=status,
+                    storage_usage=utils.get_tree_size(i['storage_url']))
 
-    def build_command_script(self, analysis):
+                ret.append((i, i['status']))
+
+        return ret
+
+    def write_command_script(self, analysis, command):
         """
-        Get analysis command as a path to a bash script.
+        Write analysis command to bash script and get path to it.
 
         Arguments:
-            analysis (leuktools.Analysis): the analysis object to be run.
+            analysis (dict): an analysis instance.
+            command (str): command to be run.
 
         Returns:
             str: analysis command as a path to a bash script.
         """
-        template = '{{\n\n    {}\n\n}} | {{\n\n    {}\n\n}}'
-        command = self.get_command(analysis, self.settings)
         outdir = analysis['storage_url']
         command_path = join(analysis['storage_url'], 'head_job.sh')
 
         # check status, if not run by admin will be marked as succeeded later
-        status = self.get_status(analysis)
-        assert status in {'IN_PROGRESS', 'FINISHED'}
+        status = self.get_after_completion_status(analysis)
+        assert status in {'IN_PROGRESS', 'FINISHED'}, 'Status not supported'
 
         if system_settings.is_admin_user and status == 'FINISHED':
             status = 'SUCCEEDED'
@@ -437,50 +503,72 @@ class AbstractPipeline:
 
         # write command
         with open(command_path, "w") as f:
+            template = '{{\n\n    {}\n\n}} | {{\n\n    {}\n\n}}'
             f.write(template.format(command, failed))
 
         return command_path
 
     @staticmethod
-    def echo_summary(command_tuples, skipped_tuples, invalid_tuples):
+    def get_patch_status_command(key, status):
+        """Return a command to patch the `status` of a given analysis `key`."""
+        return f'cli patch_status --key {key} --status {status}'
+
+    @staticmethod
+    def echo_run_summary(run_tuples, skipped_tuples, invalid_tuples):
         """
         Echo errors for error tuples such as `invalid`, `cant_run`.
 
         Arguments:
             invalid_tuples (list): of (tuple, error) tuples.
-            command_tuples (list): of (analysis, command) tuples.
+            run_tuples (list): of (analysis, status) tuples.
             skipped_tuples (list): of (analysis, skip reason) tuples.
         """
-        summary_keys = ['PK', 'PROJECTS', 'TARGETS', 'REFERENCES', 'MESSAGE']
-        summary = ['\n']
-        command_tuples.sort(key=lambda i: str(i[1]))
+        cols = [
+            'IDENTIFIER',
+            'PROJECTS',
+            'TARGETS',
+            'REFERENCES',
+            'MESSAGE']
+
+        summary = ['\n', '\t'.join(cols)]
+        run_tuples.sort(key=lambda i: str(i[1]))
         invalid_tuples.sort(key=lambda i: str(i[1]))
         skipped_tuples.sort(key=lambda i: str(i[1]))
 
         def _style_msg(msg):
+            msg = str(msg)
             color = 'blue'
+            blink = False
+
             if isinstance(msg, Exception):
                 color = 'red'
             elif msg == 'SUCCEEDED':
                 color = 'green'
             elif msg == 'FAILED':
                 color = 'red'
-            return click.style(str(msg), fg=color)
+            elif msg == 'STAGED':
+                color = 'magenta'
+                blink = True
+
+            if len(msg) > 20:
+                msg = msg[:17] + '...'
+
+            return click.style(msg, fg=color, blink=blink)
 
         def _style_projects(targets):
             keys = set()
             for i in targets:
                 for j in i['projects']:  # pragma: no cover
-                    keys.add(f"{j['pk']} {i['technique']['method']}")
-            return f"Projects {' '.join(keys)}" if keys else '0 projects'
+                    keys.add(f"{j['pk']} ({i['technique']['method']})")
+            return f"{', '.join(keys)}" if keys else '0'
 
-        def _style_workflows(workflows, relation='targets'):
+        def _style_workflows(workflows):
             if len(workflows) > 2 or not workflows:
-                return f'{len(workflows)} {relation}'
+                return f'{len(workflows)}'
             return ' '.join([i['system_id'] for i in workflows])
 
-        for i, msg in command_tuples + skipped_tuples + invalid_tuples:
-            if isinstance(i, dict):  # if skipped, command
+        for i, msg in run_tuples + skipped_tuples + invalid_tuples:
+            if isinstance(i, dict):  # if skipped, succeeded or failed
                 identifier = str(i['pk'])
                 targets = i['targets']
                 references = i['references']
@@ -489,15 +577,15 @@ class AbstractPipeline:
                 targets = i[0]
                 references = i[1]
 
-            row = {k: 'NA' for k in summary_keys}
-            row['PK'] = identifier
+            row = {k: 'NA' for k in cols}
+            row['IDENTIFIER'] = identifier
             row['MESSAGE'] = _style_msg(msg)
             row['PROJECTS'] = _style_projects(targets)
             row['TARGETS'] = _style_workflows(targets)
-            row['REFERENCES'] = _style_workflows(references, 'references')
-            summary.append('\t'.join(row[k] for k in summary_keys))
+            row['REFERENCES'] = _style_workflows(references)
+            summary.append('\t'.join(row[k] for k in cols))
 
-        summary = '\n'.join(summary).expandtabs(12) + '\n'
+        summary = '\n'.join(summary).expandtabs(20) + '\n'
         click.echo(f'{summary}\n')
 
     # -----------------------
@@ -556,9 +644,6 @@ class AbstractPipeline:
         Returns:
             tuple: list of existing analyses, list of tuples without analysis
         """
-        for i in tuples:
-            if len(i) == 2:
-                print(i)
         click.echo("Checking for existing analyses...", file=sys.stderr)
         projects = {j['pk'] for i, _, __ in tuples for j in i[0]['projects']}
         filters = dict(pipeline=self.pipeline['pk'], projects__pk__in=projects)
@@ -592,12 +677,12 @@ class AbstractPipeline:
     # DATA VALIDATION LOGIC
     # ---------------------
 
-    def validate_is_file(self, path):
+    def validate_is_file(self, path):  # pragma: no cover
         """Validate path is file."""
         if not isfile(path):
             raise ValidationError(f'{path} is not a file.')
 
-    def validate_is_dir(self, path):
+    def validate_is_dir(self, path):  # pragma: no cover
         """Validate path is directory."""
         if not isdir(path):
             raise ValidationError(f'{path} is not a file.')
@@ -631,7 +716,7 @@ class AbstractPipeline:
     def validate_single_data_type(self, targets, references):
         """Validate targets and references have sequencing data."""
         self.validate_has_raw_sequencing_data(targets, references)
-        types = set()
+        types = defaultdict(list)
 
         for i in targets + references:
             for j in i['sequencing_data']:
@@ -640,19 +725,20 @@ class AbstractPipeline:
                 if file_type.startswith('FASTQ_'):
                     file_type = 'FASTQ'
 
-                types.add(file_type)
+                types[file_type].append(i['system_id'])
 
         if len(types) > 1:
-            raise ValidationError(f'Multiple data types not supported: {types}')
+            raise ValidationError(
+                f'Multiple data types not supported: {dict(types)}')
 
-        return types.pop()
+        return list(types.keys())[0]
 
     def validate_fastq_only(self, targets, references):
         """Validate sequencing data is only fastq."""
         dtype = self.validate_single_data_type(targets, references)
 
         if dtype != 'FASTQ':
-            raise ValidationError(f'Only {dtype} supported, found: {dtype}')
+            raise ValidationError(f'Only FASTQ supported, found: {dtype}')
 
     def validate_tuple_is_pair(self, targets, references):
         """Validate targets, references tuple is a pair."""
@@ -688,7 +774,7 @@ class AbstractPipeline:
         for i in targets + references:
             if i['technique']['method'] not in methods:
                 msg.append(
-                    f"Only {methods} allowed, "
+                    f"Only '{methods}' sequencing method allowed, "
                     f"found {i['technique']['method']} for {i['system_id']}.")
 
         if msg:

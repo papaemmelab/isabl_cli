@@ -42,6 +42,7 @@ _DEFAULTS = {
     'SYSTEM_COMMANDS': [
         'cli.commands.merge_analyses',
         'cli.commands.patch_status',
+        'cli.commands.get_count',
         'cli.commands.get_attributes',
         'cli.commands.get_paths'],
     }
