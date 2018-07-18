@@ -3,6 +3,7 @@
 import click
 
 from cli.api import get_instances
+from cli import validators
 
 IDENTIFIER = click.option(
     '--identifier', '-id',
@@ -102,6 +103,28 @@ TARGETS = click.option(
     type=(str, str),
     callback=lambda _, __, i: get_instances('workflows', **dict(i)),
     required=True)
+
+PAIRS_FROM_TUPLES = click.option(
+    "--pairs_from_tuples", "-tn",
+    show_default=True,
+    type=(str, str),
+    multiple=True,
+    callback=validators.validate_pairs_from_tuples,
+    help="Pass one or more target/reference identifiers (e.g. -tn 1 2)."
+    )
+
+PAIRS_FROM_FILE = click.option(
+    "--pairs_from_file", "-tnf",
+    show_default=True,
+    type=click.Path(
+        exists=True, file_okay=True,
+        dir_okay=False, writable=False, readable=True),
+    callback=validators.validate_pairs_from_file,
+    help=(
+        "Path to a tab separated file with tumor/normal ids."
+        "Second column: normal identifiers."
+        )
+    )
 
 DIRECTORIES = click.option(
     '--directories', '-di',

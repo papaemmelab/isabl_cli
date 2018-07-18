@@ -2,9 +2,12 @@
 
 from os.path import join
 
+import click
 import pytest
 
+from cli import api
 from cli import exceptions
+from cli import factories
 from cli import validators
 
 
@@ -73,3 +76,46 @@ def test_validate_patterns_are_dirs(tmpdir):
     # check that empty files raise error with flag
     with pytest.raises(exceptions.ValidationError):
         validators.validate_patterns_are_dirs(file_patterns)
+
+def test_validate_pairs_from_tuples(tmpdir):
+    """test_validate_pairs_from_tuples."""
+    data_a = factories.WorkflowFactory()
+    data_b = factories.WorkflowFactory()
+    instance_a = api.create_instance('workflows', **data_a)
+    instance_b = api.create_instance('workflows', **data_b)
+
+    # pair that exists
+    real_pair = [(instance_a['system_id'],instance_b['system_id'])]
+    parsed_pair = list(validators.validate_pairs_from_tuples(None, None, real_pair))[0]
+    assert parsed_pair[0][0] == instance_a
+    assert parsed_pair[1][0] == instance_b
+
+    # pair that doesnt exist
+    fake_pair = [("not_real", 0)]
+    with pytest.raises(exceptions.ValidationError):
+        list(validators.validate_pairs_from_tuples(None, None, fake_pair))
+
+def test_validate_pairs_from_file(tmpdir):
+    """test_validate_pairs_from_file."""
+    tmpdir_path = str(tmpdir)
+    data_a = factories.WorkflowFactory()
+    data_b = factories.WorkflowFactory()
+    instance_a = api.create_instance('workflows', **data_a)
+    instance_b = api.create_instance('workflows', **data_b)
+
+    realpairdf = join(tmpdir_path, 'realpairdf.tsv')
+    with open(realpairdf, 'w') as f:
+        f.write('# I am the header\n')
+        f.write('\t'.join([instance_a['system_id'],instance_b['system_id']]))
+    badpairdf = join(tmpdir_path, 'badpairdf.tsv')
+    with open(badpairdf, 'w') as f:
+        f.write('\t'.join([instance_a['system_id']]))
+
+    # valid pair file
+    parsed_pair = list(validators.validate_pairs_from_file(None, None, realpairdf))[0]
+    assert parsed_pair[0][0] == instance_a
+    assert parsed_pair[1][0] == instance_b
+
+    # invalid pair file
+    with pytest.raises(click.UsageError):
+        list(validators.validate_pairs_from_file(None, None, badpairdf))[0]

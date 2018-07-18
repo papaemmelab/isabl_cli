@@ -1,9 +1,11 @@
 """cli validators."""
+import click
 
 from glob import glob
 import os
 
 from cli import exceptions
+from cli.api import get_instances
 
 
 def validate_patterns_are_files(patterns, check_size=True):
@@ -59,3 +61,50 @@ def validate_patterns_are_dirs(patterns):
                 raise exceptions.ValidationError(msg)
 
     return True
+
+def validate_pairs(pairs):
+    """Get workflows for pairs."""
+    workflows = {}
+    ids = {w for pair in pairs for w in pair}
+
+    for w in get_instances('workflows', ids):
+        workflows[w['system_id']] = [w]
+
+    for target, reference in pairs:
+        if not target in workflows.keys():
+            msg = 'Workflow {} does not exist.'.format(target)
+            raise exceptions.ValidationError(msg)
+        if not reference in workflows.keys():
+            msg = 'Workflow {} does not exist.'.format(reference)
+            raise exceptions.ValidationError(msg)
+        yield workflows[str(target)], workflows[str(reference)], []
+
+def validate_pairs_from_tuples(ctx, _, pairs):
+    """Determine if workflow with ``pairs`` ID exists."""
+    if not pairs: return
+    for as_target, as_reference, analyses in validate_pairs(pairs):
+        yield as_target, as_reference, analyses
+
+
+def validate_pairs_from_file(ctx, _, path):
+    """Return pairs from tsv file."""
+    if not path: return
+    
+    pairs = []
+    # Make sure is a tab delimited file of two columns.
+    with open(path, "r") as f:
+        line = f.readline()
+
+        while line.startswith("#"):
+            line = f.readline()
+
+        ids = line.split("\t")
+        if len(ids) != 2:
+            msg = ("{} must be a tab delimited file"
+                   " with two columns.").format(f.name)
+            raise click.UsageError(msg)
+
+        pairs.append((ids[0],ids[1]))
+
+    for as_target, as_reference, analyses in validate_pairs(pairs):
+        yield as_target, as_reference, analyses
