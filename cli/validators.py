@@ -76,7 +76,7 @@ def validate_pairs(pairs):
             raise exceptions.ValidationError(f'Workflow {target} not found.')
         if not reference in workflows.keys():
             raise exceptions.ValidationError(f'Workflow {reference} not found.')
-        ret.append((workflows[str(target)], workflows[str(reference)], []))
+        ret.append(([workflows[str(target)]], [workflows[str(reference)]], []))
 
     return ret
 
@@ -93,7 +93,7 @@ def validate_pairs_from_file(ctx, _, path):
             try:
                 ids = i.strip().split('\t')
                 pairs.append((ids[0], ids[1]))
-            except ValueError:
+            except IndexError:
                 raise exceptions.ValidationError(f'two columns required: {i}')
 
     return validate_pairs(pairs)
