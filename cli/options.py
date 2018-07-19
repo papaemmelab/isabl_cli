@@ -104,6 +104,15 @@ TARGETS = click.option(
     callback=lambda _, __, i: get_instances('workflows', **dict(i)),
     required=True)
 
+REFERENCES = click.option(
+    '--references-filters', '-rfi', 'references',
+    multiple=True,
+    help='API filters for references workflows',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: get_instances('workflows', **dict(i)),
+    required=True)
+
 TUMOR_NORMAL_PAIRS = click.option(
     '--tumor_normal_pairs', '-tn',
     show_default=True,
