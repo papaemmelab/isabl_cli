@@ -3,6 +3,8 @@
 from itertools import islice
 import collections
 import time
+import shutil
+import subprocess
 
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import click
@@ -11,6 +13,7 @@ import requests
 from cli import utils
 from cli.settings import system_settings
 from cli.settings import user_settings
+from cli.settings import import_from_string
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # pylint: disable=E1101
 
@@ -169,12 +172,6 @@ def patch_instance(endpoint, identifier, **data):
         types.SimpleNamespace: loaded with data returned from the API.
     """
     url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
-
-    if endpoint == 'analyses' and data.get('status') == 'SUCCEEDED':
-        msg = 'storage_usage must be updated on success.'
-        assert data.get('storage_usage') is not None, msg
-        utils.check_admin()
-
     instance = api_request('patch', url=url, json=data).json()
 
     if endpoint == 'analyses' and instance.get('status'):
@@ -306,6 +303,43 @@ def patch_analyses_status(analyses, status):
     return analyses
 
 
+def patch_successful_analysis(analysis):
+    """
+    Patch a successful analysis.
+
+    Make sure analysis is owned by admin user and that results field is updated.
+
+    Arguments:
+        analysis (dict): analysis instance.
+
+    Returns:
+        dict: patched analysis instance.
+    """
+    utils.check_admin()
+    pipeline = analysis['pipeline']
+    storage_url = analysis['storage_url']
+    storage_usage = utils.get_tree_size(storage_url)
+    data = {'status': 'SUCCEEDED', 'storage_usage': storage_usage}
+
+    if analysis['ran_by'] != system_settings.api_username:  # admin must own dir
+        src = storage_url + '__tmp'
+        shutil.move(storage_url, src)
+        cmd = utils.get_rsync_command(src, storage_url, chmod='a-w')
+        subprocess.check_call(cmd, shell=True)
+
+    try:
+        pipeline = import_from_string(pipeline['pipeline_class'])()
+        data['results'] = pipeline.get_outputs(analysis)
+    except ImportError:
+        pass
+    except Exception as error:
+        data['status'] = 'FAILED'
+        patch_instance('analyses', analysis['pk'], **data)
+        raise error
+
+    return patch_instance('analyses', analysis['pk'], **data)
+
+
 def _run_signals(endpoint, instance, signals):
     errors = []
     on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda *_, **__: None)
@@ -322,5 +356,5 @@ def _run_signals(endpoint, instance, signals):
                 errors.append(on_failure_error)
 
     # if errors:
-        # errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
-        # raise RuntimeError('Errors occurred during signals run:\n' + errors)
+    # errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
+    # raise RuntimeError('Errors occurred during signals run:\n' + errors)

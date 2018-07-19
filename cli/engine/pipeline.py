@@ -5,6 +5,7 @@ from collections import defaultdict
 from os.path import isdir
 from os.path import isfile
 from os.path import join
+from types import SimpleNamespace
 import abc
 import os
 import subprocess
@@ -158,6 +159,10 @@ class AbstractPipeline:
         """
         raise NotImplementedError()
 
+    # -----------------------------
+    # USER OPTIONAL IMPLEMENTATIONS
+    # -----------------------------
+
     @abc.abstractmethod  # add __isabstractmethod__ property to method
     def merge_analyses(self, storage_url, analyses):
         """
@@ -180,6 +185,18 @@ class AbstractPipeline:
     def get_after_completion_status(self, analysis):  # pylint: disable=W0613
         """Possible values are FINISHED and IN_PROGRESS."""
         return 'FINISHED'
+
+    def get_outputs(self, analysis):  # pylint: disable=W9008,W0613
+        """
+        Get dictionary of outputs, this function is run on completion.
+
+        Arguments:
+            analysis (dict): succeeded analysis instance.
+
+        Returns:
+            dict: a jsonable dictionary.
+        """
+        return {}
 
     # ----------------------
     # MERGE BY PROJECT LOGIC
@@ -365,10 +382,6 @@ class AbstractPipeline:
         if not tuples:  # pragma: no cover
             return None
 
-        # make sure required settings are set before building commands
-        for i in self.pipeline_settings:
-            getattr(self.settings, i)
-
         # run extra settings validation
         self.validate_settings(self.settings)
 
@@ -409,7 +422,8 @@ class AbstractPipeline:
                     continue
 
                 try:
-                    command = self.get_command(i, self.settings)
+                    settings = self.update_dependencies(i, self.settings)
+                    command = self.get_command(i, settings)
                     command_tuples.append((i, command))
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
@@ -603,9 +617,8 @@ class AbstractPipeline:
             tuple: list of analyses, invalid tuples [(tuple, error), ...].
         """
         label = f'Getting analyses for {len(tuples)} tuples...\t\t'
-        existing_analyses, tuples = self.get_existing_analyses(tuples)
-        created_analyses = []
-        invalid_tuples = []
+        analyses, tuples = self.get_existing_analyses(tuples)
+        invalid_tuples, tuples = self.get_tuples_dependencies(tuples)
 
         with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
             for i in bar:
@@ -621,7 +634,7 @@ class AbstractPipeline:
                         references=references,
                         analyses=analyses)
 
-                    created_analyses.append(
+                    analyses.append(
                         data.update_storage_url(
                             endpoint='analyses',
                             identifier=analysis['pk'],
@@ -629,7 +642,7 @@ class AbstractPipeline:
                 except exceptions.ValidationError as error:
                     invalid_tuples.append((i, error))
 
-        return existing_analyses + created_analyses, invalid_tuples
+        return analyses, invalid_tuples
 
     def get_existing_analyses(self, tuples):
         """
@@ -672,6 +685,29 @@ class AbstractPipeline:
                 missing.append((targets, references, analyses))
 
         return existing, missing
+
+    def update_analysis_dependencies(self, analysis, settings):
+        click.echo("Checking for existing analyses...", file=sys.stderr)
+        dependencies = []
+        supported_sources = {
+            'target_result': None,
+            'targets_result': None,
+            'targets_results': None,
+            'reference_result': None,
+            'references_result': None,
+            'references_results': None,
+            }
+
+        for i in self.pipeline_settings:
+            value = str(getattr(self.settings, i)).split(':')
+
+            if len(value) == 3 and value[0] in supported_sources:
+                dependencies.append([i] + value)
+                source, pipeline, key = value
+
+                for j in 'targets', 'references':
+
+
 
     # ---------------------
     # DATA VALIDATION LOGIC

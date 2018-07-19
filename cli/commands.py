@@ -2,15 +2,12 @@
 
 from glob import glob
 from os.path import join
-import shutil
-import subprocess
 
 import click
 
 from cli import api
 from cli import options
 from cli import utils
-from cli.settings import system_settings
 from cli.settings import import_from_string
 
 
@@ -21,8 +18,8 @@ def merge_analyses(project, pipeline):  # pragma: no cover
     """Merge analyses by project primary key."""
     project = api.get_instance('projects', project)
     pipeline = api.get_instance('pipelines', pipeline)
-    pipeline_class = import_from_string(pipeline['pipeline_class'])()
-    pipeline_class.merge_project_analyses(project)
+    pipeline = import_from_string(pipeline['pipeline_class'])()
+    pipeline.merge_project_analyses(project)
 
 
 @click.command()
@@ -33,17 +30,19 @@ def processed_finished(filters):
     filters.update(status='FINISHED')
 
     for i in api.get_instances('analyses', **filters):
-        if i['ran_by'] != system_settings.api_username:  # admin must own dir
-            src = i['storage_url'] + '__tmp'
-            shutil.move(i['storage_url'], src)
-            cmd = utils.get_rsync_command(src, i['storage_url'], chmod='a-w')
-            subprocess.check_call(cmd, shell=True)
+        api.patch_successful_analysis(i)
 
-        api.patch_instance(
-            endpoint='analyses',
-            identifier=i['pk'],
-            status='SUCCEEDED',
-            storage_usage=utils.get_tree_size(i['storage_url']))
+
+@click.command()
+@options.FILTERS
+def patch_results(filters):
+    """Update the results field of many analyses."""
+    utils.check_admin()
+
+    for i in api.get_instances('analyses', **filters):
+        pipeline = import_from_string(i['pipeline']['pipeline_class'])()
+        results = pipeline.get_outputs(i)
+        api.patch_instance('analyses', i['pk'], results=results)
 
 
 @click.command()
@@ -52,11 +51,15 @@ def processed_finished(filters):
 def patch_status(key, status):
     """Patch status of a given analysis."""
     analysis = api.get_instance('analyses', key)
-    api.patch_instance(
-        endpoint='analyses',
-        identifier=analysis['pk'],
-        status=status,
-        storage_usage=utils.get_tree_size(analysis['storage_url']))
+
+    if status == 'SUCCEEDED':
+        api.patch_successful_analysis(analysis)
+    else:
+        api.patch_instance(
+            endpoint='analyses',
+            identifier=analysis['pk'],
+            status=status,
+            storage_usage=utils.get_tree_size(analysis['storage_url']))
 
 
 @click.command()
