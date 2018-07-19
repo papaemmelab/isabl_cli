@@ -104,27 +104,22 @@ TARGETS = click.option(
     callback=lambda _, __, i: get_instances('workflows', **dict(i)),
     required=True)
 
-PAIRS_FROM_TUPLES = click.option(
-    "--pairs_from_tuples", "-tn",
+TUMOR_NORMAL_PAIRS = click.option(
+    '--tumor_normal_pairs', '-tn',
     show_default=True,
     type=(str, str),
     multiple=True,
-    callback=validators.validate_pairs_from_tuples,
-    help="Pass one or more target/reference identifiers (e.g. -tn 1 2)."
-    )
+    callback=lambda _, __, i: validators.validate_pairs(i),
+    help='Pass one or more target/reference identifiers (e.g. -tn 1 2).')
 
-PAIRS_FROM_FILE = click.option(
-    "--pairs_from_file", "-tnf",
+TUMOR_NORMAL_PAIRS_FROM_FILE = click.option(
+    '--tumor_normal_file', '-tnf',
     show_default=True,
     type=click.Path(
         exists=True, file_okay=True,
         dir_okay=False, writable=False, readable=True),
     callback=validators.validate_pairs_from_file,
-    help=(
-        "Path to a tab separated file with tumor/normal ids."
-        "Second column: normal identifiers."
-        )
-    )
+    help='Tab separated file with 2 columns: tumor, normal system ids.')
 
 DIRECTORIES = click.option(
     '--directories', '-di',
