@@ -2,7 +2,8 @@
 
 import click
 
-from cli.api import get_instances
+from cli import api
+from cli import validators
 
 IDENTIFIER = click.option(
     '--identifier', '-id',
@@ -100,8 +101,34 @@ TARGETS = click.option(
     help='API filters for target workflows',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: get_instances('workflows', **dict(i)),
+    callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
     required=True)
+
+REFERENCES = click.option(
+    '--references-filters', '-rfi', 'references',
+    multiple=True,
+    help='API filters for references workflows',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
+    required=True)
+
+TUMOR_NORMAL_PAIRS = click.option(
+    '--tumor_normal_pairs', '-tn',
+    show_default=True,
+    type=(str, str),
+    multiple=True,
+    callback=lambda _, __, i: validators.validate_pairs(i),
+    help='Pass one or more target/reference identifiers (e.g. -tn 1 2).')
+
+TUMOR_NORMAL_PAIRS_FROM_FILE = click.option(
+    '--tumor_normal_file', '-tnf',
+    show_default=True,
+    type=click.Path(
+        exists=True, file_okay=True,
+        dir_okay=False, writable=False, readable=True),
+    callback=validators.validate_pairs_from_file,
+    help='Tab separated file with 2 columns: tumor, normal system ids.')
 
 DIRECTORIES = click.option(
     '--directories', '-di',

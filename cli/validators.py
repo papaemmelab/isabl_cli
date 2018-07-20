@@ -4,6 +4,7 @@ from glob import glob
 import os
 
 from cli import exceptions
+from cli.api import get_instances
 
 
 def validate_patterns_are_files(patterns, check_size=True):
@@ -59,3 +60,40 @@ def validate_patterns_are_dirs(patterns):
                 raise exceptions.ValidationError(msg)
 
     return True
+
+
+def validate_pairs(pairs):
+    """Get workflows for pairs."""
+    if not pairs:
+        return []
+
+    ids = {i for pair in pairs for i in pair}
+    workflows = {i['system_id']: i for i in get_instances('workflows', ids)}
+    ret = []
+
+    for target, reference in pairs:
+        if not target in workflows.keys():
+            raise exceptions.ValidationError(f'Workflow {target} not found.')
+        if not reference in workflows.keys():
+            raise exceptions.ValidationError(f'Workflow {reference} not found.')
+        ret.append(([workflows[str(target)]], [workflows[str(reference)]]))
+
+    return ret
+
+
+def validate_pairs_from_file(ctx, _, path):
+    """Return pairs from tsv file."""
+    pairs = []
+
+    with open(path, "r") as f:
+        for i in f:
+            if i.startswith("#"):
+                continue
+
+            try:
+                ids = i.strip().split('\t')
+                pairs.append((ids[0], ids[1]))
+            except IndexError:
+                raise exceptions.ValidationError(f'two columns required: {i}')
+
+    return validate_pairs(pairs)
