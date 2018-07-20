@@ -2,7 +2,7 @@
 
 import click
 
-from cli.api import get_instances
+from cli import api
 from cli import validators
 
 IDENTIFIER = click.option(
@@ -101,7 +101,7 @@ TARGETS = click.option(
     help='API filters for target workflows',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: get_instances('workflows', **dict(i)),
+    callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
     required=True)
 
 REFERENCES = click.option(
@@ -110,7 +110,7 @@ REFERENCES = click.option(
     help='API filters for references workflows',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: get_instances('workflows', **dict(i)),
+    callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
     required=True)
 
 TUMOR_NORMAL_PAIRS = click.option(

@@ -76,7 +76,7 @@ def validate_pairs(pairs):
             raise exceptions.ValidationError(f'Workflow {target} not found.')
         if not reference in workflows.keys():
             raise exceptions.ValidationError(f'Workflow {reference} not found.')
-        ret.append(([workflows[str(target)]], [workflows[str(reference)]], []))
+        ret.append(([workflows[str(target)]], [workflows[str(reference)]]))
 
     return ret
 
