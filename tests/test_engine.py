@@ -23,22 +23,10 @@ class TestPipeline(AbstractPipeline):
     cli_help = "This is a test pipeline"
     cli_options = [options.TARGETS]
     pipeline_settings = {'foo': 'bar'}
-    pipeline_inputs = {'bar': 'foo'}
-
-    def get_project_analysis_results(self, analysis):
-        return {'project_result_key': None}
-
-    def get_analysis_results(self, analysis):
-        return {'analysis_result_key': None}
+    pipeline_inputs = {'bar'}
 
     def process_cli_options(self, targets):
         return [([i], []) for i in targets]
-
-    def merge_project_analyses(self, storage_url, analyses):
-        assert len(analyses) == 2, f'Expected 2, got: {len(analyses)}'
-
-        with open(join(storage_url, 'test.merge'), 'w') as f:
-            f.write(str(len(analyses)))
 
     def validate_workflows(self, targets, references):
         self.validate_one_target_no_references(targets, references)
@@ -58,6 +46,18 @@ class TestPipeline(AbstractPipeline):
         assert inputs['bar'] == 'foo'
 
         return f"echo {analysis['targets'][0]['system_id']}"
+
+    def merge_project_analyses(self, storage_url, analyses):
+        assert len(analyses) == 2, f'Expected 2, got: {len(analyses)}'
+
+        with open(join(storage_url, 'test.merge'), 'w') as f:
+            f.write(str(len(analyses)))
+
+    def get_analysis_results(self, analysis):
+        return {'analysis_result_key': None}
+
+    def get_project_analysis_results(self, analysis):
+        return {'project_result_key': None}
 
 
 def test_pipeline_settings():
