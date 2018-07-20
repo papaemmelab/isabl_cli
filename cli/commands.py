@@ -14,12 +14,12 @@ from cli.settings import import_from_string
 @click.command()
 @click.option('--project', help='primary key of project to merge by', type=int)
 @click.option('--pipeline', help='analyses pipeline primary key', type=int)
-def merge_analyses(project, pipeline):  # pragma: no cover
+def merge_project_analyses(project, pipeline):  # pragma: no cover
     """Merge analyses by project primary key."""
     project = api.get_instance('projects', project)
     pipeline = api.get_instance('pipelines', pipeline)
     pipeline = import_from_string(pipeline['pipeline_class'])()
-    pipeline.merge_project_analyses(project)
+    pipeline.run_project_merge(project)
 
 
 @click.command()
@@ -30,7 +30,7 @@ def processed_finished(filters):
     filters.update(status='FINISHED')
 
     for i in api.get_instances('analyses', **filters):
-        api.patch_successful_analysis(i)
+        api.patch_analysis_status(i, 'SUCCEEDED')
 
 
 @click.command()
@@ -41,7 +41,7 @@ def patch_results(filters):
 
     for i in api.get_instances('analyses', **filters):
         pipeline = import_from_string(i['pipeline']['pipeline_class'])()
-        results = pipeline.get_outputs(i)
+        results = pipeline.get_analysis_results(i)
         api.patch_instance('analyses', i['pk'], results=results)
 
 
@@ -51,15 +51,7 @@ def patch_results(filters):
 def patch_status(key, status):
     """Patch status of a given analysis."""
     analysis = api.get_instance('analyses', key)
-
-    if status == 'SUCCEEDED':
-        api.patch_successful_analysis(analysis)
-    else:
-        api.patch_instance(
-            endpoint='analyses',
-            identifier=analysis['pk'],
-            status=status,
-            storage_usage=utils.get_tree_size(analysis['storage_url']))
+    api.patch_analysis_status(analysis, status)
 
 
 @click.command()

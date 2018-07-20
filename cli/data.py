@@ -67,7 +67,7 @@ def trigger_analyses_merge(analysis):
     except ImportError:
         return
 
-    if hasattr(pipeline.merge_analyses, '__isabstractmethod__'):
+    if hasattr(pipeline.merge_project_analyses, '__isabstractmethod__'):
         return  # pragma: no cover
 
     projects = {j['pk']: j for i in analysis['targets'] for j in i['projects']}
@@ -80,7 +80,7 @@ def trigger_analyses_merge(analysis):
             projects=i['pk'])
 
         if not pending:
-            pipeline.submit_merge_project_analyses(i)
+            pipeline.submit_project_merge(i)
 
 
 def trash_analysis_storage(analysis):

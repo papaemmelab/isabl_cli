@@ -40,7 +40,7 @@ _DEFAULTS = {
     'ADMIN_COMMANDS': [
         'cli.commands.processed_finished'],
     'SYSTEM_COMMANDS': [
-        'cli.commands.merge_analyses',
+        'cli.commands.merge_project_analyses',
         'cli.commands.patch_status',
         'cli.commands.get_count',
         'cli.commands.get_attributes',
@@ -215,7 +215,7 @@ class PipelineSettings(BaseSettings):
             val = self.reference_data.get(val.split(':', 1)[1])
             val = val['url'] if val else NotImplemented
 
-        if isinstance(val, type(NotImplemented)):
+        if val is NotImplemented:
             raise exceptions.MissingRequirementError(
                 f"Setting '{attr}' is required, contact an engineer.")
 

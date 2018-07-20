@@ -23,17 +23,24 @@ class TestPipeline(AbstractPipeline):
     cli_help = "This is a test pipeline"
     cli_options = [options.TARGETS]
     pipeline_settings = {'foo': 'bar'}
+    pipeline_inputs = {'bar': 'foo'}
 
-    def merge_analyses(self, storage_url, analyses):
+    def get_project_analysis_results(self, analysis):
+        return {'project_result_key': None}
+
+    def get_analysis_results(self, analysis):
+        return {'analysis_result_key': None}
+
+    def process_cli_options(self, targets):
+        return [([i], []) for i in targets]
+
+    def merge_project_analyses(self, storage_url, analyses):
         assert len(analyses) == 2, f'Expected 2, got: {len(analyses)}'
 
         with open(join(storage_url, 'test.merge'), 'w') as f:
             f.write(str(len(analyses)))
 
-    def get_tuples(self, targets):
-        return [([i], [], []) for i in targets]
-
-    def validate_tuple(self, targets, references, analyses):
+    def validate_workflows(self, targets, references):
         self.validate_one_target_no_references(targets, references)
 
         if targets[0]['center_id'] == '0':
@@ -41,9 +48,15 @@ class TestPipeline(AbstractPipeline):
 
         return True
 
-    def get_command(self, analysis, settings):
+    def get_dependencies(self, targets, references):
+        return [], {'bar': 'foo'}
+
+    def get_command(self, analysis, inputs, settings):
         if analysis['targets'][0]['center_id'] == '1':
             return 'exit 1'
+
+        assert inputs['bar'] == 'foo'
+
         return f"echo {analysis['targets'][0]['system_id']}"
 
 
@@ -87,10 +100,13 @@ def test_engine(tmpdir):
         ]
 
     workflows = [api.create_instance('workflows', **i) for i in workflows]
-    tuples = [([i], [], []) for i in workflows]
+    tuples = [([i], []) for i in workflows]
     command = TestPipeline.as_cli_command()
     pipeline = TestPipeline()
-    pipeline.run_tuples(tuples, commit=True)
+    ran_analyses, _, __ = pipeline.run(tuples, commit=True)
+
+    assert 'analysis_result_key' in ran_analyses[1][0]['results']
+    assert 'analysis_result_key' in ran_analyses[2][0]['results']
 
     runner = CliRunner()
     result = runner.invoke(command, ["--help"])
@@ -103,7 +119,7 @@ def test_engine(tmpdir):
     pks = ','.join(str(i['pk']) for i in workflows)
     args = ['-fi', 'pk__in', pks, '--verbose']
     result = runner.invoke(command, args, catch_exceptions=False)
-    analysis = pipeline.get_project_level_analysis(project)
+    analysis = pipeline.get_project_analysis(project)
     merged = join(analysis['storage_url'], 'test.merge')
 
     assert 'FAILED' in result.output
@@ -111,6 +127,7 @@ def test_engine(tmpdir):
     assert 'SKIPPED 3' in result.output
     assert 'INVALID 1' in result.output
     assert isfile(merged)
+    assert 'project_result_key' in analysis['results']
 
     with open(merged) as f:
         assert f.read().strip() == '2'

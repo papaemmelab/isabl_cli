@@ -303,7 +303,7 @@ def patch_analyses_status(analyses, status):
     return analyses
 
 
-def patch_successful_analysis(analysis):
+def patch_analysis_status(analysis, status):
     """
     Patch a successful analysis.
 
@@ -311,31 +311,43 @@ def patch_successful_analysis(analysis):
 
     Arguments:
         analysis (dict): analysis instance.
+        status (dict): analysis status.
 
     Returns:
         dict: patched analysis instance.
     """
-    utils.check_admin()
+    data = {'status': status}
     pipeline = analysis['pipeline']
     storage_url = analysis['storage_url']
-    storage_usage = utils.get_tree_size(storage_url)
-    data = {'status': 'SUCCEEDED', 'storage_usage': storage_usage}
 
-    if analysis['ran_by'] != system_settings.api_username:  # admin must own dir
-        src = storage_url + '__tmp'
-        shutil.move(storage_url, src)
-        cmd = utils.get_rsync_command(src, storage_url, chmod='a-w')
-        subprocess.check_call(cmd, shell=True)
+    if status in {'FAILED', 'SUCCEEDED', 'IN_PROGRESS'}:
+        data['storage_usage'] = utils.get_tree_size(storage_url)
 
-    try:
-        pipeline = import_from_string(pipeline['pipeline_class'])()
-        data['results'] = pipeline.get_outputs(analysis)
-    except ImportError:
-        pass
-    except Exception as error:
-        data['status'] = 'FAILED'
-        patch_instance('analyses', analysis['pk'], **data)
-        raise error
+    # admin must own directory of regular analyses
+    if status == 'SUCCEEDED' and not analysis['project_level_analysis']:
+        utils.check_admin()
+
+        if analysis['ran_by'] != system_settings.api_username:
+            src = storage_url + '__tmp'
+            shutil.move(storage_url, src)
+            cmd = utils.get_rsync_command(src, storage_url, chmod='a-w')
+            subprocess.check_call(cmd, shell=True)
+
+    if status == 'SUCCEEDED':
+        try:
+            pipeline = import_from_string(pipeline['pipeline_class'])()
+            get_results = pipeline.get_analysis_results
+
+            if analysis['project_level_analysis']:
+                get_results = pipeline.get_project_analysis_results
+
+            data['results'] = get_results(analysis)
+        except ImportError:
+            pass
+        except Exception as error:  # pragma: no cover
+            data['status'] = 'FAILED'
+            patch_instance('analyses', analysis['pk'], **data)
+            raise error
 
     return patch_instance('analyses', analysis['pk'], **data)
 

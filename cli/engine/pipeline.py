@@ -5,7 +5,6 @@ from collections import defaultdict
 from os.path import isdir
 from os.path import isfile
 from os.path import join
-from types import SimpleNamespace
 import abc
 import os
 import subprocess
@@ -101,6 +100,7 @@ class AbstractPipeline:
 
     import_strings = {}
     engine_settings = {'raise_error': False}
+    pipeline_inputs = {}
     pipeline_settings = {}
     cli_help = ""
     cli_options = []
@@ -115,7 +115,7 @@ class AbstractPipeline:
     # USER REQUIRED IMPLEMENTATIONS
     # -----------------------------
 
-    def get_tuples(self, **cli_options):  # pylint: disable=W9008
+    def process_cli_options(self, **cli_options):  # pylint: disable=W9008
         """
         Must return list of tuples given the parsed options.
 
@@ -123,18 +123,17 @@ class AbstractPipeline:
             cli_options (dict): parsed command line options.
 
         Returns:
-            list: of (targets, references, analyses) tuples.
+            list: of (targets, references) tuples.
         """
         raise NotImplementedError()
 
-    def validate_tuple(self, targets, references, analyses):  # pylint: disable=W9008
+    def validate_workflows(self, targets, references):  # pylint: disable=W9008
         """
         Must raise UsageError if tuple combination isnt valid else return True.
 
         Arguments:
             targets (list): list of targets dictionaries.
             references (list): list of references dictionaries.
-            analyses (list): list of analyses dictionaries.
 
         Raises:
             click.UsageError: if tuple is invalid.
@@ -144,7 +143,20 @@ class AbstractPipeline:
         """
         raise NotImplementedError()
 
-    def get_command(self, analysis, settings):  # pylint: disable=W9008
+    def get_dependencies(self, targets, references):  # pylint: disable=W9008,W0613
+        """
+        Get dictionary of inputs, this function is run before `get_command`.
+
+        Arguments:
+            targets (list): created analysis instance.
+            references (list): created analysis instance.
+
+        Returns:
+            tuple: (list of analyses dependencies primary keys, inputs dict).
+        """
+        raise NotImplementedError()
+
+    def get_command(self, analysis, inputs, settings):  # pylint: disable=W9008
         """
         Must return command and final analysis status.
 
@@ -152,6 +164,7 @@ class AbstractPipeline:
 
         Arguments:
             analysis (dict): an analysis object as retrieved from API.
+            inputs (dict): as returned by `get_dependencies`.
             settings (dict): pipelines settings.
 
         Returns:
@@ -164,7 +177,7 @@ class AbstractPipeline:
     # -----------------------------
 
     @abc.abstractmethod  # add __isabstractmethod__ property to method
-    def merge_analyses(self, storage_url, analyses):
+    def merge_project_analyses(self, storage_url, analyses):
         """
         Merge analyses on a project level basis.
 
@@ -178,17 +191,11 @@ class AbstractPipeline:
         """
         raise NotImplementedError('No merging logic available!')
 
-    def validate_settings(self, settings):
-        """Validate settings."""
-        return
-
-    def get_after_completion_status(self, analysis):  # pylint: disable=W0613
-        """Possible values are FINISHED and IN_PROGRESS."""
-        return 'FINISHED'
-
-    def get_outputs(self, analysis):  # pylint: disable=W9008,W0613
+    def get_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
         """
-        Get dictionary of outputs, this function is run on completion.
+        Get dictionary of analysis results.
+
+        This function is run on completion.
 
         Arguments:
             analysis (dict): succeeded analysis instance.
@@ -196,13 +203,35 @@ class AbstractPipeline:
         Returns:
             dict: a jsonable dictionary.
         """
-        return {}
+        return {} # pragma: no cover
+
+    def get_project_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
+        """
+        Get dictionary of results for a project level analysis.
+
+        This function is run on completion.
+
+        Arguments:
+            analysis (dict): succeeded analysis instance.
+
+        Returns:
+            dict: a jsonable dictionary.
+        """
+        return {} # pragma: no cover
+
+    def get_after_completion_status(self, analysis):  # pylint: disable=W0613
+        """Possible values are FINISHED and IN_PROGRESS."""
+        return 'FINISHED'
+
+    def validate_settings(self, settings):
+        """Validate settings."""
+        return
 
     # ----------------------
     # MERGE BY PROJECT LOGIC
     # ----------------------
 
-    def merge_project_analyses(self, project):
+    def run_project_merge(self, project):
         """
         Merge analyses on a project level basis.
 
@@ -217,26 +246,28 @@ class AbstractPipeline:
 
         if analyses:
             try:
-                error = None
-                status = 'SUCCEEDED'
-                analysis = self.get_project_level_analysis(project)
-                self.merge_analyses(analysis['storage_url'], analyses)
-            except NotImplementedError as error:  # pragma: no cover
+                analysis = self.get_project_analysis(project)
+                oldmask = os.umask(0o22)
+                self.merge_project_analyses(analysis['storage_url'], analyses)
+                os.umask(oldmask)
+                api.patch_analysis_status(analysis, 'SUCCEEDED')
+            except Exception as error:  # pragma: no cover pylint: disable=W0703
+                api.patch_analysis_status(analysis, 'FAILED')
                 raise error
-            except Exception as err:  # pragma: no cover pylint: disable=W0703
-                error = err
-                status = 'FAILED'
 
-            api.patch_instance(
-                endpoint='analyses',
-                identifier=analysis['pk'],
-                status=status,
-                storage_usage=utils.get_tree_size(analysis['storage_url']))
+    def submit_project_merge(self, project):
+        """
+        Directly call `merge_project_analyses`.
 
-            if error is not None:
-                raise error  # pylint: disable=E0702
+        Overwrite this method if the merge procedure should be submitted using
+        a scheduler, see `commands.merge_project_analyses`.
 
-    def get_project_level_analysis(self, project):
+        Arguments:
+            project (dict): a project instance.
+        """
+        self.run_project_merge(project)
+
+    def get_project_analysis(self, project):
         """
         Get or create project level analysis.
 
@@ -259,21 +290,14 @@ class AbstractPipeline:
 
         return analysis
 
-    def submit_merge_project_analyses(self, project):
-        """
-        Directly call `merge_project_analyses`.
-
-        Overwrite this method if the merge procedure should be submitted using
-        a scheduler, see `commands.merge_analyses`.
-
-        Arguments:
-            project (dict): a project instance.
-        """
-        self.merge_project_analyses(project)
-
     # ----------
     # PROPERTIES
     # ----------
+
+    @property
+    def key(self):
+        """Space separated name, version and assembly."""
+        return f'{self.NAME} {self.VERSION} {self.ASSEMBLY}'
 
     @cached_property
     def settings(self):
@@ -340,8 +364,8 @@ class AbstractPipeline:
                 raise click.UsageError(
                     '--commit is redundant with --force, simply use --force')
 
-            pipe.run_tuples(
-                tuples=pipe.get_tuples(**cli_options),
+            pipe.run(
+                tuples=pipe.process_cli_options(**cli_options),
                 commit=commit,
                 force=force,
                 verbose=verbose)
@@ -360,27 +384,29 @@ class AbstractPipeline:
     # ANALYSES EXECUTION LOGIC
     # ------------------------
 
-    def run_tuples(self, tuples, commit, force=False, verbose=True):
+    def run(self, tuples, commit, force=False, verbose=True):
         """
-        Run a list of tuples.
+        Run a list of targets, references tuples.
 
         Arguments:
             force (bool): if true, analyses are wiped before being submitted.
             commit (bool): if true, analyses are started (`force` overwrites).
             verbose (bool): whether or not verbose output should be printed.
-            tuples (list): list of (targets, references, analyses) tuples.
-                elements can be objects or identifiers.
+            tuples (list): list of (targets, references) tuples.
 
         Returns:
             tuple: command_tuples, skipped_tuples, invalid_tuples
         """
         commit = True if force else commit
-        tuples = list(tuples)
-        utils.echo_title(
-            f'Running {len(tuples)} tuples for {self.NAME} ({self.VERSION})')
+        tuples = [tuple(i) for i in tuples]  # coerce to tuple
+        utils.echo_title(f'Running {len(tuples)} tuples for {self.key}')
 
         if not tuples:  # pragma: no cover
             return None
+
+        # make sure required settings are set before building commands
+        for i in self.pipeline_settings:
+            getattr(self.settings, i)
 
         # run extra settings validation
         self.validate_settings(self.settings)
@@ -422,8 +448,8 @@ class AbstractPipeline:
                     continue
 
                 try:
-                    settings = self.update_dependencies(i, self.settings)
-                    command = self.get_command(i, settings)
+                    inputs = i.pop('pipeline_inputs')
+                    command = self.get_command(i, inputs, self.settings)
                     command_tuples.append((i, command))
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
@@ -457,9 +483,9 @@ class AbstractPipeline:
                 self.write_command_script(i, j)
                 log = join(i['storage_url'], 'head_job.log')
                 err = join(i['storage_url'], 'head_job.err')
-                api.patch_instance('analyses', i['pk'], status='STARTED')
+                api.patch_analysis_status(i, 'STARTED')
+                oldmask = os.umask(0o22)
                 status = 'SUCCEEDED'
-                os.umask(0o007)
 
                 with open(log, 'w') as stdout, open(err, 'w') as stderr:
                     try:
@@ -469,15 +495,12 @@ class AbstractPipeline:
                             stdout=stdout,
                             stderr=stderr,
                             shell=True)
+
                     except subprocess.CalledProcessError:
                         status = 'FAILED'
 
-                i = api.patch_instance(
-                    endpoint='analyses',
-                    identifier=i['pk'],
-                    status=status,
-                    storage_usage=utils.get_tree_size(i['storage_url']))
-
+                os.umask(oldmask)
+                i = api.patch_analysis_status(i, status)
                 ret.append((i, i['status']))
 
         return ret
@@ -602,6 +625,21 @@ class AbstractPipeline:
         summary = '\n'.join(summary).expandtabs(20) + '\n'
         click.echo(f'{summary}\n')
 
+    def _get_dependencies(self, targets, references):
+        analyses, inputs = self.get_dependencies(targets, references)
+        missing = []
+
+        for i, j in self.pipeline_inputs.items():  # pragma: no cover
+            if i not in inputs and j is NotImplemented:
+                missing.append(i)
+
+        if missing:  # pragma: no cover
+            missing = ', '.join(map(str, missing))
+            raise exceptions.ConfigurationError(
+                f'Required inputs missing from `get_dependencies`: {missing}')
+
+        return analyses, inputs
+
     # -----------------------
     # ANALYSES CREATION LOGIC
     # -----------------------
@@ -617,15 +655,18 @@ class AbstractPipeline:
             tuple: list of analyses, invalid tuples [(tuple, error), ...].
         """
         label = f'Getting analyses for {len(tuples)} tuples...\t\t'
-        analyses, tuples = self.get_existing_analyses(tuples)
-        invalid_tuples, tuples = self.get_tuples_dependencies(tuples)
+
+        # add dependencies and inputs
+        tuples = [i + self._get_dependencies(*i) for i in tuples]
+        existing_analyses, tuples = self.get_existing_analyses(tuples)
+        invalid_tuples, created_analyses = [], []
 
         with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
             for i in bar:
                 try:
-                    targets, references, analyses = i
+                    targets, references, analyses, inputs = i
                     self.validate_species(targets, references)
-                    self.validate_tuple(targets, references, analyses)
+                    self.validate_workflows(targets, references)
 
                     analysis = api.create_instance(
                         endpoint='analyses',
@@ -634,15 +675,17 @@ class AbstractPipeline:
                         references=references,
                         analyses=analyses)
 
-                    analyses.append(
-                        data.update_storage_url(
-                            endpoint='analyses',
-                            identifier=analysis['pk'],
-                            use_hash=True))
+                    analysis = data.update_storage_url(
+                        endpoint='analyses',
+                        identifier=analysis['pk'],
+                        use_hash=True)
+
+                    analysis['pipeline_inputs'] = inputs
+                    created_analyses.append(analysis)
                 except exceptions.ValidationError as error:
                     invalid_tuples.append((i, error))
 
-        return analyses, invalid_tuples
+        return existing_analyses + created_analyses, invalid_tuples
 
     def get_existing_analyses(self, tuples):
         """
@@ -652,13 +695,13 @@ class AbstractPipeline:
         requested analyses are in `analysis.analyses`.
 
         Arguments:
-            tuples (list): list of (targets, references, analyses) tuples.
+            tuples (list): (targets, references, analyses, inputs) tuples.
 
         Returns:
             tuple: list of existing analyses, list of tuples without analysis
         """
         click.echo("Checking for existing analyses...", file=sys.stderr)
-        projects = {j['pk'] for i, _, __ in tuples for j in i[0]['projects']}
+        projects = {j['pk'] for i in tuples for j in i[0][0]['projects']}
         filters = dict(pipeline=self.pipeline['pk'], projects__pk__in=projects)
         cache = defaultdict(list)
         existing, missing = [], []
@@ -671,43 +714,21 @@ class AbstractPipeline:
         for i in api.get_instances('analyses', **filters):
             cache[get_cache_key(i['targets'], i['references'])].append(i)
 
-        for targets, references, analyses in tuples:
+        for targets, references, analyses, inputs in tuples:
             expected = set(analyses)
             found_existing = False
 
             for i in cache[get_cache_key(targets, references)]:
                 if expected.issubset(set(i['analyses'])):
                     found_existing = True
+                    i['pipeline_inputs'] = inputs
                     existing.append(i)
                     break
 
             if not found_existing:
-                missing.append((targets, references, analyses))
+                missing.append((targets, references, analyses, inputs))
 
         return existing, missing
-
-    def update_analysis_dependencies(self, analysis, settings):
-        click.echo("Checking for existing analyses...", file=sys.stderr)
-        dependencies = []
-        supported_sources = {
-            'target_result': None,
-            'targets_result': None,
-            'targets_results': None,
-            'reference_result': None,
-            'references_result': None,
-            'references_results': None,
-            }
-
-        for i in self.pipeline_settings:
-            value = str(getattr(self.settings, i)).split(':')
-
-            if len(value) == 3 and value[0] in supported_sources:
-                dependencies.append([i] + value)
-                source, pipeline, key = value
-
-                for j in 'targets', 'references':
-
-
 
     # ---------------------
     # DATA VALIDATION LOGIC
