@@ -90,8 +90,8 @@ def test_validate_pairs(tmpdir):
         (instance_c['system_id'],instance_b['system_id'])
     ]
     parsed_pairs = validators.validate_pairs(real_pairs)
-    assert parsed_pairs[0] == ([instance_a], [instance_b], [])
-    assert parsed_pairs[1] == ([instance_c], [instance_b], [])
+    assert parsed_pairs[0] == ([instance_a], [instance_b])
+    assert parsed_pairs[1] == ([instance_c], [instance_b])
 
     # pairs that dont exist
     fake_pair = [("not_real", 0), (2, "fake")]
@@ -118,8 +118,8 @@ def test_validate_pairs_from_file(tmpdir):
 
     # valid pair file
     parsed_pairs = validators.validate_pairs_from_file(None, None, realpairdf)
-    assert parsed_pairs[0] == ([instance_a], [instance_b], [])
-    assert parsed_pairs[1] == ([instance_c], [instance_b], [])
+    assert parsed_pairs[0] == ([instance_a], [instance_b])
+    assert parsed_pairs[1] == ([instance_c], [instance_b])
 
     # invalid pair file
     with pytest.raises(click.UsageError):
