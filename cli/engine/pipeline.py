@@ -2,8 +2,6 @@
 # pylint: disable=R0201,C0103
 
 from collections import defaultdict
-from os.path import isdir
-from os.path import isfile
 from os.path import join
 import abc
 import os
@@ -19,9 +17,11 @@ from cli import api
 from cli import data
 from cli import exceptions
 from cli import utils
-from cli.exceptions import ValidationError
 from cli.settings import PipelineSettings
 from cli.settings import system_settings
+
+from .validator import Validator
+
 
 COMMIT = click.option(
     "--commit",
@@ -43,7 +43,7 @@ FORCE = click.option(
     is_flag=True)
 
 
-class AbstractPipeline:
+class AbstractPipeline(Validator):
 
     """
     An Abstract pipeline.
@@ -93,13 +93,19 @@ class AbstractPipeline:
         skip_exceptions (object): TODO.
     """
 
+    # pipeline unique together definition
     NAME = None
     VERSION = None
     ASSEMBLY = None
     SPECIES = None
 
+    # utils
+    get_workflow_result = utils.get_workflow_result
+    get_workflow_results = utils.get_workflow_results
+
+    # pipeline configuration
     import_strings = {}
-    engine_settings = {'raise_error': False}
+    engine_settings = {}
     pipeline_inputs = {}
     pipeline_settings = {}
     cli_help = ""
@@ -143,18 +149,19 @@ class AbstractPipeline:
         """
         raise NotImplementedError()
 
-    def get_dependencies(self, targets, references):  # pylint: disable=W9008,W0613
+    def get_dependencies(self, targets, references, settings):  # pylint: disable=W9008,W0613
         """
         Get dictionary of inputs, this function is run before `get_command`.
 
         Arguments:
             targets (list): created analysis instance.
             references (list): created analysis instance.
+            settings (object): settings namespace.
 
         Returns:
             tuple: (list of analyses dependencies primary keys, inputs dict).
         """
-        raise NotImplementedError()
+        return [], {}
 
     def get_command(self, analysis, inputs, settings):  # pylint: disable=W9008
         """
@@ -550,6 +557,26 @@ class AbstractPipeline:
         """Return a command to patch the `status` of a given analysis `key`."""
         return f'cli patch_status --key {key} --status {status}'
 
+    def _get_dependencies(self, targets, references):
+        missing = []
+        analyses, inputs = self.get_dependencies(
+            targets, references, self.settings)
+
+        for i, j in self.pipeline_inputs.items():  # pragma: no cover
+            if i not in inputs and j is NotImplemented:
+                missing.append(i)
+
+        if missing:  # pragma: no cover
+            missing = ', '.join(map(str, missing))
+            raise exceptions.ConfigurationError(
+                f'Required inputs missing from `get_dependencies`: {missing}')
+
+        return analyses, inputs
+
+    # --------------
+    # PIPELINE UTILS
+    # --------------
+
     @staticmethod
     def echo_run_summary(run_tuples, skipped_tuples, invalid_tuples):
         """
@@ -588,7 +615,7 @@ class AbstractPipeline:
                 blink = True
 
             if len(msg) > 20:
-                msg = msg[:17] + '...'
+                msg = msg[:100] + '...'
 
             return click.style(msg, fg=color, blink=blink)
 
@@ -605,10 +632,13 @@ class AbstractPipeline:
             return ' '.join([i['system_id'] for i in workflows])
 
         for i, msg in run_tuples + skipped_tuples + invalid_tuples:
+            extra_msg = ''
+
             if isinstance(i, dict):  # if skipped, succeeded or failed
                 identifier = str(i['pk'])
                 targets = i['targets']
                 references = i['references']
+                extra_msg = ' ' + i['storage_url']
             else:  # if invalid tuples
                 identifier = 'INVALID'
                 targets = i[0]
@@ -616,7 +646,7 @@ class AbstractPipeline:
 
             row = {k: 'NA' for k in cols}
             row['IDENTIFIER'] = identifier
-            row['MESSAGE'] = _style_msg(msg)
+            row['MESSAGE'] = _style_msg(msg) + extra_msg
             row['PROJECTS'] = _style_projects(targets)
             row['TARGETS'] = _style_workflows(targets)
             row['REFERENCES'] = _style_workflows(references)
@@ -625,20 +655,53 @@ class AbstractPipeline:
         summary = '\n'.join(summary).expandtabs(20) + '\n'
         click.echo(f'{summary}\n')
 
-    def _get_dependencies(self, targets, references):
-        analyses, inputs = self.get_dependencies(targets, references)
-        missing = []
+    def get_workflow_bedfile(self, workflow, bedfile_type='targets'):
+        """Get targets or baits bedfile for workflow."""
+        return workflow['technique']['bed_files'][self.ASSEMBLY][bedfile_type]
 
-        for i, j in self.pipeline_inputs.items():  # pragma: no cover
-            if i not in inputs and j is NotImplemented:
-                missing.append(i)
+    def get_workflow_bam(self, workflow):
+        """Get workflow bam for pipeline assembly."""
+        return workflow['bam_files'][self.ASSEMBLY]['url']
 
-        if missing:  # pragma: no cover
-            missing = ', '.join(map(str, missing))
-            raise exceptions.ConfigurationError(
-                f'Required inputs missing from `get_dependencies`: {missing}')
+    def update_workflow_bam_file(self, workflow, bam_url, analysis_pk):
+        """Update workflow default bam for assembly, ADMIN ONLY."""
+        try:
+            self.get_workflow_bam(workflow)
+            return workflow
+        except KeyError:
+            pass
 
-        return analyses, inputs
+        return data.update_workflow_bam_file(
+            workflow=workflow,
+            assembly_name=self.ASSEMBLY,
+            analysis_pk=analysis_pk,
+            bam_url=bam_url)
+
+    def validate_bams(self, workflows):
+        """Raise error not all workflows have registered bams."""
+        errors = []
+
+        for i in workflows:
+            try:
+                self.get_workflow_bam(i)
+            except KeyError:
+                errors.append(f'{i["system_id"]} has no registered bam')
+
+        if errors:
+            raise exceptions.ValidationError('\n'.join(errors))
+
+    def validate_bedfiles(self, workflows, bedfile_type='targets'):
+        """Raise error not all workflows have registered bams."""
+        errors = []
+
+        for i in workflows:
+            try:
+                self.get_workflow_bedfile(i, bedfile_type=bedfile_type)
+            except KeyError:
+                errors.append(f'{i["system_id"]} has no registered bedfile')
+
+        if errors:
+            raise exceptions.ValidationError('\n'.join(errors))
 
     # -----------------------
     # ANALYSES CREATION LOGIC
@@ -729,178 +792,3 @@ class AbstractPipeline:
                 missing.append((targets, references, analyses, inputs))
 
         return existing, missing
-
-    # ---------------------
-    # DATA VALIDATION LOGIC
-    # ---------------------
-
-    def validate_is_file(self, path):  # pragma: no cover
-        """Validate path is file."""
-        if not isfile(path):
-            raise ValidationError(f'{path} is not a file.')
-
-    def validate_is_dir(self, path):  # pragma: no cover
-        """Validate path is directory."""
-        if not isdir(path):
-            raise ValidationError(f'{path} is not a file.')
-
-    def validate_reference_genome(self, reference):
-        """Validate genome exists and has required indexes."""
-        required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
-
-        if not all(isfile(reference + i) for i in required):
-            raise ValidationError(
-                f'Missing indexes please run:\n\n\t'
-                f'bwa index {reference}\n\tsamtools faidx {reference}')
-
-        if not isfile(reference + '.dict'):
-            raise ValidationError(
-                f'Please generate {reference + ".dict"}, e.g.\n\n\t'
-                f'samtools dict -a {self.ASSEMBLY} -s {self.SPECIES} '
-                f'{reference} > {reference + ".dict"}')
-
-    def validate_has_raw_sequencing_data(self, targets, references):
-        """Validate targets and references have sequencing data."""
-        msg = []
-
-        for i in targets + references:
-            if not i['sequencing_data']:
-                msg.append(f'{i["system_id"]} has no sequencing data...')
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_single_data_type(self, targets, references):
-        """Validate targets and references have sequencing data."""
-        self.validate_has_raw_sequencing_data(targets, references)
-        types = defaultdict(list)
-
-        for i in targets + references:
-            for j in i['sequencing_data']:
-                file_type = j['file_type']
-
-                if file_type.startswith('FASTQ_'):
-                    file_type = 'FASTQ'
-
-                types[file_type].append(i['system_id'])
-
-        if len(types) > 1:
-            raise ValidationError(
-                f'Multiple data types not supported: {dict(types)}')
-
-        return list(types.keys())[0]
-
-    def validate_fastq_only(self, targets, references):
-        """Validate sequencing data is only fastq."""
-        dtype = self.validate_single_data_type(targets, references)
-
-        if dtype != 'FASTQ':
-            raise ValidationError(f'Only FASTQ supported, found: {dtype}')
-
-    def validate_tuple_is_pair(self, targets, references):
-        """Validate targets, references tuple is a pair."""
-        if len(targets) != 1 or len(references) != 1:
-            raise ValidationError('Target, reference pairs required.')
-
-    def validate_one_target_no_references(self, targets, references):
-        """Test only one sample is passed targets and none on references."""
-        if len(targets) != 1 or references:
-            raise ValidationError('References not allowed.')
-
-    def validate_at_least_one_target_one_reference(self, targets, references):
-        """Validate that at least one reference and target are passed."""
-        if not references or not targets:
-            raise ValidationError('References and targets required.')
-
-    def validate_targets_not_in_references(self, targets, references):
-        """Make sure targets are not passed as references also."""
-        refset = set(i['pk'] for i in references)
-        msg = []
-
-        for i in targets:
-            if i['pk'] in refset:
-                msg.append(f"{i['system_id']} was also used as reference.")
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_methods(self, targets, references, methods):
-        """Make sure all targets and references are come from PDX samples."""
-        msg = []
-
-        for i in targets + references:
-            if i['technique']['method'] not in methods:
-                msg.append(
-                    f"Only '{methods}' sequencing method allowed, "
-                    f"found {i['technique']['method']} for {i['system_id']}.")
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_pdx_only(self, targets, references):
-        """Make sure all targets and references are come from PDX samples."""
-        msg = []
-
-        for i in targets + references:
-            if not i['specimen']['is_pdx']:
-                msg.append(f"{i['system_id']} specimen is not PDX derived")
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_dna_only(self, targets, references):
-        """Make sure all targets and references are DNA data."""
-        msg = []
-
-        for i in targets + references:
-            if i['technique']['analyte'] != 'DNA':
-                msg.append(f"{i['system_id']} analyte is not DNA")
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_rna_only(self, targets, references):
-        """Make sure all targets and references are DNA data."""
-        msg = []
-
-        for i in targets + references:
-            if i['technique']['analyte'] != 'RNA':
-                msg.append(f"{i['system_id']} analyte is not RNA")
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_dna_pairs(self, targets, references):
-        """Validate targets, references tuples for base dna pipelines."""
-        self.validate_tuple_is_pair(targets, references)
-        self.validate_dna_only(targets, references)
-
-    def validate_same_technique(self, targets, references):
-        """Validate targets and references have same bedfile."""
-        techniques = {i['technique']['slug'] for i in references}
-
-        if len(techniques) > 1:
-            raise ValidationError(
-                f'Multiple references techniques: {techniques}')
-
-        msg = []
-        for i in targets:
-            if i['technique']['slug'] not in techniques:
-                msg.append(
-                    f"References technique differ from {i['system_id']}: "
-                    f"{i['technique']['slug']} =! "
-                    f"{references[0]['technique']['slug']}.")
-
-        if msg:
-            raise ValidationError('\n'.join(msg))
-
-    def validate_species(self, targets, references):
-        """Validate targets and references have sequencing data."""
-        msg = []
-
-        for i in targets + references:
-            if i['specimen']['individual']['species'] != self.SPECIES:
-                msg.append(f'{i["system_id"]} species not supported')
-
-        if msg:
-            raise ValidationError('\n'.join(msg))

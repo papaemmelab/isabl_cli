@@ -113,16 +113,16 @@ REFERENCES = click.option(
     callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
     required=True)
 
-TUMOR_NORMAL_PAIRS = click.option(
-    '--tumor_normal_pairs', '-tn',
+PAIRS = click.option(
+    '--pairs', '-p',
     show_default=True,
     type=(str, str),
     multiple=True,
     callback=lambda _, __, i: validators.validate_pairs(i),
-    help='Pass one or more target/reference identifiers (e.g. -tn 1 2).')
+    help='Pass one or more tumor normal pairs (e.g. -tn 1 2 -tn 3 4).')
 
-TUMOR_NORMAL_PAIRS_FROM_FILE = click.option(
-    '--tumor_normal_file', '-tnf',
+PAIRS_FROM_FILE = click.option(
+    '--pairs-from-file', '-pf',
     show_default=True,
     type=click.Path(
         exists=True, file_okay=True,

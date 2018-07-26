@@ -88,13 +88,13 @@ def test_import_bedfiles(tmpdir):
         targets_path=targets.strpath,
         baits_path=baits.strpath,
         assembly='AnAssembly',
-        description='This are test bedfiles')
+        description='This are test bed_files')
 
     for i in 'targets', 'baits':
         for j in '', '.gz', '.gz.tbi':
-            assert os.path.isfile(technique['bedfiles']['AnAssembly'][i] + j)
+            assert os.path.isfile(technique['bed_files']['AnAssembly'][i] + j)
 
-        with open(technique['bedfiles']['AnAssembly'][i], 'r') as f:  # test bed is sorted
+        with open(technique['bed_files']['AnAssembly'][i], 'r') as f:  # test bed is sorted
             assert next(f).startswith('1')
 
     command = data.BedImporter.as_cli_command()
@@ -108,7 +108,7 @@ def test_import_bedfiles(tmpdir):
         '--description', 'Test',
         ]
     result = runner.invoke(command, args, catch_exceptions=False)
-    assert 'has registered bedfiles for' in result.output
+    assert 'has registered bed_files for' in result.output
 
 
 def test_local_data_import(tmpdir):

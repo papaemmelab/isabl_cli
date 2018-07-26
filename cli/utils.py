@@ -11,6 +11,67 @@ import click
 from cli.settings import system_settings
 
 
+def get_workflow_results(
+        workflow,
+        pipeline_key,
+        result_key,
+        targets=None,
+        references=None,
+        analyses=None):
+    """
+    Match results from a workflow object.
+
+    If targets, references or analyses are provided the analysis result must
+    match these list of samples and dependencies.
+
+    Arguments:
+        workflow (dict): workflow object for which result will be retrieved.
+        pipeline_key (int): key of the pipeline that generated the result.
+        result_key (dict): name of the result.
+        targets (list): target workflows dicts that must match.
+        references (dict): reference workflows dicts that must match.
+        analyses (dict): analyses dicts that must match.
+
+    Returns:
+        list: of tuples (result_value, analysis primary key).
+    """
+    results = []
+    targets = {i['pk'] for i in targets}
+    references = {i['pk'] for i in references}
+    analyses = {i['pk'] for i in analyses}
+
+    for i in workflow['analyses_as_target']:
+        if i['pipeline'] == pipeline_key:
+            i_targets = {j['pk'] for j in i['targets']}
+            i_references = {j['pk'] for j in i['references']}
+            i_analyses = set(i['analyses'])
+
+            if targets and i_targets.difference(targets):
+                continue
+
+            if references and i_references.difference(references):
+                continue
+
+            if analyses and not analyses.issubset(i_analyses):
+                continue
+
+            results.append((i['results'][result_key], i['pk']))
+
+    return results
+
+
+def get_workflow_result(*args, **kwargs):
+    """
+    See get_workflows_results for full signature.
+
+    Returns:
+        tuple: result value, analysis pk that produced the result
+    """
+    results = get_workflow_results(*args, **kwargs)
+    assert len(results) == 1, f'Multiple results returned {results}'
+    return results[0]
+
+
 def traverse_dict(dictionary, keys, serialize=False):
     """
     Traverse a `dictionary` using a list of `keys`.
