@@ -80,8 +80,13 @@ class Validator:
         if len(targets) != 1 or len(references) != 1:
             raise ValidationError('Target, reference pairs required.')
 
+    def validate_one_target(self, targets):
+        """Validate only one target."""
+        if len(targets) != 1:
+            raise ValidationError(f'Only 1 target allowed: {len(targets)}')
+
     def validate_one_target_no_references(self, targets, references):
-        """Test only one sample is passed targets and none on references."""
+        """Validate only one sample is passed targets and none on references."""
         if len(targets) != 1 or references:
             raise ValidationError('References not allowed.')
 
@@ -155,22 +160,28 @@ class Validator:
 
     def validate_same_technique(self, targets, references):
         """Validate targets and references have same bedfile."""
-        techniques = {i['technique']['slug'] for i in references}
+        targets_techniques = {i['technique']['slug'] for i in targets}
+        references_techniques = {i['technique']['slug'] for i in references}
 
-        if len(techniques) > 1:
+        if len(references_techniques) > 1:
             raise ValidationError(
-                f'Multiple references techniques: {techniques}')
+                f'Multiple references techniques: {references_techniques}')
 
-        msg = []
-        for i in targets:
-            if i['technique']['slug'] not in techniques:
-                msg.append(
-                    f"References technique differ from {i['system_id']}: "
-                    f"{i['technique']['slug']} =! "
-                    f"{references[0]['technique']['slug']}.")
+        if len(targets_techniques) > 1:
+            raise ValidationError(
+                f'Multiple targets techniques: {targets_techniques}')
 
-        if msg:
-            raise ValidationError('\n'.join(msg))
+        if references_techniques:
+            msg = []
+            for i in targets:
+                if i['technique']['slug'] not in references_techniques:
+                    msg.append(
+                        f"References technique differ from {i['system_id']}: "
+                        f"{i['technique']['slug']} =! "
+                        f"{references[0]['technique']['slug']}.")
+
+            if msg:
+                raise ValidationError('\n'.join(msg))
 
     def validate_species(self, targets, references):
         """Validate targets and references have sequencing data."""

@@ -30,7 +30,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         'use_lsf': True,
         'throttle_by': 50}
 
-    def get_requirements(self, targets_methods, settings):
+    def get_requirements(self, targets_methods, settings):  # pylint: disable=W0613
         """
         Get submission requirements given a set of targets' methods.
 
@@ -41,7 +41,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
         Returns:
             str: lsf requirements (e.g. -q test).
         """
-        raise NotImplementedError()
+        return ''
 
     def get_job_name(self, analysis):
         """Get job name given an analysis dict."""

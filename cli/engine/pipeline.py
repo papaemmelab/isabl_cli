@@ -100,8 +100,8 @@ class AbstractPipeline(Validator):
     SPECIES = None
 
     # utils
-    get_workflow_result = utils.get_workflow_result
-    get_workflow_results = utils.get_workflow_results
+    get_result = utils.get_result
+    get_results = utils.get_results
 
     # pipeline configuration
     import_strings = {}
@@ -655,18 +655,52 @@ class AbstractPipeline(Validator):
         summary = '\n'.join(summary).expandtabs(20) + '\n'
         click.echo(f'{summary}\n')
 
-    def get_workflow_bedfile(self, workflow, bedfile_type='targets'):
+    def get_bedfile(self, workflow, bedfile_type='targets'):
         """Get targets or baits bedfile for workflow."""
         return workflow['technique']['bed_files'][self.ASSEMBLY][bedfile_type]
 
-    def get_workflow_bam(self, workflow):
+    def get_bam(self, workflow):
         """Get workflow bam for pipeline assembly."""
         return workflow['bam_files'][self.ASSEMBLY]['url']
+
+    def get_bams(self, workflows):
+        """Get bams for multiple workflows."""
+        return [self.get_bam(i) for i in workflows]
+
+
+    def get_fastq(self, workflow):
+        """
+        Get workflow fastq R1 and R2 files.
+
+        Arguments:
+            workflow (dict): a workflow instance.
+
+        Raises:
+            MissingDataError: if number of R1 and R2 files is not the same.
+
+        Returns:
+            tuple: list of R1 fastq, list of R2.
+        """
+        read_1, read_2 = [], []
+
+        for i in workflow['sequencing_data']:
+            if i['file_type'] == 'FASTQ_R1':
+                read_1.append(i['file_url'])
+            elif i['file_type'] == 'FASTQ_R2':
+                read_2.append(i['file_url'])
+
+        if read_2 and len(read_1) != len(read_2):
+            raise exceptions.MissingDataError(
+                f'The # of read 1 files ({len(read_1)}) '
+                f'and read 2 ({len(read_2)}) should be the same '
+                f'for RNA paired-end sequencing, found: {read_1 + read_2}')
+
+        return read_1, read_2
 
     def update_workflow_bam_file(self, workflow, bam_url, analysis_pk):
         """Update workflow default bam for assembly, ADMIN ONLY."""
         try:
-            self.get_workflow_bam(workflow)
+            self.get_bam(workflow)
             return workflow
         except KeyError:
             pass
@@ -680,12 +714,14 @@ class AbstractPipeline(Validator):
     def validate_bams(self, workflows):
         """Raise error not all workflows have registered bams."""
         errors = []
+        assembly = self.ASSEMBLY
 
         for i in workflows:
             try:
-                self.get_workflow_bam(i)
+                self.get_bam(i)
             except KeyError:
-                errors.append(f'{i["system_id"]} has no registered bam')
+                sample = i["system_id"]
+                errors.append(f'{sample} has no registered bam for {assembly}')
 
         if errors:
             raise exceptions.ValidationError('\n'.join(errors))
@@ -696,7 +732,7 @@ class AbstractPipeline(Validator):
 
         for i in workflows:
             try:
-                self.get_workflow_bedfile(i, bedfile_type=bedfile_type)
+                self.get_bedfile(i, bedfile_type=bedfile_type)
             except KeyError:
                 errors.append(f'{i["system_id"]} has no registered bedfile')
 

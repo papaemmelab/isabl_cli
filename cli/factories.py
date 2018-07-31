@@ -35,7 +35,7 @@ class PlatformFactory(BaseFactory):
 
 
 class DiseaseFactory(BaseFactory):
-    acronym = factory.Sequence(lambda n: f'DISEASE-{n}')
+    acronym = factory.Sequence(lambda n: f'D-{n}')
     name = fuzzy.FuzzyText(length=6, chars=string.ascii_letters)
 
 

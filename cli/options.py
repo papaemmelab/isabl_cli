@@ -5,6 +5,11 @@ import click
 from cli import api
 from cli import validators
 
+
+def _get_workflows(filter_tuples):
+    return api.get_instances('workflows', **dict(filter_tuples))
+
+
 IDENTIFIER = click.option(
     '--identifier', '-id',
     show_default=True,
@@ -101,7 +106,7 @@ TARGETS = click.option(
     help='API filters for target workflows',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
+    callback=lambda _, __, i: _get_workflows(i),
     required=True)
 
 REFERENCES = click.option(
@@ -110,8 +115,17 @@ REFERENCES = click.option(
     help='API filters for references workflows',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: api.get_instances('workflows', **dict(i)),
+    callback=lambda _, __, i: _get_workflows(i),
     required=True)
+
+NULLABLE_REFERENCES = click.option(
+    '--references-filters', '-rfi', 'references',
+    multiple=True,
+    help='API filters for references workflows',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: _get_workflows(i) if i else [],
+    required=False)
 
 PAIRS = click.option(
     '--pairs', '-p',

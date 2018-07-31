@@ -11,7 +11,7 @@ import click
 from cli.settings import system_settings
 
 
-def get_workflow_results(
+def get_results(
         workflow,
         pipeline_key,
         result_key,
@@ -60,14 +60,14 @@ def get_workflow_results(
     return results
 
 
-def get_workflow_result(*args, **kwargs):
+def get_result(*args, **kwargs):
     """
     See get_workflows_results for full signature.
 
     Returns:
         tuple: result value, analysis pk that produced the result
     """
-    results = get_workflow_results(*args, **kwargs)
+    results = get_results(*args, **kwargs)
     assert len(results) == 1, f'Multiple results returned {results}'
     return results[0]
 
