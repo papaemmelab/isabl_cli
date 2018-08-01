@@ -8,7 +8,7 @@ class PackageBaseException(Exception):
     """A base exception for cli."""
 
 
-class ValidationError(PackageBaseException, UsageError):
+class ValidationError(PackageBaseException, UsageError, AssertionError):
 
     """A class to raise when a validation error occurs."""
 

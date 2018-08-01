@@ -68,8 +68,9 @@ def get_result(*args, **kwargs):
         tuple: result value, analysis pk that produced the result
     """
     results = get_results(*args, **kwargs)
+    result, key = results[0]
     assert len(results) == 1, f'Multiple results returned {results}'
-    return results[0]
+    return result, key
 
 
 def traverse_dict(dictionary, keys, serialize=False):

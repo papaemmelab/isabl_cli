@@ -32,7 +32,7 @@ class TestPipeline(AbstractPipeline):
         self.validate_one_target_no_references(targets, references)
 
         if targets[0]['center_id'] == '0':
-            raise exceptions.ValidationError('Invalid Center ID')
+            raise AssertionError('Invalid Center ID')
 
         return True
 
@@ -141,17 +141,17 @@ def test_engine(tmpdir):
     assert 'trashing:' in result.output
 
 
-def test_validate_tuple_is_pair():
+def test_validate_is_pair():
     pipeline = AbstractPipeline()
     targets = [{}]
     references = [{}]
-    pipeline.validate_tuple_is_pair(targets, references)
+    pipeline.validate_is_pair(targets, references)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         targets.append({})
-        pipeline.validate_tuple_is_pair(targets, references)
+        pipeline.validate_is_pair(targets, references)
 
-    assert 'Target, reference pairs required' in str(error.value)
+    assert 'Pairs only.' in str(error.value)
 
 
 def test_validate_reference_genome(tmpdir):
@@ -159,7 +159,7 @@ def test_validate_reference_genome(tmpdir):
     required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
     pipeline = AbstractPipeline()
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         pipeline.validate_reference_genome(reference.strpath)
 
     assert 'Missing indexes please run' in str(error.value)
@@ -168,7 +168,7 @@ def test_validate_reference_genome(tmpdir):
         tmp = tmpdir.join('reference.fasta' + i)
         tmp.write('foo')
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         pipeline.validate_reference_genome(reference.strpath)
 
     assert 'samtools dict -a' in str(error.value)
@@ -177,10 +177,9 @@ def test_validate_reference_genome(tmpdir):
 def test_validate_fastq_only():
     pipeline = AbstractPipeline()
     targets = [{'sequencing_data': [], 'system_id': 'FOO'}]
-    references = []
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_has_raw_sequencing_data(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_has_raw_sequencing_data(targets)
 
     assert 'FOO' in str(error.value)
 
@@ -189,15 +188,15 @@ def test_validate_fastq_only():
         {'sequencing_data': [{'file_type': 'FASTQ_R1'}], 'system_id': 'BAR'},
         ]
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_single_data_type(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_single_data_type(targets)
 
     assert 'FOO' in str(error.value)
 
     targets = [{'sequencing_data': [{'file_type': 'BAM'}], 'system_id': 'FOO'}]
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_fastq_only(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_fastq_only(targets)
 
     assert 'Only FASTQ supported' in str(error.value)
 
@@ -205,10 +204,9 @@ def test_validate_fastq_only():
 def test_validate_methods():
     pipeline = AbstractPipeline()
     targets = [{'technique': {'method': 'FOO'}, 'system_id': 'FOO BAR'}]
-    references = []
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_methods(targets, references, 'BAR')
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_methods(targets, 'BAR')
 
     assert "Only 'BAR' sequencing method allowed" in str(error.value)
 
@@ -216,10 +214,9 @@ def test_validate_methods():
 def test_validate_pdx_only():
     pipeline = AbstractPipeline()
     targets = [{'specimen': {'is_pdx': False}, 'system_id': 'FOO'}]
-    references = []
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_pdx_only(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_pdx_only(targets)
 
     assert 'is not PDX' in str(error.value)
 
@@ -227,17 +224,16 @@ def test_validate_pdx_only():
 def test_validate_dna_rna_only():
     pipeline = AbstractPipeline()
     targets = [{'technique': {'analyte': 'DNA'}, 'system_id': 'FOO'}]
-    references = []
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_rna_only(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_rna_only(targets)
 
     assert 'is not RNA' in str(error.value)
 
     targets = [{'technique': {'analyte': 'RNA'}, 'system_id': 'FOO'}]
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_dna_only(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_dna_only(targets)
 
     assert 'is not DNA' in str(error.value)
 
@@ -245,10 +241,9 @@ def test_validate_dna_rna_only():
 def test_validate_species():
     pipeline = AbstractPipeline()
     targets = [{'specimen': {'individual': {'species': 'MOUSE'}}, 'system_id': 'FOO'}]
-    references = []
 
-    with pytest.raises(click.UsageError) as error:
-        pipeline.validate_species(targets, references)
+    with pytest.raises(AssertionError) as error:
+        pipeline.validate_species(targets)
 
     assert 'species not supported' in str(error.value)
 
@@ -259,11 +254,11 @@ def test_validate_one_target_no_references():
     references = []
     pipeline.validate_one_target_no_references(targets, references)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         references.append({})
         pipeline.validate_one_target_no_references(targets, references)
 
-    assert 'References not allowed' in str(error.value)
+    assert 'No reference workflows' in str(error.value)
 
 
 def test_validate_atleast_onetarget_onereference():
@@ -272,7 +267,7 @@ def test_validate_atleast_onetarget_onereference():
     references = [{}]
     pipeline.validate_at_least_one_target_one_reference(targets, references)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         targets = []
         pipeline.validate_at_least_one_target_one_reference(
             targets, references)
@@ -286,7 +281,7 @@ def test_validate_targets_not_in_references():
     references = [{'pk': 2, 'system_id': 2}]
     pipeline.validate_targets_not_in_references(targets, references)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         references = targets
         pipeline.validate_targets_not_in_references(targets, references)
 
@@ -297,11 +292,11 @@ def test_validate_dna_tuples():
     pipeline = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
-    pipeline.validate_dna_only(targets, references)
+    pipeline.validate_dna_only(targets + references)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         targets[0]['technique']['analyte'] = 'RNA'
-        pipeline.validate_dna_only(targets, references)
+        pipeline.validate_dna_only(targets + references)
 
     assert 'analyte is not DNA' in str(error.value)
 
@@ -319,14 +314,14 @@ def test_validate_same_technique():
     references = [{'system_id': 2, 'technique': {'slug': '1'}}]
     pipeline.validate_same_technique(targets, references)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         targets = [{'system_id': 1, 'technique': {'slug': '2'}}]
         pipeline.validate_same_technique(targets, references)
 
-    assert 'References technique differ from' in str(error.value)
+    assert 'Same techniques required' in str(error.value)
 
-    with pytest.raises(click.UsageError) as error:
+    with pytest.raises(AssertionError) as error:
         references.append({'system_id': 3, 'technique': {'slug': '2'}})
         pipeline.validate_same_technique(targets, references)
 
-    assert 'Multiple references techniques:' in str(error.value)
+    assert 'Expected one technique, got:' in str(error.value)

@@ -764,7 +764,7 @@ class AbstractPipeline(Validator):
             for i in bar:
                 try:
                     targets, references, analyses, inputs = i
-                    self.validate_species(targets, references)
+                    self.validate_species(targets + references)
                     self.validate_workflows(targets, references)
 
                     analysis = api.create_instance(
@@ -781,7 +781,8 @@ class AbstractPipeline(Validator):
 
                     analysis['pipeline_inputs'] = inputs
                     created_analyses.append(analysis)
-                except exceptions.ValidationError as error:
+                except (exceptions.ValidationError, AssertionError) as error:
+                    error = exceptions.ValidationError(error)
                     invalid_tuples.append((i, error))
 
         return existing_analyses + created_analyses, invalid_tuples
