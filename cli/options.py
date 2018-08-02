@@ -127,6 +127,13 @@ NULLABLE_REFERENCES = click.option(
     callback=lambda _, __, i: _get_workflows(i) if i else [],
     required=False)
 
+PAIR = click.option(
+    '--pair', '-p',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: validators.validate_pairs([i])[0],
+    help='Pass one tumor normal pair identifiers (e.g. -tn 1 2).')
+
 PAIRS = click.option(
     '--pairs', '-p',
     show_default=True,

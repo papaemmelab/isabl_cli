@@ -24,6 +24,8 @@ def get_results(
     If targets, references or analyses are provided the analysis result must
     match these list of samples and dependencies.
 
+    Pass `result_key='storage_url'` to get the output directory.
+
     Arguments:
         workflow (dict): workflow object for which result will be retrieved.
         pipeline_key (int): key of the pipeline that generated the result.
@@ -36,12 +38,12 @@ def get_results(
         list: of tuples (result_value, analysis primary key).
     """
     results = []
-    targets = {i['pk'] for i in targets}
-    references = {i['pk'] for i in references}
-    analyses = {i['pk'] for i in analyses}
+    targets = {i['pk'] for i in targets or []}
+    references = {i['pk'] for i in references or []}
+    analyses = {i['pk'] for i in analyses or []}
 
     for i in workflow['analyses_as_target']:
-        if i['pipeline'] == pipeline_key:
+        if i['pipeline']['pk'] == pipeline_key:
             i_targets = {j['pk'] for j in i['targets']}
             i_references = {j['pk'] for j in i['references']}
             i_analyses = set(i['analyses'])
@@ -55,7 +57,12 @@ def get_results(
             if analyses and not analyses.issubset(i_analyses):
                 continue
 
-            results.append((i['results'][result_key], i['pk']))
+            if result_key == 'storage_url':
+                result = i['storage_url']
+            else:
+                result = i['results'][result_key]
+
+            results.append((result, i['pk']))
 
     return results
 

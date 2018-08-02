@@ -272,6 +272,16 @@ def get_instances_count(endpoint, **filters):
     return int(api_request('get', url=url, params=filters).json()['count'])
 
 
+def get_tree(identifier):
+    """Get everything for an individual."""
+    return get_instance('individuals/tree', identifier)
+
+
+def get_trees(identifiers=None, **filters):
+    """Get everything for multiple individuals."""
+    return get_instances('individuals/tree', identifiers, **filters)
+
+
 def patch_analyses_status(analyses, status):
     """
     Patch the `status` of multiple `analyses`.
@@ -333,7 +343,7 @@ def patch_analysis_status(analysis, status):
             cmd = utils.get_rsync_command(src, storage_url, chmod='a-w')
             subprocess.check_call(cmd, shell=True)
 
-    if status == 'SUCCEEDED':
+    if status in {'SUCCEEDED', 'IN_PROGRESS'}:
         try:
             pipeline = import_from_string(pipeline['pipeline_class'])()
             get_results = pipeline.get_analysis_results
