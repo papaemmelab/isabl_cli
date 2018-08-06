@@ -100,6 +100,15 @@ NULLABLE_FILTERS = click.option(
     type=(str, str),
     callback=lambda _, __, i: dict(i))
 
+ANALYSES = click.option(
+    '--analyses-filters', '-fi',
+    multiple=True,
+    help='API filters analyses instances',
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: api.get_instances('analyses', **dict(i)),
+    required=True)
+
 TARGETS = click.option(
     '--targets-filters', '-fi', 'targets',
     multiple=True,
@@ -215,3 +224,23 @@ FILES_DATA = click.option(
         dir_okay=False,
         writable=False,
         readable=True))
+
+
+def get_analyses_filters_option(**defaults):
+    """Get analyses filters with `defaults`."""
+    msg = ''
+
+    if defaults:
+        msg += ' with default filters: '
+        msg += ', '.join(f'{i}={j}' for i, j in defaults.items())
+
+    def callback(tuples):
+        return api.get_instances('analyses', **{**dict(tuples), **defaults})
+
+    return click.option(
+        '--analyses-filters', '-fi',
+        multiple=True,
+        help='API filters for analyses instances' + msg,
+        show_default=True,
+        type=(str, str),
+        callback=lambda _, __, i: callback(i))

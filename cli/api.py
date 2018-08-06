@@ -223,9 +223,8 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
         count = get_instances_count(endpoint, **filters)
         count += len(identifiers or [])
         ids_msg = ' at least ' if identifiers else ' '  # ids may be in filters
-        click.echo(
-            f'Retrieving{ids_msg}{count} from {endpoint} API endpoint...',
-            err=True)
+        count = f'Retrieving{ids_msg}{count} from {endpoint} API endpoint...'
+        click.echo(count, err=True)
 
     if filters or identifiers is None:
         instances += iterate(url, **filters)
