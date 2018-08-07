@@ -126,7 +126,7 @@ class UserSettings(object):
         return data
 
 
-class BaseSettings(object):
+class BaseSettings:
 
     """Obtained from drf-yasg/rest_framework."""
 
@@ -190,34 +190,43 @@ class SystemSettings(BaseSettings):
         return settings
 
 
-class PipelineSettings(BaseSettings):
-    def __init__(self, pipeline, *args, **kwargs):
+class PipelineSettings:
+
+    def __init__(self, pipeline, defaults, import_strings=None):
         """Get pipeline settings from system settings."""
         self._key = f'{pipeline.NAME} {pipeline.VERSION} {pipeline.ASSEMBLY}'
+        self.defaults = defaults
+        self.pipeline = pipeline.pipeline
         self.reference_data = pipeline.assembly['reference_data'] or {}
-        super().__init__(*args, **kwargs)
+        self.import_strings = import_strings or {}
 
     @property
     def system_settings(self):
         """Return dictionary with settings."""
         return system_settings
 
-    @property
-    def _settings(self):
-        """Return dictionary with settings."""
-        return system_settings.PIPELINES_SETTINGS.get(self._key, {})
-
     def __getattr__(self, attr):
         """Check if present in user settings or fall back to defaults."""
-        val = super().__getattr__(attr)
+        if attr not in self.defaults:  # pragma: no cover
+            raise AttributeError("Invalid setting: '%s'" % attr)
+
+        required = self.defaults[attr] is NotImplemented
+
+        try:
+            val = self.pipeline['settings'][attr]
+        except KeyError:
+            val = self.defaults[attr]
 
         if isinstance(val, str) and 'reference_data_id:' in val:
             val = self.reference_data.get(val.split(':', 1)[1])
             val = val['url'] if val else NotImplemented
+        elif attr in self.import_strings:  # coerce import strings into object
+            val = perform_import(val, attr)
 
-        if val is NotImplemented:
-            raise exceptions.MissingRequirementError(
-                f"Setting '{attr}' is required, contact an engineer.")
+        # raise error if not implemented
+        if val is NotImplemented or (val is None and required):
+            msg = f"Setting '{attr}' is required, contact an engineer"
+            raise exceptions.MissingRequirementError(msg)
 
         return val
 

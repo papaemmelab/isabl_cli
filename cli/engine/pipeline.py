@@ -312,10 +312,11 @@ class AbstractPipeline(Validator):
         defaults = self.pipeline_settings.copy()
 
         for i, j in self.engine_settings.items():
+            defaults[i] = j
+
             if i in self.pipeline_settings:  # pragma: no cover
                 msg = f"System setting '{i}' can't be used, pick other name"
                 raise exceptions.ConfigurationError(msg)
-            defaults[i] = j
 
         return PipelineSettings(
             pipeline=self,
