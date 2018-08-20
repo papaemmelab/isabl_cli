@@ -12,14 +12,14 @@ from cli.settings import system_settings
 
 
 def get_results(
-        workflow,
+        experiment,
         pipeline_key,
         result_key,
         targets=None,
         references=None,
         analyses=None):
     """
-    Match results from a workflow object.
+    Match results from a experiment object.
 
     If targets, references or analyses are provided the analysis result must
     match these list of samples and dependencies.
@@ -27,11 +27,11 @@ def get_results(
     Pass `result_key='storage_url'` to get the output directory.
 
     Arguments:
-        workflow (dict): workflow object for which result will be retrieved.
+        experiment (dict): experiment object for which result will be retrieved.
         pipeline_key (int): key of the pipeline that generated the result.
         result_key (dict): name of the result.
-        targets (list): target workflows dicts that must match.
-        references (dict): reference workflows dicts that must match.
+        targets (list): target experiments dicts that must match.
+        references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
 
     Returns:
@@ -42,7 +42,7 @@ def get_results(
     references = {i['pk'] for i in references or []}
     analyses = {i['pk'] for i in analyses or []}
 
-    for i in workflow['analyses_as_target']:
+    for i in experiment['results']:
         if i['pipeline']['pk'] == pipeline_key:
             i_targets = {j['pk'] for j in i['targets']}
             i_references = {j['pk'] for j in i['references']}
@@ -69,7 +69,7 @@ def get_results(
 
 def get_result(*args, **kwargs):
     """
-    See get_workflows_results for full signature.
+    See get_experiments_results for full signature.
 
     Returns:
         tuple: result value, analysis pk that produced the result

@@ -34,7 +34,6 @@ This package was created using [Cookiecutter] and the
 [docker2singularity]: https://github.com/singularityware/docker2singularity
 [cookiecutter]: https://github.com/audreyr/cookiecutter
 [leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
-[`--batchSystem`]: http://toil.readthedocs.io/en/latest/developingWorkflows/batchSystem.html?highlight=BatchSystem
 
 <!-- Badges -->
 [docker_base]: https://hub.docker.com/r/leukgen/cli

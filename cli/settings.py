@@ -32,7 +32,7 @@ _DEFAULTS = {
     'INSTALLED_PIPELINES': [],
     'CUSTOM_COMMANDS': [],
     'ON_DATA_IMPORT': [
-        'cli.data.symlink_workflow_to_projects'],
+        'cli.data.symlink_experiment_to_projects'],
     'ON_STATUS_CHANGE': [
         'cli.data.symlink_analysis_to_targets',
         'cli.data.trigger_analyses_merge'],

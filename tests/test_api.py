@@ -66,17 +66,17 @@ def test_patch_analyses_status():
 
 
 def test_system_id():
-    data_a = factories.WorkflowFactory()
-    data_b = factories.WorkflowFactory(specimen=data_a['specimen'])
-    instance_a = api.create_instance('workflows', **data_a)
-    instance_b = api.create_instance('workflows', **data_b)
+    data_a = factories.ExperimentFactory()
+    data_b = factories.ExperimentFactory(sample=data_a['sample'])
+    instance_a = api.create_instance('experiments', **data_a)
+    instance_b = api.create_instance('experiments', **data_b)
     system_ids = [instance_a['system_id'], instance_b['system_id']]
-    assert instance_a['specimen']['pk'] == instance_b['specimen']['pk']
-    assert api.get_instance('workflows', system_ids[0])['pk'] == instance_a['pk']
-    assert len(api.get_instances('workflows', system_ids)) == 2
+    assert instance_a['sample']['pk'] == instance_b['sample']['pk']
+    assert api.get_instance('experiments', system_ids[0])['pk'] == instance_a['pk']
+    assert len(api.get_instances('experiments', system_ids)) == 2
 
-    instance_a['specimen']['data']['key'] = 'value'
-    instance_a['specimen']['notes'] = 'a note'
-    patched = api.patch_instance('workflows', instance_a['pk'], specimen=instance_a['specimen'])
-    assert patched['specimen']['data']['key'] == 'value'
-    assert patched['specimen']['notes'] == 'a note'
+    instance_a['sample']['data']['key'] = 'value'
+    instance_a['sample']['notes'] = 'a note'
+    patched = api.patch_instance('experiments', instance_a['pk'], sample=instance_a['sample'])
+    assert patched['sample']['data']['key'] == 'value'
+    assert patched['sample']['notes'] == 'a note'

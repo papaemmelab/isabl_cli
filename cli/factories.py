@@ -1,6 +1,5 @@
 """Instance factories used for testing."""
 
-import collections
 import random
 import string
 
@@ -79,15 +78,15 @@ class IndividualFactory(BaseFactory):
     research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
 
 
-class SpecimenFactory(BaseFactory):
+class SampleFactory(BaseFactory):
     disease = factory.SubFactory(DiseaseFactory)
     individual = factory.SubFactory(IndividualFactory)
     pdx_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    specimen_class = fuzzy.FuzzyChoice(['TUMOR', 'NORMAL'])
+    sample_class = fuzzy.FuzzyChoice(['TUMOR', 'NORMAL'])
     research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
 
 
-class WorkflowFactory(BaseFactory):
+class ExperimentFactory(BaseFactory):
     bam_files = factory.SubFactory(factory.DictFactory)
     cell_type = fuzzy.FuzzyChoice(['SINGLE', 'BULK'])
     center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
@@ -99,5 +98,5 @@ class WorkflowFactory(BaseFactory):
     sequencing_center = factory.SubFactory(CenterFactory)
     sequencing_data = None
     sequencing_platform = factory.SubFactory(PlatformFactory)
-    specimen = factory.SubFactory(SpecimenFactory)
+    sample = factory.SubFactory(SampleFactory)
     technique = factory.SubFactory(TechniqueFactory)

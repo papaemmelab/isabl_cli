@@ -31,22 +31,22 @@ class Validator:
             f'samtools dict -a {self.ASSEMBLY} -s {self.SPECIES} '
             f'{reference} > {reference + ".dict"}')
 
-    def validate_has_raw_sequencing_data(self, workflows):
-        """Validate workflows have sequencing data."""
+    def validate_has_raw_sequencing_data(self, experiments):
+        """Validate experiments have sequencing data."""
         msg = []
 
-        for i in workflows:
+        for i in experiments:
             if not i['sequencing_data']:
                 msg.append(f'{i["system_id"]} has no sequencing data...')
 
         assert not msg, '\n'.join(msg)
 
-    def validate_single_data_type(self, workflows):
-        """Validate workflows have only one type of sequencing data."""
-        self.validate_has_raw_sequencing_data(workflows)
+    def validate_single_data_type(self, experiments):
+        """Validate experiments have only one type of sequencing data."""
+        self.validate_has_raw_sequencing_data(experiments)
         types = defaultdict(list)
 
-        for i in workflows:
+        for i in experiments:
             for j in i['sequencing_data']:
                 file_type = j['file_type']
 
@@ -58,9 +58,9 @@ class Validator:
         assert len(types) == 1, f'Multiple types not supported: {dict(types)}'
         return list(types.keys())[0]
 
-    def validate_fastq_only(self, workflows):
+    def validate_fastq_only(self, experiments):
         """Validate sequencing data is only fastq."""
-        dtype = self.validate_single_data_type(workflows)
+        dtype = self.validate_single_data_type(experiments)
         assert dtype == 'FASTQ', f'Only FASTQ supported, found: {dtype}'
 
     def validate_is_pair(self, targets, references):
@@ -74,7 +74,7 @@ class Validator:
     def validate_one_target_no_references(self, targets, references):
         """Validate only one sample is passed targets and none on references."""
         self.validate_one_target(targets)
-        assert not references, f'No reference workflows, got: {len(references)}'
+        assert not references, f'No reference experiments, got: {len(references)}'
 
     def validate_at_least_one_target_one_reference(self, targets, references):  # pylint: disable=C0103
         """Validate that at least one reference and target are passed."""
@@ -87,11 +87,11 @@ class Validator:
         msg = [template % i['system_id'] for i in targets if i['pk'] in refset]
         assert not msg, '\n'.join(msg)
 
-    def validate_methods(self, workflows, methods):
-        """Make sure all workflows methods are those expected."""
+    def validate_methods(self, experiments, methods):
+        """Make sure all experiments methods are those expected."""
         msg = []
 
-        for i in workflows:
+        for i in experiments:
             if i['technique']['method'] not in methods:
                 msg.append(
                     f"Only '{methods}' sequencing method allowed, "
@@ -99,31 +99,31 @@ class Validator:
 
         assert not msg, '\n'.join(msg)
 
-    def validate_pdx_only(self, workflows):
-        """Make sure workflows come from PDX samples."""
+    def validate_pdx_only(self, experiments):
+        """Make sure experiments come from PDX samples."""
         msg = []
 
-        for i in workflows:
-            if not i['specimen']['is_pdx']:
-                msg.append(f"{i['system_id']} specimen is not PDX derived")
+        for i in experiments:
+            if not i['sample']['is_pdx']:
+                msg.append(f"{i['system_id']} sample is not PDX derived")
 
         assert not msg, '\n'.join(msg)
 
-    def validate_dna_only(self, workflows):
-        """Make sure workflows are DNA data."""
+    def validate_dna_only(self, experiments):
+        """Make sure experiments are DNA data."""
         msg = []
 
-        for i in workflows:
+        for i in experiments:
             if i['technique']['analyte'] != 'DNA':
                 msg.append(f"{i['system_id']} analyte is not DNA")
 
         assert not msg, '\n'.join(msg)
 
-    def validate_rna_only(self, workflows):
-        """Make sure workflows are RNA data."""
+    def validate_rna_only(self, experiments):
+        """Make sure experiments are RNA data."""
         msg = []
 
-        for i in workflows:
+        for i in experiments:
             if i['technique']['analyte'] != 'RNA':
                 msg.append(f"{i['system_id']} analyte is not RNA")
 
@@ -142,12 +142,12 @@ class Validator:
         assert len(ttec) == 1, f'Expected one technique, got: {ttec}'
         assert rtec == ttec, f'Same techniques required: {ttec}, {rtec}'
 
-    def validate_species(self, workflows):
-        """Validate workflows's species is same as pipeline's setting."""
+    def validate_species(self, experiments):
+        """Validate experiments's species is same as pipeline's setting."""
         msg = []
 
-        for i in workflows:
-            if i['specimen']['individual']['species'] != self.SPECIES:
+        for i in experiments:
+            if i['sample']['individual']['species'] != self.SPECIES:
                 msg.append(f'{i["system_id"]} species not supported')
 
         assert not msg, '\n'.join(msg)

@@ -23,12 +23,12 @@ class TestPipeline(AbstractPipeline):
     cli_help = "This is a test pipeline"
     cli_options = [options.TARGETS]
     pipeline_settings = {'foo': 'bar'}
-    pipeline_inputs = {'bar'}
+    pipeline_inputs = {'bar': None}
 
     def process_cli_options(self, targets):
         return [([i], []) for i in targets]
 
-    def validate_workflows(self, targets, references):
+    def validate_experiments(self, targets, references):
         self.validate_one_target_no_references(targets, references)
 
         if targets[0]['center_id'] == '0':
@@ -36,7 +36,7 @@ class TestPipeline(AbstractPipeline):
 
         return True
 
-    def get_dependencies(self, targets, references):
+    def get_dependencies(self, targets, references, settings):
         return [], {'bar': 'foo'}
 
     def get_command(self, analysis, inputs, settings):
@@ -68,12 +68,6 @@ def test_pipeline_settings():
         'from_system_settings': None
         }
 
-    _DEFAULTS['PIPELINES_SETTINGS'] = {
-        f'{pipeline.NAME} {pipeline.VERSION} {pipeline.ASSEMBLY}':{
-            'from_system_settings': 'BAR'
-        }
-    }
-
     pipeline.assembly['reference_data']['test_id'] = dict(url='FOO')
     assert pipeline.settings.test_reference == 'FOO'
 
@@ -82,7 +76,6 @@ def test_pipeline_settings():
 
     assert 'is required' in str(error.value)
     assert pipeline.settings.system_settings == system_settings
-    assert pipeline.settings.from_system_settings == 'BAR'
 
 
 def test_engine(tmpdir):
@@ -90,17 +83,17 @@ def test_engine(tmpdir):
     _DEFAULTS['BASE_STORAGE_DIRECTORY'] = data_storage_directory.strpath
 
     individual = factories.IndividualFactory(species='HUMAN')
-    specimen = factories.SpecimenFactory(individual=individual)
+    sample = factories.SampleFactory(individual=individual)
     project = api.create_instance('projects', **factories.ProjectFactory())
 
-    workflows = [
-        factories.WorkflowFactory(
-            center_id=str(i), specimen=specimen, projects=[project])
+    experiments = [
+        factories.ExperimentFactory(
+            center_id=str(i), sample=sample, projects=[project])
         for i in range(4)
         ]
 
-    workflows = [api.create_instance('workflows', **i) for i in workflows]
-    tuples = [([i], []) for i in workflows]
+    experiments = [api.create_instance('experiments', **i) for i in experiments]
+    tuples = [([i], []) for i in experiments]
     command = TestPipeline.as_cli_command()
     pipeline = TestPipeline()
     ran_analyses, _, __ = pipeline.run(tuples, commit=True)
@@ -116,7 +109,7 @@ def test_engine(tmpdir):
     assert "--force" in result.output
     assert "--verbose" in result.output
 
-    pks = ','.join(str(i['pk']) for i in workflows)
+    pks = ','.join(str(i['pk']) for i in experiments)
     args = ['-fi', 'pk__in', pks, '--verbose']
     result = runner.invoke(command, args, catch_exceptions=False)
     analysis = pipeline.get_project_analysis(project)
@@ -213,7 +206,7 @@ def test_validate_methods():
 
 def test_validate_pdx_only():
     pipeline = AbstractPipeline()
-    targets = [{'specimen': {'is_pdx': False}, 'system_id': 'FOO'}]
+    targets = [{'sample': {'is_pdx': False}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
         pipeline.validate_pdx_only(targets)
@@ -240,7 +233,7 @@ def test_validate_dna_rna_only():
 
 def test_validate_species():
     pipeline = AbstractPipeline()
-    targets = [{'specimen': {'individual': {'species': 'MOUSE'}}, 'system_id': 'FOO'}]
+    targets = [{'sample': {'individual': {'species': 'MOUSE'}}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
         pipeline.validate_species(targets)
@@ -258,7 +251,7 @@ def test_validate_one_target_no_references():
         references.append({})
         pipeline.validate_one_target_no_references(targets, references)
 
-    assert 'No reference workflows' in str(error.value)
+    assert 'No reference experiments' in str(error.value)
 
 
 def test_validate_atleast_onetarget_onereference():

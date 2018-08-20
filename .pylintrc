@@ -257,7 +257,7 @@ logging-modules=logging
 # Good variable names which should always be accepted, separated by a comma
 # DEFAULT:  good-names=i,j,k,ex,Run,_
 # RATIONALE:  'pb', 'id', 'pk' have well-understood meainings in the code.
-# 'w' is commonly used to refer to a Workflow, same as 'a' to an analysis.
+# 'w' is commonly used to refer to a Experiment, same as 'a' to an analysis.
 # 'r' is commonly used to store a resquests response while 'f' is a file.
 # 'df' is a pandas DataFrame, 'pk' is a primary key.
 good-names = i, j, k, ex, Run, _, pb, id, pk, w, a, f, r, df, jobName, unitName, jobStore, logToMaster, fileStore

@@ -177,8 +177,8 @@ def patch_instance(endpoint, identifier, **data):
     if endpoint == 'analyses' and instance.get('status'):
         _run_signals('analyses', instance, system_settings.ON_STATUS_CHANGE)
 
-    if endpoint == 'workflows' and instance.get('sequencing_data'):
-        _run_signals('workflows', instance, system_settings.ON_DATA_IMPORT)
+    if endpoint == 'experiments' and instance.get('sequencing_data'):
+        _run_signals('experiments', instance, system_settings.ON_DATA_IMPORT)
 
     return instance
 
@@ -209,12 +209,12 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
 
     Raises:
         click.UsageError: if string identifier and endpoint not in individuals,
-            specimens or workdflows.
+            samples or workdflows.
 
     Returns:
         list: of types.SimpleNamespace objects loaded with dicts from API.
     """
-    check_system_id = endpoint in {'individuals', 'specimens', 'workflows'}
+    check_system_id = endpoint in {'individuals', 'samples', 'experiments'}
     url = f'{system_settings.API_BASE_URL}/{endpoint}'
     instances = []
     keys = set()
@@ -228,7 +228,7 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
 
     if filters or identifiers is None:
         instances += iterate(url, **filters)
-        keys = {i['pk'] for i in instances}
+        keys = {i['pk'] for i in instances if i.get('pk')}
 
     for chunk in chunks(identifiers or [], 10000):
         primary_keys = set()

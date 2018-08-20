@@ -6,14 +6,14 @@ from cli import api
 from cli import validators
 
 
-def _get_workflows(filter_tuples):
-    return api.get_instances('workflows', **dict(filter_tuples))
+def _get_experiments(filter_tuples):
+    return api.get_instances('experiments', **dict(filter_tuples))
 
 
 IDENTIFIER = click.option(
     '--identifier', '-id',
     show_default=True,
-    help='identifier to be used (traverse with dot, e.g. `specimen.system_id`)',
+    help='identifier to be used (traverse with dot, e.g. `sample.system_id`)',
     callback=lambda _, __, i: i.split('.'),
     required=True)
 
@@ -21,7 +21,7 @@ FIELDS = click.option(
     '--field', '-f',
     show_default=True,
     multiple=True,
-    help='fields to be retrieved (traverse with dot, e.g. `specimen.disease`)',
+    help='fields to be retrieved (traverse with dot, e.g. `sample.disease`)',
     callback=lambda _, __, i: [j.split('.') for j in i],
     required=True)
 
@@ -40,11 +40,11 @@ ENDPOINT = click.option(
     default='analyses',
     show_default=True,
     type=click.Choice([
-        'workflows',
+        'experiments',
         'analyses',
         'projects',
         'techniques',
-        'specimens',
+        'samples',
         'individuals',
         'assemblies']),
     required=True)
@@ -112,28 +112,28 @@ ANALYSES = click.option(
 TARGETS = click.option(
     '--targets-filters', '-fi', 'targets',
     multiple=True,
-    help='API filters for target workflows',
+    help='API filters for target experiments',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: _get_workflows(i),
+    callback=lambda _, __, i: _get_experiments(i),
     required=True)
 
 REFERENCES = click.option(
     '--references-filters', '-rfi', 'references',
     multiple=True,
-    help='API filters for references workflows',
+    help='API filters for references experiments',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: _get_workflows(i),
+    callback=lambda _, __, i: _get_experiments(i),
     required=True)
 
 NULLABLE_REFERENCES = click.option(
     '--references-filters', '-rfi', 'references',
     multiple=True,
-    help='API filters for references workflows',
+    help='API filters for references experiments',
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: _get_workflows(i) if i else [],
+    callback=lambda _, __, i: _get_experiments(i) if i else [],
     required=False)
 
 PAIR = click.option(

@@ -116,9 +116,9 @@ def test_local_data_import(tmpdir):
     _DEFAULTS['BASE_STORAGE_DIRECTORY'] = data_storage_directory.strpath
 
     projects = [api.create_instance('projects', **factories.ProjectFactory())]
-    workflows = [factories.WorkflowFactory(projects=projects) for i in range(3)]
-    workflows = [api.create_instance('workflows', **i) for i in workflows]
-    keys = [i['pk'] for i in workflows]
+    experiments = [factories.ExperimentFactory(projects=projects) for i in range(3)]
+    experiments = [api.create_instance('experiments', **i) for i in experiments]
+    keys = [i['pk'] for i in experiments]
 
     importer = data.DataImporter()
     _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
@@ -126,15 +126,15 @@ def test_local_data_import(tmpdir):
     assert obtained == 3 + 1
 
     with pytest.raises(click.UsageError) as error:
-        path_1 = tmpdir.join(f'{workflows[0]["system_id"]}.fastq')
+        path_1 = tmpdir.join(f'{experiments[0]["system_id"]}.fastq')
         path_1.write('foo')
         importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
 
     path_1.remove()
     assert 'cant determine if read 1 or read 2' in str(error.value)
 
-    path_1 = tmpdir.join(f'{workflows[0]["system_id"]}_R1_foo.fastq')
-    path_2 = tmpdir.join(f'{workflows[0]["system_id"]}_R2_foo.fastq')
+    path_1 = tmpdir.join(f'{experiments[0]["system_id"]}_R1_foo.fastq')
+    path_2 = tmpdir.join(f'{experiments[0]["system_id"]}_R2_foo.fastq')
     path_1.write('foo')
     path_2.write('foo')
 
@@ -142,8 +142,8 @@ def test_local_data_import(tmpdir):
     assert 'samples matched: 1' in summary
 
     with pytest.raises(click.UsageError) as error:
-        path_1 = tmpdir.join(f'{workflows[1]["system_id"]}_1.fastq')
-        path_2 = tmpdir.join(f'{workflows[1]["system_id"]}.bam')
+        path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
+        path_2 = tmpdir.join(f'{experiments[1]["system_id"]}.bam')
         path_1.write('foo')
         path_2.write('foo')
         importer.import_data(directories=[tmpdir.strpath], pk__in=keys, commit=True)
@@ -153,8 +153,8 @@ def test_local_data_import(tmpdir):
     assert 'multiple formats' in str(error.value)
 
     with pytest.raises(click.UsageError) as error:
-        api.patch_instance('workflows', workflows[1]['pk'], center_id='dup_id')
-        api.patch_instance('workflows', workflows[2]['pk'], center_id='dup_id')
+        api.patch_instance('experiments', experiments[1]['pk'], center_id='dup_id')
+        api.patch_instance('experiments', experiments[2]['pk'], center_id='dup_id')
         importer.import_data(
             key=lambda x: x['center_id'],
             directories=[tmpdir.strpath],
@@ -162,10 +162,10 @@ def test_local_data_import(tmpdir):
 
     assert 'same identifier for' in str(error.value)
 
-    path_1 = tmpdir.join(f'_{workflows[1]["system_id"]}_cram1_.cram')
-    path_2 = tmpdir.join(f'_{workflows[1]["system_id"]}_cram2_.cram')
-    path_3 = tmpdir.join(f'_{workflows[2]["system_id"]}_bam1_.bam')
-    path_4 = tmpdir.join(f'_{workflows[2]["system_id"]}_bam2_.bam')
+    path_1 = tmpdir.join(f'_{experiments[1]["system_id"]}_cram1_.cram')
+    path_2 = tmpdir.join(f'_{experiments[1]["system_id"]}_cram2_.cram')
+    path_3 = tmpdir.join(f'_{experiments[2]["system_id"]}_bam1_.bam')
+    path_4 = tmpdir.join(f'_{experiments[2]["system_id"]}_bam2_.bam')
 
     path_1.write('foo')
     path_2.write('foo')
@@ -183,12 +183,12 @@ def test_local_data_import(tmpdir):
     assert imported[0]['storage_usage'] > 0
     assert imported[0]['sequencing_data']
     assert imported[1]['sequencing_data']
-    assert 'workflows' in imported[1]['storage_url']
+    assert 'experiments' in imported[1]['storage_url']
     assert len(os.listdir(os.path.join(imported[1]['storage_url'], 'data'))) == 2
     assert 'samples matched: 2' in summary
     assert 'samples skipped: 1' in summary
 
-    api.patch_instance('workflows', workflows[1]['pk'], sequencing_data=None)
+    api.patch_instance('experiments', experiments[1]['pk'], sequencing_data=None)
     file_data = tmpdir.join('file_data.yaml')
 
     with open(file_data.strpath, 'w') as f:
@@ -205,11 +205,11 @@ def test_local_data_import(tmpdir):
 
     result = runner.invoke(command, args, catch_exceptions=False)
     assert 'samples matched: 1' in result.output
-    workflows[1] = api.get_instance('workflows', workflows[1]['pk'])
-    assert workflows[1]['sequencing_data'][0]['file_data']['PU'] == 'TEST_PU'
-    assert workflows[1]['sequencing_data'][1]['file_data']['PU'] == 'TEST_PU'
+    experiments[1] = api.get_instance('experiments', experiments[1]['pk'])
+    assert experiments[1]['sequencing_data'][0]['file_data']['PU'] == 'TEST_PU'
+    assert experiments[1]['sequencing_data'][1]['file_data']['PU'] == 'TEST_PU'
 
-    args = ['-di', tmpdir.strpath, '-id', 'specimen', '-fi', 'pk__in', keys]
+    args = ['-di', tmpdir.strpath, '-id', 'sample', '-fi', 'pk__in', keys]
     result = runner.invoke(command, args)
     assert 'invalid type for identifier' in result.output
 

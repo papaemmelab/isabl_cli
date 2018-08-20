@@ -79,10 +79,10 @@ def test_validate_patterns_are_dirs(tmpdir):
 
 def test_validate_pairs(tmpdir):
     """test_validate_pairs."""
-    data = [factories.WorkflowFactory() for i in range(3)]
-    instance_a = api.create_instance('workflows', **data[0])
-    instance_b = api.create_instance('workflows', **data[1])
-    instance_c = api.create_instance('workflows', **data[2])
+    data = [factories.ExperimentFactory() for i in range(3)]
+    instance_a = api.create_instance('experiments', **data[0])
+    instance_b = api.create_instance('experiments', **data[1])
+    instance_c = api.create_instance('experiments', **data[2])
 
     # pairs that exist
     real_pairs = [
@@ -101,10 +101,10 @@ def test_validate_pairs(tmpdir):
 def test_validate_pairs_from_file(tmpdir):
     """test_validate_pairs_from_file."""
     tmpdir_path = str(tmpdir)
-    data = [factories.WorkflowFactory() for i in range(3)]
-    instance_a = api.create_instance('workflows', **data[0])
-    instance_b = api.create_instance('workflows', **data[1])
-    instance_c = api.create_instance('workflows', **data[2])
+    data = [factories.ExperimentFactory() for i in range(3)]
+    instance_a = api.create_instance('experiments', **data[0])
+    instance_b = api.create_instance('experiments', **data[1])
+    instance_c = api.create_instance('experiments', **data[2])
 
     realpairdf = join(tmpdir_path, 'realpairdf.tsv')
     with open(realpairdf, 'w') as f:

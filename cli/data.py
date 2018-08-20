@@ -7,6 +7,7 @@ from os.path import basename
 from os.path import getsize
 from os.path import isdir
 from os.path import join
+from uuid import uuid4
 import os
 import re
 import shutil
@@ -23,43 +24,43 @@ from cli.settings import system_settings
 from cli.settings import import_from_string
 
 
-def update_workflow_bam_file(workflow, assembly_name, analysis_pk, bam_url):
+def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
     """
-    Update default bam for a workflow given the assembly.
+    Update default bam for a experiment given the assembly.
 
     Arguments:
-        workflow (dict): workflow dict.
+        experiment (dict): experiment dict.
         assembly_name (str): assembly name.
         analysis_pk (int): analysis primary key.
         bam_url (str): bam url.
 
     Returns:
-        dict: patched workflow instance
+        dict: patched experiment instance
     """
     utils.check_admin()
-    pk = workflow['pk']
-    bam_files = workflow['bam_files']
+    pk = experiment['pk']
+    bam_files = experiment['bam_files']
 
     if bam_files.get(assembly_name, None):
-        raise click.UsageError(f'Workflow {pk} already has {assembly_name} bam')
+        raise click.UsageError(f'Experiment {pk} already has {assembly_name} bam')
 
     bam_files[assembly_name] = {'url': bam_url, 'analysis': analysis_pk}
-    return api.patch_instance('workflows', pk, bam_files=bam_files)
+    return api.patch_instance('experiments', pk, bam_files=bam_files)
 
 
-def symlink_workflow_to_projects(workflow):
-    """Create symlink from workflow directory and projects directories."""
-    for i in workflow['projects']:
+def symlink_experiment_to_projects(experiment):
+    """Create symlink from experiment directory and projects directories."""
+    for i in experiment['projects']:
         if not i['storage_url']:  # pragma: no cover
             i = update_storage_url('projects', i['pk'])
 
         utils.force_symlink(
-            workflow['storage_url'],
-            join(i['storage_url'], workflow['system_id']))
+            experiment['storage_url'],
+            join(i['storage_url'], experiment['system_id']))
 
 
 def symlink_analysis_to_targets(analysis):
-    """Create symlink from workflow directory and projects directories."""
+    """Create symlink from experiment directory and projects directories."""
     if analysis['status'] != 'SUCCEEDED':
         return
 
@@ -71,7 +72,7 @@ def symlink_analysis_to_targets(analysis):
 
     for i in analysis['targets']:
         if not i['storage_url']:  # pragma: no cover
-            i = update_storage_url('workflows', i['pk'])
+            i = update_storage_url('experiments', i['pk'])
         utils.force_symlink(src, join(i['storage_url'], dst))
 
     if analysis['project_level_analysis']:
@@ -407,7 +408,7 @@ class BedImporter():
 class DataImporter(BaseImporter):
 
     """
-    A Data import engine for workflows.
+    A Data import engine for experiments.
 
     Attributes:
         FASTQ_REGEX (str): a regex pattern used to match fastq files.
@@ -423,32 +424,32 @@ class DataImporter(BaseImporter):
             self, directories, symlink=False, commit=False,
             key=lambda x: x['system_id'], files_data=None, **filters):
         """
-        Import raw data for multiple workflows.
+        Import raw data for multiple experiments.
 
-        Workflows's `storage_url`, `storage_usage`, `sequencing_data` are
+        Experiments's `storage_url`, `storage_usage`, `sequencing_data` are
         updated.
 
         Arguments:
             directories (list): list of directories to be recursively explored.
             symlink (bool): if True symlink instead of moving.
             commit (bool): if True perform import operation.
-            key (function): given a workflow dict returns id to match.
+            key (function): given a experiment dict returns id to match.
             filters (dict): key value pairs to use as API query params.
             files_data (dict): keys are files basenames and values are
                 dicts with extra annotations such as PL, LB, or any other.
 
         Raises:
             click.UsageError: if `key` returns the same identifier for multiple
-                workflows. If a workflow matches both fastq and bam files.
+                experiments. If a experiment matches both fastq and bam files.
                 if cant determine read 1 or read 2 from matched fastq files.
 
         Returns:
-            tuple: list of workflows for which data has been matched and a
+            tuple: list of experiments for which data has been matched and a
                 summary of the operation.
         """
         utils.check_admin()
         files_data = files_data or {}
-        workflows_matched = []
+        experiments_matched = []
         cache = defaultdict(dict)
         patterns = []
         identifiers = {}
@@ -459,8 +460,8 @@ class DataImporter(BaseImporter):
                 raise click.UsageError(
                     f'Invalid file data, expected dict {i}: {j}')
 
-        # get workflows and load cache dictionary
-        for i in api.get_instances('workflows', verbose=True, **filters):
+        # get experiments and load cache dictionary
+        for i in api.get_instances('experiments', verbose=True, **filters):
             index = f"primary_key_{i['pk']}"
             using_id = f"{i['system_id']} (Skipped, identifier is NULL)"
             identifier = key(i)
@@ -502,15 +503,15 @@ class DataImporter(BaseImporter):
             with click.progressbar(bar, label=label) as bar:
                 for i in bar:
                     if commit and i['files']:
-                        workflows_matched.append(self.import_files(
+                        experiments_matched.append(self.import_files(
                             instance=i['instance'],
                             files=i['files'],
                             symlink=symlink,
                             files_data=files_data))
                     elif i['files']:  # pragma: no cover
-                        workflows_matched.append(i['instance'])
+                        experiments_matched.append(i['instance'])
 
-        return workflows_matched, self.get_summary(cache)
+        return experiments_matched, self.get_summary(cache)
 
     def match_path(self, path, pattern):
         """Match `path` with `pattern` and update cache if fastq or bam."""
@@ -542,7 +543,7 @@ class DataImporter(BaseImporter):
         Move/link files into instance's `storage_url` and update database.
 
         Arguments:
-            instance (dict): workflow instance.
+            instance (dict): experiment instance.
             files (dict): list of files to be imported.
             symlink (dict): whether to symlink or move the data.
             files_data (dict): keys are files basenames and values are
@@ -552,7 +553,7 @@ class DataImporter(BaseImporter):
             click.UsageError: if multiple data formats are found.
 
         Returns:
-            dict: patched workflow instance.
+            dict: patched experiment instance.
         """
         dtypes = set()
         sequencing_data = []
@@ -560,7 +561,7 @@ class DataImporter(BaseImporter):
 
         if not instance['storage_url']:
             instance = update_storage_url(
-                endpoint='workflows',
+                endpoint='experiments',
                 identifier=instance['pk'],
                 use_hash=True)
 
@@ -582,7 +583,7 @@ class DataImporter(BaseImporter):
                 dtypes.add('FASTQ')
 
             if not file_name.startswith(instance['system_id']):
-                file_name = f'{instance["system_id"]}__{file_name}'
+                file_name = f'{instance["system_id"]}_{uuid4().hex}_{file_name}'
 
             dst = join(data_dir, file_name)
             src_dst.append((src, dst))
@@ -606,7 +607,7 @@ class DataImporter(BaseImporter):
                 self.move(src, dst)
 
         return api.patch_instance(
-            endpoint='workflows',
+            endpoint='experiments',
             identifier=instance['pk'],
             storage_url=instance['storage_url'],
             storage_usage=utils.get_tree_size(instance['storage_url']),
@@ -688,11 +689,11 @@ class DataImporter(BaseImporter):
         @options.FILES_DATA
         def cmd(identifier, commit, filters, directories, symlink, files_data):
             """
-            Find and import data for multiple workflows from many directories.
+            Find and import data for multiple experiments from many directories.
 
             Search is recursive and any cram, bam or fastq file that matches
-            the workflow identifier will be imported. Multiple data types for
-            same workflow is not currently supported.
+            the experiment identifier will be imported. Multiple data types for
+            same experiment is not currently supported.
 
             Its possible to provide custom annotation per file (e.g. PL, PU, or
             LB in the case of fastq data). In order to do so, provide a yaml
@@ -710,8 +711,8 @@ class DataImporter(BaseImporter):
                     LB: Library2
                     ...
             """
-            def key(workflow):
-                value, types = workflow, (int, str, type(None))
+            def key(experiment):
+                value, types = experiment, (int, str, type(None))
                 for i in identifier:
                     value = value.get(i)
                 if not isinstance(value, types):

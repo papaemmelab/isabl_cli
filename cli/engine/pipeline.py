@@ -133,7 +133,7 @@ class AbstractPipeline(Validator):
         """
         raise NotImplementedError()
 
-    def validate_workflows(self, targets, references):  # pylint: disable=W9008
+    def validate_experiments(self, targets, references):  # pylint: disable=W9008
         """
         Must raise UsageError if tuple combination isnt valid else return True.
 
@@ -627,10 +627,10 @@ class AbstractPipeline(Validator):
                     keys.add(f"{j['pk']} ({i['technique']['method']})")
             return f"{', '.join(keys)}" if keys else '0'
 
-        def _style_workflows(workflows):
-            if len(workflows) > 2 or not workflows:
-                return f'{len(workflows)}'
-            return ' '.join([i['system_id'] for i in workflows])
+        def _style_experiments(experiments):
+            if len(experiments) > 2 or not experiments:
+                return f'{len(experiments)}'
+            return ' '.join([i['system_id'] for i in experiments])
 
         for i, msg in run_tuples + skipped_tuples + invalid_tuples:
             extra_msg = ''
@@ -649,32 +649,32 @@ class AbstractPipeline(Validator):
             row['IDENTIFIER'] = identifier
             row['MESSAGE'] = _style_msg(msg) + extra_msg
             row['PROJECTS'] = _style_projects(targets)
-            row['TARGETS'] = _style_workflows(targets)
-            row['REFERENCES'] = _style_workflows(references)
+            row['TARGETS'] = _style_experiments(targets)
+            row['REFERENCES'] = _style_experiments(references)
             summary.append('\t'.join(row[k] for k in cols))
 
         summary = '\n'.join(summary).expandtabs(20) + '\n'
         click.echo(f'{summary}\n')
 
-    def get_bedfile(self, workflow, bedfile_type='targets'):
-        """Get targets or baits bedfile for workflow."""
-        return workflow['technique']['bed_files'][self.ASSEMBLY][bedfile_type]
+    def get_bedfile(self, experiment, bedfile_type='targets'):
+        """Get targets or baits bedfile for experiment."""
+        return experiment['technique']['bed_files'][self.ASSEMBLY][bedfile_type]
 
-    def get_bam(self, workflow):
-        """Get workflow bam for pipeline assembly."""
-        return workflow['bam_files'][self.ASSEMBLY]['url']
+    def get_bam(self, experiment):
+        """Get experiment bam for pipeline assembly."""
+        return experiment['bam_files'][self.ASSEMBLY]['url']
 
-    def get_bams(self, workflows):
-        """Get bams for multiple workflows."""
-        return [self.get_bam(i) for i in workflows]
+    def get_bams(self, experiments):
+        """Get bams for multiple experiments."""
+        return [self.get_bam(i) for i in experiments]
 
 
-    def get_fastq(self, workflow):
+    def get_fastq(self, experiment):
         """
-        Get workflow fastq R1 and R2 files.
+        Get experiment fastq R1 and R2 files.
 
         Arguments:
-            workflow (dict): a workflow instance.
+            experiment (dict): a experiment instance.
 
         Raises:
             MissingDataError: if number of R1 and R2 files is not the same.
@@ -684,7 +684,7 @@ class AbstractPipeline(Validator):
         """
         read_1, read_2 = [], []
 
-        for i in workflow['sequencing_data']:
+        for i in experiment['sequencing_data']:
             if i['file_type'] == 'FASTQ_R1':
                 read_1.append(i['file_url'])
             elif i['file_type'] == 'FASTQ_R2':
@@ -698,26 +698,26 @@ class AbstractPipeline(Validator):
 
         return read_1, read_2
 
-    def update_workflow_bam_file(self, workflow, bam_url, analysis_pk):
-        """Update workflow default bam for assembly, ADMIN ONLY."""
+    def update_experiment_bam_file(self, experiment, bam_url, analysis_pk):
+        """Update experiment default bam for assembly, ADMIN ONLY."""
         try:
-            self.get_bam(workflow)
-            return workflow
+            self.get_bam(experiment)
+            return experiment
         except KeyError:
             pass
 
-        return data.update_workflow_bam_file(
-            workflow=workflow,
+        return data.update_experiment_bam_file(
+            experiment=experiment,
             assembly_name=self.ASSEMBLY,
             analysis_pk=analysis_pk,
             bam_url=bam_url)
 
-    def validate_bams(self, workflows):
-        """Raise error not all workflows have registered bams."""
+    def validate_bams(self, experiments):
+        """Raise error not all experiments have registered bams."""
         errors = []
         assembly = self.ASSEMBLY
 
-        for i in workflows:
+        for i in experiments:
             try:
                 self.get_bam(i)
             except KeyError:
@@ -727,11 +727,11 @@ class AbstractPipeline(Validator):
         if errors:
             raise exceptions.ValidationError('\n'.join(errors))
 
-    def validate_bedfiles(self, workflows, bedfile_type='targets'):
-        """Raise error not all workflows have registered bams."""
+    def validate_bedfiles(self, experiments, bedfile_type='targets'):
+        """Raise error not all experiments have registered bams."""
         errors = []
 
-        for i in workflows:
+        for i in experiments:
             try:
                 self.get_bedfile(i, bedfile_type=bedfile_type)
             except KeyError:
@@ -766,7 +766,7 @@ class AbstractPipeline(Validator):
                 try:
                     targets, references, analyses, inputs = i
                     self.validate_species(targets + references)
-                    self.validate_workflows(targets, references)
+                    self.validate_experiments(targets, references)
 
                     analysis = api.create_instance(
                         endpoint='analyses',
