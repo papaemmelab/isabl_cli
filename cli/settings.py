@@ -192,12 +192,12 @@ class SystemSettings(BaseSettings):
 
 class PipelineSettings:
 
-    def __init__(self, pipeline, defaults, import_strings=None):
-        """Get pipeline settings from system settings."""
-        self._key = f'{pipeline.NAME} {pipeline.VERSION} {pipeline.ASSEMBLY}'
+    def __init__(self, application, defaults, import_strings=None):
+        """Get application settings from system settings."""
+        self._key = f'{application.NAME} {application.VERSION} {application.ASSEMBLY}'
         self.defaults = defaults
-        self.pipeline = pipeline.pipeline
-        self.reference_data = pipeline.assembly['reference_data'] or {}
+        self.application = application.application
+        self.reference_data = application.assembly['reference_data'] or {}
         self.import_strings = import_strings or {}
 
     @property
@@ -213,7 +213,7 @@ class PipelineSettings:
         required = self.defaults[attr] is NotImplemented
 
         try:
-            val = self.pipeline['settings'][attr]
+            val = self.application['settings'][attr]
         except KeyError:
             val = self.defaults[attr]
 

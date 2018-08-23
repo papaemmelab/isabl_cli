@@ -10,7 +10,7 @@ add_select =
 ignore =
     D100,  # Missing docstring in public module
     D301,  # We need to be able to include back slashes in docstrings for click
-    D101,  # Missing docstring in public class (its ok for toil pipelines)
+    D101,  # Missing docstring in public class (its ok for toil applications)
     D413,  # Missing blank line after last section
     D211,  # No blank lines allowed before class docstring
     D212,  # Multi-line docstring summary should start at the first line

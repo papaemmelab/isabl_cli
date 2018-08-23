@@ -20,10 +20,10 @@ class TestPipeline(AbstractPipeline):
     ASSEMBLY = 'GRCh4000'
     SPECIES = 'HUMAN'
 
-    cli_help = "This is a test pipeline"
+    cli_help = "This is a test application"
     cli_options = [options.TARGETS]
-    pipeline_settings = {'foo': 'bar'}
-    pipeline_inputs = {'bar': None}
+    application_settings = {'foo': 'bar'}
+    application_inputs = {'bar': None}
 
     def process_cli_options(self, targets):
         return [([i], []) for i in targets]
@@ -60,22 +60,22 @@ class TestPipeline(AbstractPipeline):
         return {'project_result_key': None}
 
 
-def test_pipeline_settings():
-    pipeline = TestPipeline()
-    pipeline.pipeline_settings = {
+def test_application_settings():
+    application = TestPipeline()
+    application.application_settings = {
         'test_reference': 'reference_data_id:test_id',
         'needs_to_be_implemented': NotImplemented,
         'from_system_settings': None
         }
 
-    pipeline.assembly['reference_data']['test_id'] = dict(url='FOO')
-    assert pipeline.settings.test_reference == 'FOO'
+    application.assembly['reference_data']['test_id'] = dict(url='FOO')
+    assert application.settings.test_reference == 'FOO'
 
     with pytest.raises(exceptions.MissingRequirementError) as error:
-        pipeline.settings.needs_to_be_implemented
+        application.settings.needs_to_be_implemented
 
     assert 'is required' in str(error.value)
-    assert pipeline.settings.system_settings == system_settings
+    assert application.settings.system_settings == system_settings
 
 
 def test_engine(tmpdir):
@@ -95,8 +95,8 @@ def test_engine(tmpdir):
     experiments = [api.create_instance('experiments', **i) for i in experiments]
     tuples = [([i], []) for i in experiments]
     command = TestPipeline.as_cli_command()
-    pipeline = TestPipeline()
-    ran_analyses, _, __ = pipeline.run(tuples, commit=True)
+    application = TestPipeline()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
 
     assert 'analysis_result_key' in ran_analyses[1][0]['results']
     assert 'analysis_result_key' in ran_analyses[2][0]['results']
@@ -104,7 +104,7 @@ def test_engine(tmpdir):
     runner = CliRunner()
     result = runner.invoke(command, ["--help"])
 
-    assert "This is a test pipeline" in result.output
+    assert "This is a test application" in result.output
     assert "--commit" in result.output
     assert "--force" in result.output
     assert "--verbose" in result.output
@@ -112,7 +112,7 @@ def test_engine(tmpdir):
     pks = ','.join(str(i['pk']) for i in experiments)
     args = ['-fi', 'pk__in', pks, '--verbose']
     result = runner.invoke(command, args, catch_exceptions=False)
-    analysis = pipeline.get_project_analysis(project)
+    analysis = application.get_project_analysis(project)
     merged = join(analysis['storage_url'], 'test.merge')
 
     assert 'FAILED' in result.output
@@ -135,14 +135,14 @@ def test_engine(tmpdir):
 
 
 def test_validate_is_pair():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{}]
     references = [{}]
-    pipeline.validate_is_pair(targets, references)
+    application.validate_is_pair(targets, references)
 
     with pytest.raises(AssertionError) as error:
         targets.append({})
-        pipeline.validate_is_pair(targets, references)
+        application.validate_is_pair(targets, references)
 
     assert 'Pairs only.' in str(error.value)
 
@@ -150,10 +150,10 @@ def test_validate_is_pair():
 def test_validate_reference_genome(tmpdir):
     reference = tmpdir.join('reference.fasta')
     required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_reference_genome(reference.strpath)
+        application.validate_reference_genome(reference.strpath)
 
     assert 'Missing indexes please run' in str(error.value)
 
@@ -162,17 +162,17 @@ def test_validate_reference_genome(tmpdir):
         tmp.write('foo')
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_reference_genome(reference.strpath)
+        application.validate_reference_genome(reference.strpath)
 
     assert 'samtools dict -a' in str(error.value)
 
 
 def test_validate_fastq_only():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'sequencing_data': [], 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_has_raw_sequencing_data(targets)
+        application.validate_has_raw_sequencing_data(targets)
 
     assert 'FOO' in str(error.value)
 
@@ -182,139 +182,139 @@ def test_validate_fastq_only():
         ]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_single_data_type(targets)
+        application.validate_single_data_type(targets)
 
     assert 'FOO' in str(error.value)
 
     targets = [{'sequencing_data': [{'file_type': 'BAM'}], 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_fastq_only(targets)
+        application.validate_fastq_only(targets)
 
     assert 'Only FASTQ supported' in str(error.value)
 
 
 def test_validate_methods():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'technique': {'method': 'FOO'}, 'system_id': 'FOO BAR'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_methods(targets, 'BAR')
+        application.validate_methods(targets, 'BAR')
 
     assert "Only 'BAR' sequencing method allowed" in str(error.value)
 
 
 def test_validate_pdx_only():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'sample': {'is_pdx': False}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_pdx_only(targets)
+        application.validate_pdx_only(targets)
 
     assert 'is not PDX' in str(error.value)
 
 
 def test_validate_dna_rna_only():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'technique': {'analyte': 'DNA'}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_rna_only(targets)
+        application.validate_rna_only(targets)
 
     assert 'is not RNA' in str(error.value)
 
     targets = [{'technique': {'analyte': 'RNA'}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_dna_only(targets)
+        application.validate_dna_only(targets)
 
     assert 'is not DNA' in str(error.value)
 
 
 def test_validate_species():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'sample': {'individual': {'species': 'MOUSE'}}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
-        pipeline.validate_species(targets)
+        application.validate_species(targets)
 
     assert 'species not supported' in str(error.value)
 
 
 def test_validate_one_target_no_references():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{}]
     references = []
-    pipeline.validate_one_target_no_references(targets, references)
+    application.validate_one_target_no_references(targets, references)
 
     with pytest.raises(AssertionError) as error:
         references.append({})
-        pipeline.validate_one_target_no_references(targets, references)
+        application.validate_one_target_no_references(targets, references)
 
     assert 'No reference experiments' in str(error.value)
 
 
 def test_validate_atleast_onetarget_onereference():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{}]
     references = [{}]
-    pipeline.validate_at_least_one_target_one_reference(targets, references)
+    application.validate_at_least_one_target_one_reference(targets, references)
 
     with pytest.raises(AssertionError) as error:
         targets = []
-        pipeline.validate_at_least_one_target_one_reference(
+        application.validate_at_least_one_target_one_reference(
             targets, references)
 
     assert 'References and targets required' in str(error.value)
 
 
 def test_validate_targets_not_in_references():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'pk': 1, 'system_id': 1}]
     references = [{'pk': 2, 'system_id': 2}]
-    pipeline.validate_targets_not_in_references(targets, references)
+    application.validate_targets_not_in_references(targets, references)
 
     with pytest.raises(AssertionError) as error:
         references = targets
-        pipeline.validate_targets_not_in_references(targets, references)
+        application.validate_targets_not_in_references(targets, references)
 
     assert '1 was also used as reference' in str(error.value)
 
 
 def test_validate_dna_tuples():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
-    pipeline.validate_dna_only(targets + references)
+    application.validate_dna_only(targets + references)
 
     with pytest.raises(AssertionError) as error:
         targets[0]['technique']['analyte'] = 'RNA'
-        pipeline.validate_dna_only(targets + references)
+        application.validate_dna_only(targets + references)
 
     assert 'analyte is not DNA' in str(error.value)
 
 
 def test_validate_dna_pairs():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
-    pipeline.validate_dna_pairs(targets, references)
+    application.validate_dna_pairs(targets, references)
 
 
 def test_validate_same_technique():
-    pipeline = AbstractPipeline()
+    application = AbstractPipeline()
     targets = [{'system_id': 1, 'technique': {'slug': '1'}}]
     references = [{'system_id': 2, 'technique': {'slug': '1'}}]
-    pipeline.validate_same_technique(targets, references)
+    application.validate_same_technique(targets, references)
 
     with pytest.raises(AssertionError) as error:
         targets = [{'system_id': 1, 'technique': {'slug': '2'}}]
-        pipeline.validate_same_technique(targets, references)
+        application.validate_same_technique(targets, references)
 
     assert 'Same techniques required' in str(error.value)
 
     with pytest.raises(AssertionError) as error:
         references.append({'system_id': 3, 'technique': {'slug': '2'}})
-        pipeline.validate_same_technique(targets, references)
+        application.validate_same_technique(targets, references)
 
     assert 'Expected one technique, got:' in str(error.value)

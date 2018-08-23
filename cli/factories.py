@@ -53,7 +53,7 @@ class PipelineFactory(BaseFactory):
 
 class AnalysisFactory(BaseFactory):
     ran_by = 'admin'
-    pipeline = factory.SubFactory(PipelineFactory)
+    application = factory.SubFactory(PipelineFactory)
     targets = []
     references = []
 

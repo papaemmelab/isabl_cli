@@ -46,7 +46,7 @@ FORCE = click.option(
 class AbstractPipeline(Validator):
 
     """
-    An Abstract pipeline.
+    An Abstract application.
 
     Whilst this project becomes more mature, the size of `AbstractPipeline` is
     expected to be reduced and split into components. As for now we will leave
@@ -86,14 +86,14 @@ class AbstractPipeline(Validator):
         SPECIES (object): TODO.
         import_strings (object): TODO.
         engine_settings (object): TODO.
-        pipeline_settings (object): TODO.
+        application_settings (object): TODO.
         cli_help (object): TODO.
         cli_options (object): TODO.
         skip_status (object): TODO.
         skip_exceptions (object): TODO.
     """
 
-    # pipeline unique together definition
+    # application unique together definition
     NAME = None
     VERSION = None
     ASSEMBLY = None
@@ -103,11 +103,11 @@ class AbstractPipeline(Validator):
     get_result = utils.get_result
     get_results = utils.get_results
 
-    # pipeline configuration
+    # application configuration
     import_strings = {}
     engine_settings = {}
-    pipeline_inputs = {}
-    pipeline_settings = {}
+    application_inputs = {}
+    application_settings = {}
     cli_help = ""
     cli_options = []
     skip_status = {'FAILED', 'FINISHED', 'STARTED', 'SUBMITTED', 'SUCCEEDED'}
@@ -172,7 +172,7 @@ class AbstractPipeline(Validator):
         Arguments:
             analysis (dict): an analysis object as retrieved from API.
             inputs (dict): as returned by `get_dependencies`.
-            settings (dict): pipelines settings.
+            settings (dict): applications settings.
 
         Returns:
             tuple: command (str), final status (str)
@@ -189,7 +189,7 @@ class AbstractPipeline(Validator):
         Merge analyses on a project level basis.
 
         If implemented, a new project level analyses will be created. This
-        function will only be called if no other analysis of the same pipeline
+        function will only be called if no other analysis of the same application
         is currently running or submitted.
 
         Arguments:
@@ -247,7 +247,7 @@ class AbstractPipeline(Validator):
         """
         analyses = api.get_instances(
             endpoint='analyses',
-            pipeline=self.pipeline['pk'],
+            application=self.application['pk'],
             projects=project['pk'],
             status='SUCCEEDED')
 
@@ -287,7 +287,7 @@ class AbstractPipeline(Validator):
         analysis = api.create_instance(
             endpoint='analyses',
             project_level_analysis=project,
-            pipeline=self.pipeline)
+            application=self.application)
 
         if not analysis['storage_url']:
             analysis = data.update_storage_url(
@@ -308,25 +308,25 @@ class AbstractPipeline(Validator):
 
     @cached_property
     def settings(self):
-        """Return the pipeline settings."""
-        defaults = self.pipeline_settings.copy()
+        """Return the application settings."""
+        defaults = self.application_settings.copy()
 
         for i, j in self.engine_settings.items():
             defaults[i] = j
 
-            if i in self.pipeline_settings:  # pragma: no cover
+            if i in self.application_settings:  # pragma: no cover
                 msg = f"System setting '{i}' can't be used, pick other name"
                 raise exceptions.ConfigurationError(msg)
 
         return PipelineSettings(
-            pipeline=self,
+            application=self,
             defaults=defaults,
             import_strings=self.import_strings)
 
     @cached_property
-    def pipeline(self):
-        """Get pipeline database object."""
-        pipeline_class = f'{self.__module__}.{self.__class__.__name__}'
+    def application(self):
+        """Get application database object."""
+        application_class = f'{self.__module__}.{self.__class__.__name__}'
 
         if not all([self.NAME, self.VERSION, self.ASSEMBLY, self.SPECIES]):
             raise NotImplementedError(
@@ -335,25 +335,25 @@ class AbstractPipeline(Validator):
                 f"ASSEMBLY must be set: {self.ASSEMBLY}\n"
                 f"SPECIES must be set: {self.SPECIES}\n")
 
-        pipeline = api.create_instance(
-            endpoint='pipelines',
+        application = api.create_instance(
+            endpoint='applications',
             name=self.NAME,
             version=self.VERSION,
             assembly={'name': self.ASSEMBLY, 'species': self.SPECIES},
-            pipeline_class=pipeline_class)
+            application_class=application_class)
 
-        if pipeline['pipeline_class'] != pipeline_class:  # pragma: no cover
+        if application['application_class'] != application_class:  # pragma: no cover
             api.patch_instance(
-                endpoint='pipelines',
-                identifier=pipeline['pk'],
-                pipeline_class=pipeline_class)
+                endpoint='applications',
+                identifier=application['pk'],
+                application_class=application_class)
 
-        return pipeline
+        return application
 
     @cached_property
     def assembly(self):
         """Get assembly database object."""
-        return self.pipeline['assembly']
+        return self.application['assembly']
 
     # ----------------------------
     # COMMAND LINE INTERFACE LOGIC
@@ -361,7 +361,7 @@ class AbstractPipeline(Validator):
 
     @classmethod
     def as_cli_command(cls):
-        """Get pipeline as click command line interface."""
+        """Get application as click command line interface."""
         pipe = cls()
 
         @click.command(help=cls.cli_help, name=pipe.get_cli_command_name())
@@ -413,7 +413,7 @@ class AbstractPipeline(Validator):
             return None
 
         # make sure required settings are set before building commands
-        for i in self.pipeline_settings:
+        for i in self.application_settings:
             getattr(self.settings, i)
 
         # run extra settings validation
@@ -456,7 +456,7 @@ class AbstractPipeline(Validator):
                     continue
 
                 try:
-                    inputs = i.pop('pipeline_inputs')
+                    inputs = i.pop('application_inputs')
                     command = self.get_command(i, inputs, self.settings)
                     command_tuples.append((i, command))
                 except self.skip_exceptions as error:  # pragma: no cover
@@ -472,7 +472,7 @@ class AbstractPipeline(Validator):
 
     def submit_analyses(self, command_tuples):
         """
-        Submit pipelines as arrays grouped by the target methods.
+        Submit applications as arrays grouped by the target methods.
 
         Arguments:
             command_tuples (list): of (analysis, command) tuples.
@@ -563,7 +563,7 @@ class AbstractPipeline(Validator):
         analyses, inputs = self.get_dependencies(
             targets, references, self.settings)
 
-        for i, j in self.pipeline_inputs.items():  # pragma: no cover
+        for i, j in self.application_inputs.items():  # pragma: no cover
             if i not in inputs and j is NotImplemented:
                 missing.append(i)
 
@@ -661,7 +661,7 @@ class AbstractPipeline(Validator):
         return experiment['technique']['bed_files'][self.ASSEMBLY][bedfile_type]
 
     def get_bam(self, experiment):
-        """Get experiment bam for pipeline assembly."""
+        """Get experiment bam for application assembly."""
         return experiment['bam_files'][self.ASSEMBLY]['url']
 
     def get_bams(self, experiments):
@@ -746,7 +746,7 @@ class AbstractPipeline(Validator):
 
     def get_or_create_analyses(self, tuples):
         """
-        Get or create analysis for a pipeline and a list of tuples.
+        Get or create analysis for a application and a list of tuples.
 
         Arguments:
             tuples (list): list of (targets, references, analyses) tuples.
@@ -770,7 +770,7 @@ class AbstractPipeline(Validator):
 
                     analysis = api.create_instance(
                         endpoint='analyses',
-                        pipeline=self.pipeline,
+                        application=self.application,
                         targets=targets,
                         references=references,
                         analyses=analyses)
@@ -780,7 +780,7 @@ class AbstractPipeline(Validator):
                         identifier=analysis['pk'],
                         use_hash=True)
 
-                    analysis['pipeline_inputs'] = inputs
+                    analysis['application_inputs'] = inputs
                     created_analyses.append(analysis)
                 except (exceptions.ValidationError, AssertionError) as error:
                     error = exceptions.ValidationError(error)
@@ -803,7 +803,7 @@ class AbstractPipeline(Validator):
         """
         click.echo("Checking for existing analyses...", file=sys.stderr)
         projects = {j['pk'] for i in tuples for j in i[0][0]['projects']}
-        filters = dict(pipeline=self.pipeline['pk'], projects__pk__in=projects)
+        filters = dict(application=self.application['pk'], projects__pk__in=projects)
         cache = defaultdict(list)
         existing, missing = [], []
 
@@ -822,7 +822,7 @@ class AbstractPipeline(Validator):
             for i in cache[get_cache_key(targets, references)]:
                 if expected.issubset(set(i['analyses'])):
                     found_existing = True
-                    i['pipeline_inputs'] = inputs
+                    i['application_inputs'] = inputs
                     existing.append(i)
                     break
 

@@ -1,4 +1,4 @@
-"""An LSF pipeline engine."""
+"""An LSF application engine."""
 # pylint: disable=W9008,R0201
 
 from collections import defaultdict
@@ -18,7 +18,7 @@ from cli import api
 from cli import utils
 from cli.settings import system_settings
 
-from .pipeline import AbstractPipeline
+from .application import AbstractPipeline
 
 
 class LsfPipeline(AbstractPipeline):  # pragma: no cover
@@ -36,7 +36,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
 
         Arguments:
             targets_methods (set): targets sequencing methods.
-            settings (object): pipeline settings.
+            settings (object): application settings.
 
         Returns:
             str: lsf requirements (e.g. -q test).
@@ -67,11 +67,11 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
             f'methods: {" ".join(methods)}',
             f'projects: {" ".join(projects)}',
             f'rundir: {analysis["storage_url"]}',
-            f'pipeline: {analysis["pipeline"]["pk"]}'])
+            f'application: {analysis["application"]["pk"]}'])
 
     def submit_analyses(self, command_tuples):
         """
-        Submit pipelines as arrays grouped by the target methods.
+        Submit applications as arrays grouped by the target methods.
 
         Arguments:
             command_tuples (list): list of (analysis, command) tuples.
@@ -102,7 +102,7 @@ class LsfPipeline(AbstractPipeline):  # pragma: no cover
                         j['pk'] for k in i['targets'] for j in k['projects'])
 
                 jobname = (
-                    f"Array | pipeline: {self.pipeline['pk']} | "
+                    f"Array | application: {self.application['pk']} | "
                     f"methods: {methods} | projects: {projects}")
 
                 try:

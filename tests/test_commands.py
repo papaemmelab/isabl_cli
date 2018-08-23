@@ -32,12 +32,12 @@ def test_commands(tmpdir):
 
     runner = CliRunner()
     args = [
-        '-fi', 'pk', analysis['pk'], '-f', 'pipeline.name', '-f', 'pipeline',
+        '-fi', 'pk', analysis['pk'], '-f', 'application.name', '-f', 'application',
         '-f', 'carlos', '-f', 'invalid.nested_attr']
 
     result = runner.invoke(commands.get_attributes, args, catch_exceptions=False)
-    assert analysis['pipeline']['name'] in result.output
-    assert 'pipeline.name' in result.output
+    assert analysis['application']['name'] in result.output
+    assert 'application.name' in result.output
     assert '"name": ' in result.output
     assert 'INVALID KEY (carlos)' in result.output
     assert 'INVALID KEY (nested_attr)' in result.output

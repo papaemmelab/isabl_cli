@@ -66,8 +66,8 @@ def symlink_analysis_to_targets(analysis):
 
     src = analysis['storage_url']
     dst = '__'.join([
-        analysis['pipeline']['name'].lower().replace(' ', '_'),
-        analysis['pipeline']['version'].lower().replace(' ', '_'),
+        analysis['application']['name'].lower().replace(' ', '_'),
+        analysis['application']['version'].lower().replace(' ', '_'),
         str(analysis['pk'])])
 
     for i in analysis['targets']:
@@ -88,11 +88,11 @@ def trigger_analyses_merge(analysis):
         return
 
     try:
-        pipeline = import_from_string(analysis['pipeline']['pipeline_class'])()
+        application = import_from_string(analysis['application']['application_class'])()
     except ImportError:
         return
 
-    if hasattr(pipeline.merge_project_analyses, '__isabstractmethod__'):
+    if hasattr(application.merge_project_analyses, '__isabstractmethod__'):
         return  # pragma: no cover
 
     projects = {j['pk']: j for i in analysis['targets'] for j in i['projects']}
@@ -101,11 +101,11 @@ def trigger_analyses_merge(analysis):
         pending = api.get_instances_count(
             endpoint='analyses',
             status__in='STARTED,SUBMITTED',
-            pipeline=analysis['pipeline']['pk'],
+            application=analysis['application']['pk'],
             projects=i['pk'])
 
         if not pending:
-            pipeline.submit_project_merge(i)
+            application.submit_project_merge(i)
 
 
 def trash_analysis_storage(analysis):

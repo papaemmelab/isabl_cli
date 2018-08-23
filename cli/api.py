@@ -326,7 +326,7 @@ def patch_analysis_status(analysis, status):
         dict: patched analysis instance.
     """
     data = {'status': status}
-    pipeline = analysis['pipeline']
+    application = analysis['application']
     storage_url = analysis['storage_url']
 
     if status in {'FAILED', 'SUCCEEDED', 'IN_PROGRESS'}:
@@ -344,11 +344,11 @@ def patch_analysis_status(analysis, status):
 
     if status in {'SUCCEEDED', 'IN_PROGRESS'}:
         try:
-            pipeline = import_from_string(pipeline['pipeline_class'])()
-            get_results = pipeline.get_analysis_results
+            application = import_from_string(application['application_class'])()
+            get_results = application.get_analysis_results
 
             if analysis['project_level_analysis']:
-                get_results = pipeline.get_project_analysis_results
+                get_results = application.get_project_analysis_results
 
             data['results'] = get_results(analysis)
         except ImportError:

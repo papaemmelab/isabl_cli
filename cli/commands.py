@@ -13,13 +13,13 @@ from cli.settings import import_from_string
 
 @click.command()
 @click.option('--project', help='primary key of project to merge by', type=int)
-@click.option('--pipeline', help='analyses pipeline primary key', type=int)
-def merge_project_analyses(project, pipeline):  # pragma: no cover
+@click.option('--application', help='analyses application primary key', type=int)
+def merge_project_analyses(project, application):  # pragma: no cover
     """Merge analyses by project primary key."""
     project = api.get_instance('projects', project)
-    pipeline = api.get_instance('pipelines', pipeline)
-    pipeline = import_from_string(pipeline['pipeline_class'])()
-    pipeline.run_project_merge(project)
+    application = api.get_instance('applications', application)
+    application = import_from_string(application['application_class'])()
+    application.run_project_merge(project)
 
 
 @click.command()
@@ -40,8 +40,8 @@ def patch_results(filters):
     utils.check_admin()
 
     for i in api.get_instances('analyses', **filters):
-        pipeline = import_from_string(i['pipeline']['pipeline_class'])()
-        results = pipeline.get_analysis_results(i)
+        application = import_from_string(i['application']['application_class'])()
+        results = application.get_analysis_results(i)
         api.patch_instance('analyses', i['pk'], results=results)
 
 

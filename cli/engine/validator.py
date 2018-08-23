@@ -130,7 +130,7 @@ class Validator:
         assert not msg, '\n'.join(msg)
 
     def validate_dna_pairs(self, targets, references):
-        """Validate targets, references tuples for base dna pipelines."""
+        """Validate targets, references tuples for base dna applications."""
         self.validate_is_pair(targets, references)
         self.validate_dna_only(targets + references)
 
@@ -143,7 +143,7 @@ class Validator:
         assert rtec == ttec, f'Same techniques required: {ttec}, {rtec}'
 
     def validate_species(self, experiments):
-        """Validate experiments's species is same as pipeline's setting."""
+        """Validate experiments's species is same as application's setting."""
         msg = []
 
         for i in experiments:

@@ -35,7 +35,7 @@ class ImplementationError(PackageBaseException):
 
 class CantBeRunError(PackageBaseException):
 
-    """A class to raise when a pipeline just cannot be run."""
+    """A class to raise when a application just cannot be run."""
 
 
 class MissingDataError(PackageBaseException):

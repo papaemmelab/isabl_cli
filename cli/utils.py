@@ -13,7 +13,7 @@ from cli.settings import system_settings
 
 def get_results(
         experiment,
-        pipeline_key,
+        application_key,
         result_key,
         targets=None,
         references=None,
@@ -28,7 +28,7 @@ def get_results(
 
     Arguments:
         experiment (dict): experiment object for which result will be retrieved.
-        pipeline_key (int): key of the pipeline that generated the result.
+        application_key (int): key of the application that generated the result.
         result_key (dict): name of the result.
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
@@ -43,7 +43,7 @@ def get_results(
     analyses = {i['pk'] for i in analyses or []}
 
     for i in experiment['results']:
-        if i['pipeline']['pk'] == pipeline_key:
+        if i['application']['pk'] == application_key:
             i_targets = {j['pk'] for j in i['targets']}
             i_references = {j['pk'] for j in i['references']}
             i_analyses = set(i['analyses'])

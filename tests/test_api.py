@@ -49,8 +49,8 @@ def test_api_methods():
 
 
 def test_patch_analyses_status():
-    pipeline = factories.PipelineFactory()
-    analyses = [factories.AnalysisFactory(pipeline=pipeline) for _ in range(2)]
+    application = factories.PipelineFactory()
+    analyses = [factories.AnalysisFactory(application=application) for _ in range(2)]
     created = [api.create_instance('analyses', **i) for i in analyses]
     assert all([i['status'] == 'CREATED' for i in created])
 
@@ -62,7 +62,7 @@ def test_patch_analyses_status():
     for i in created:
         api.delete_instance('analyses', i['pk'])
 
-    api.delete_instance('pipelines', created[0]['pipeline']['pk'])
+    api.delete_instance('applications', created[0]['application']['pk'])
 
 
 def test_system_id():
