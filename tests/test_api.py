@@ -49,7 +49,7 @@ def test_api_methods():
 
 
 def test_patch_analyses_status():
-    application = factories.PipelineFactory()
+    application = factories.ApplicationFactory()
     analyses = [factories.AnalysisFactory(application=application) for _ in range(2)]
     created = [api.create_instance('analyses', **i) for i in analyses]
     assert all([i['status'] == 'CREATED' for i in created])

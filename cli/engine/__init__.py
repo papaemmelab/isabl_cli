@@ -1,4 +1,4 @@
 """Engine module."""
 
-from .application import AbstractPipeline
-from .lsf import LsfPipeline
+from .application import AbstractApplication
+from .lsf import LsfApplication

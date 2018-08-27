@@ -44,7 +44,7 @@ class AssemblyFactory(BaseFactory):
     species = fuzzy.FuzzyChoice(['HUMAN', 'MOUSE'])
 
 
-class PipelineFactory(BaseFactory):
+class ApplicationFactory(BaseFactory):
     description = fuzzy.FuzzyText(length=10, chars=string.ascii_letters)
     name = fuzzy.FuzzyText(length=10, chars=string.ascii_letters)
     version = fuzzy.FuzzyText(length=10, chars=string.ascii_letters)
@@ -53,7 +53,7 @@ class PipelineFactory(BaseFactory):
 
 class AnalysisFactory(BaseFactory):
     ran_by = 'admin'
-    application = factory.SubFactory(PipelineFactory)
+    application = factory.SubFactory(ApplicationFactory)
     targets = []
     references = []
 

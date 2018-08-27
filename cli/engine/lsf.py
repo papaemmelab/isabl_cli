@@ -18,10 +18,10 @@ from cli import api
 from cli import utils
 from cli.settings import system_settings
 
-from .application import AbstractPipeline
+from .application import AbstractApplication
 
 
-class LsfPipeline(AbstractPipeline):  # pragma: no cover
+class LsfApplication(AbstractApplication):  # pragma: no cover
 
     """Submit jobs as job array throttled by `THROTTLE` argument."""
 

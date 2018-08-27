@@ -4,8 +4,8 @@ from os.path import abspath
 from os.path import dirname
 from os.path import join
 
-from cli.engine import AbstractPipeline
-from cli.engine import LsfPipeline
+from cli.engine import AbstractApplication
+from cli.engine import LsfApplication
 from cli.exceptions import MissingDataError
 from cli.exceptions import ValidationError
 

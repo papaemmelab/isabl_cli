@@ -190,7 +190,7 @@ class SystemSettings(BaseSettings):
         return settings
 
 
-class PipelineSettings:
+class ApplicationSettings:
 
     def __init__(self, application, defaults, import_strings=None):
         """Get application settings from system settings."""

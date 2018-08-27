@@ -8,12 +8,12 @@ from cli import api
 from cli import factories
 from cli import exceptions
 from cli import options
-from cli.engine import AbstractPipeline
+from cli.engine import AbstractApplication
 from cli.settings import system_settings
 from cli.settings import _DEFAULTS
 
 
-class TestPipeline(AbstractPipeline):
+class TestApplication(AbstractApplication):
 
     NAME = 'HELLO_WORLD'
     VERSION = 'STILL_TESTING'
@@ -61,7 +61,7 @@ class TestPipeline(AbstractPipeline):
 
 
 def test_application_settings():
-    application = TestPipeline()
+    application = TestApplication()
     application.application_settings = {
         'test_reference': 'reference_data_id:test_id',
         'needs_to_be_implemented': NotImplemented,
@@ -94,8 +94,8 @@ def test_engine(tmpdir):
 
     experiments = [api.create_instance('experiments', **i) for i in experiments]
     tuples = [([i], []) for i in experiments]
-    command = TestPipeline.as_cli_command()
-    application = TestPipeline()
+    command = TestApplication.as_cli_command()
+    application = TestApplication()
     ran_analyses, _, __ = application.run(tuples, commit=True)
 
     assert 'analysis_result_key' in ran_analyses[1][0]['results']
@@ -135,7 +135,7 @@ def test_engine(tmpdir):
 
 
 def test_validate_is_pair():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{}]
     references = [{}]
     application.validate_is_pair(targets, references)
@@ -150,7 +150,7 @@ def test_validate_is_pair():
 def test_validate_reference_genome(tmpdir):
     reference = tmpdir.join('reference.fasta')
     required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
-    application = AbstractPipeline()
+    application = AbstractApplication()
 
     with pytest.raises(AssertionError) as error:
         application.validate_reference_genome(reference.strpath)
@@ -168,7 +168,7 @@ def test_validate_reference_genome(tmpdir):
 
 
 def test_validate_fastq_only():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'sequencing_data': [], 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
@@ -195,7 +195,7 @@ def test_validate_fastq_only():
 
 
 def test_validate_methods():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'technique': {'method': 'FOO'}, 'system_id': 'FOO BAR'}]
 
     with pytest.raises(AssertionError) as error:
@@ -205,7 +205,7 @@ def test_validate_methods():
 
 
 def test_validate_pdx_only():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'sample': {'is_pdx': False}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
@@ -215,7 +215,7 @@ def test_validate_pdx_only():
 
 
 def test_validate_dna_rna_only():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'technique': {'analyte': 'DNA'}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
@@ -232,7 +232,7 @@ def test_validate_dna_rna_only():
 
 
 def test_validate_species():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'sample': {'individual': {'species': 'MOUSE'}}, 'system_id': 'FOO'}]
 
     with pytest.raises(AssertionError) as error:
@@ -242,7 +242,7 @@ def test_validate_species():
 
 
 def test_validate_one_target_no_references():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{}]
     references = []
     application.validate_one_target_no_references(targets, references)
@@ -255,7 +255,7 @@ def test_validate_one_target_no_references():
 
 
 def test_validate_atleast_onetarget_onereference():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{}]
     references = [{}]
     application.validate_at_least_one_target_one_reference(targets, references)
@@ -269,7 +269,7 @@ def test_validate_atleast_onetarget_onereference():
 
 
 def test_validate_targets_not_in_references():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'pk': 1, 'system_id': 1}]
     references = [{'pk': 2, 'system_id': 2}]
     application.validate_targets_not_in_references(targets, references)
@@ -282,7 +282,7 @@ def test_validate_targets_not_in_references():
 
 
 def test_validate_dna_tuples():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
     application.validate_dna_only(targets + references)
@@ -295,14 +295,14 @@ def test_validate_dna_tuples():
 
 
 def test_validate_dna_pairs():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'system_id': 1, 'technique': {'analyte': 'DNA'}}]
     references = [{'system_id': 2, 'technique': {'analyte': 'DNA'}}]
     application.validate_dna_pairs(targets, references)
 
 
 def test_validate_same_technique():
-    application = AbstractPipeline()
+    application = AbstractApplication()
     targets = [{'system_id': 1, 'technique': {'slug': '1'}}]
     references = [{'system_id': 2, 'technique': {'slug': '1'}}]
     application.validate_same_technique(targets, references)
