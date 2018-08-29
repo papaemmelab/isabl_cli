@@ -8,7 +8,7 @@ from cli import api
 from cli import factories
 from cli import exceptions
 from cli import options
-from cli.engine import AbstractApplication
+from cli import AbstractApplication
 from cli.settings import system_settings
 from cli.settings import _DEFAULTS
 

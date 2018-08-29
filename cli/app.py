@@ -3,9 +3,10 @@
 
 from collections import defaultdict
 from os.path import join
+from os.path import isdir
+from os.path import isfile
 import abc
 import os
-import subprocess
 import sys
 
 from cached_property import cached_property
@@ -19,8 +20,6 @@ from cli import exceptions
 from cli import utils
 from cli.settings import ApplicationSettings
 from cli.settings import system_settings
-
-from .validator import Validator
 
 
 COMMIT = click.option(
@@ -43,7 +42,7 @@ FORCE = click.option(
     is_flag=True)
 
 
-class AbstractApplication(Validator):
+class AbstractApplication:
 
     """
     An Abstract application.
@@ -85,7 +84,6 @@ class AbstractApplication(Validator):
         ASSEMBLY (object): TODO.
         SPECIES (object): TODO.
         import_strings (object): TODO.
-        engine_settings (object): TODO.
         application_settings (object): TODO.
         cli_help (object): TODO.
         cli_options (object): TODO.
@@ -104,10 +102,9 @@ class AbstractApplication(Validator):
     get_results = utils.get_results
 
     # application configuration
-    import_strings = {}
-    engine_settings = {}
     application_inputs = {}
     application_settings = {}
+    application_import_strings = {}
     cli_help = ""
     cli_options = []
     skip_status = {'FAILED', 'FINISHED', 'STARTED', 'SUBMITTED', 'SUCCEEDED'}
@@ -301,27 +298,22 @@ class AbstractApplication(Validator):
     # PROPERTIES
     # ----------
 
-    @property
-    def key(self):
+    @cached_property
+    def primary_key(self):
         """Space separated name, version and assembly."""
-        return f'{self.NAME} {self.VERSION} {self.ASSEMBLY}'
+        return self.application['pk']
 
     @cached_property
     def settings(self):
         """Return the application settings."""
         defaults = self.application_settings.copy()
+        import_strings = set(self.application_import_strings)
+        import_strings.add('batch_system')
 
-        for i, j in self.engine_settings.items():
-            defaults[i] = j
+        if 'batch_system' not in defaults:
+            defaults['batch_system'] = 'cli.batch_systems.Local'
 
-            if i in self.application_settings:  # pragma: no cover
-                msg = f"System setting '{i}' can't be used, pick other name"
-                raise exceptions.ConfigurationError(msg)
-
-        return ApplicationSettings(
-            application=self,
-            defaults=defaults,
-            import_strings=self.import_strings)
+        return ApplicationSettings(self, defaults, import_strings)
 
     @cached_property
     def application(self):
@@ -405,9 +397,10 @@ class AbstractApplication(Validator):
         Returns:
             tuple: command_tuples, skipped_tuples, invalid_tuples
         """
+        key = f'{self.NAME} {self.VERSION} {self.ASSEMBLY}'
         commit = True if force else commit
         tuples = [tuple(i) for i in tuples]  # coerce to tuple
-        utils.echo_title(f'Running {len(tuples)} tuples for {self.key}')
+        utils.echo_title(f'Running {len(tuples)} tuples for {key}')
 
         if not tuples:  # pragma: no cover
             return None
@@ -459,59 +452,30 @@ class AbstractApplication(Validator):
                     inputs = i.pop('application_inputs')
                     command = self.get_command(i, inputs, self.settings)
                     command_tuples.append((i, command))
+                    self.write_command_script(i, command)
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
         if commit:
-            run_tuples = self.submit_analyses(command_tuples)
+            runner = self.settings.batch_system()
+            run_tuples = runner.submit_analyses(self, command_tuples)
         else:
             run_tuples = [(i, 'STAGED') for i, _ in command_tuples]
             api.patch_analyses_status([i for i, _ in command_tuples], 'STAGED')
 
         return run_tuples, skipped_tuples
 
-    def submit_analyses(self, command_tuples):
-        """
-        Submit applications as arrays grouped by the target methods.
+    def get_command_script_path(self, analysis):
+        """Get path to analysis command script."""
+        return join(analysis['storage_url'], 'head_job.sh')
 
-        Arguments:
-            command_tuples (list): of (analysis, command) tuples.
+    def get_command_log_path(self, analysis):
+        """Get path to analysis log file."""
+        return join(analysis['storage_url'], 'head_job.log')
 
-        Returns:
-            list: analysis, status tuples.
-        """
-        # make sure analyses are in submitted status to avoid
-        # merging project level analyses in every success
-        ret = []
-        api.patch_analyses_status([i for i, _ in command_tuples], 'SUBMITTED')
-        label = f'Running {len(command_tuples)} analyses...'
-
-        with progressbar(command_tuples, label=label) as bar:
-            for i, j in bar:
-                self.write_command_script(i, j)
-                log = join(i['storage_url'], 'head_job.log')
-                err = join(i['storage_url'], 'head_job.err')
-                api.patch_analysis_status(i, 'STARTED')
-                oldmask = os.umask(0o22)
-                status = 'SUCCEEDED'
-
-                with open(log, 'w') as stdout, open(err, 'w') as stderr:
-                    try:
-                        subprocess.check_call(
-                            args=j,
-                            cwd=i['storage_url'],
-                            stdout=stdout,
-                            stderr=stderr,
-                            shell=True)
-
-                    except subprocess.CalledProcessError:
-                        status = 'FAILED'
-
-                os.umask(oldmask)
-                i = api.patch_analysis_status(i, status)
-                ret.append((i, i['status']))
-
-        return ret
+    def get_command_err_path(self, analysis):
+        """Get path to analysis err file."""
+        return join(analysis['storage_url'], 'head_job.err')
 
     def write_command_script(self, analysis, command):
         """
@@ -520,21 +484,16 @@ class AbstractApplication(Validator):
         Arguments:
             analysis (dict): an analysis instance.
             command (str): command to be run.
-
-        Returns:
-            str: analysis command as a path to a bash script.
         """
-        outdir = analysis['storage_url']
-        command_path = join(analysis['storage_url'], 'head_job.sh')
-
         # check status, if not run by admin will be marked as succeeded later
+        outdir = analysis['storage_url']
         status = self.get_after_completion_status(analysis)
         assert status in {'IN_PROGRESS', 'FINISHED'}, 'Status not supported'
 
         if system_settings.is_admin_user and status == 'FINISHED':
             status = 'SUCCEEDED'
 
-        # build command
+        # build and write command
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
@@ -546,12 +505,9 @@ class AbstractApplication(Validator):
         if system_settings.is_admin_user:
             command += f" && chmod -R a-w {analysis['storage_url']}"
 
-        # write command
-        with open(command_path, "w") as f:
+        with open(self.get_command_script_path(analysis), "w") as f:
             template = '{{\n\n    {}\n\n}} | {{\n\n    {}\n\n}}'
             f.write(template.format(command, failed))
-
-        return command_path
 
     @staticmethod
     def get_patch_status_command(key, status):
@@ -575,8 +531,35 @@ class AbstractApplication(Validator):
         return analyses, inputs
 
     # --------------
-    # PIPELINE UTILS
+    # APPLICATION UTILS
     # --------------
+
+    @staticmethod
+    def get_job_name(analysis):
+        """Get job name given an analysis instance."""
+        targets = analysis['targets']
+        references = analysis['references']
+        methods = {i['technique']['method'] for i in targets}
+        projects = {str(j['pk']) for i in targets for j in i['projects']}
+
+        if len(targets) > 2 or not targets:
+            targets = f'{len(targets)} samples.'
+        else:
+            targets = ' '.join([i['system_id'] for i in targets])
+
+        if len(references) > 2 or not references:
+            references = f'{len(references)} samples.'
+        else:
+            references = ' '.join([i['system_id'] for i in references])
+
+        return ' | '.join([
+            f'analysis: {analysis["pk"]}',
+            f'targets: {targets}',
+            f'references: {references} |',
+            f'methods: {" ".join(methods)}',
+            f'projects: {" ".join(projects)}',
+            f'rundir: {analysis["storage_url"]}',
+            f'application: {analysis["application"]["pk"]}'])
 
     @staticmethod
     def echo_run_summary(run_tuples, skipped_tuples, invalid_tuples):
@@ -830,3 +813,149 @@ class AbstractApplication(Validator):
                 missing.append((targets, references, analyses, inputs))
 
         return existing, missing
+
+    # -------------------------
+    # ANALYSES VALIDATION UTILS
+    # -------------------------
+
+    def validate_is_file(self, path):  # pragma: no cover
+        """Validate path is file."""
+        assert isfile(path), f'{path} is not a file.'
+
+    def validate_is_dir(self, path):  # pragma: no cover
+        """Validate path is directory."""
+        assert isdir(path), f'{path} is not a file.'
+
+    def validate_reference_genome(self, reference):
+        """Validate genome exists and has required indexes."""
+        required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
+
+        assert all(isfile(reference + i) for i in required), (
+            f'Missing indexes please run:\n\n\t'
+            f'bwa index {reference}\n\tsamtools faidx {reference}')
+
+        assert isfile(reference + '.dict'), (
+            f'Please generate {reference + ".dict"}, e.g.\n\n\t'
+            f'samtools dict -a {self.ASSEMBLY} -s {self.SPECIES} '
+            f'{reference} > {reference + ".dict"}')
+
+    def validate_has_raw_sequencing_data(self, experiments):
+        """Validate experiments have sequencing data."""
+        msg = []
+
+        for i in experiments:
+            if not i['sequencing_data']:
+                msg.append(f'{i["system_id"]} has no sequencing data...')
+
+        assert not msg, '\n'.join(msg)
+
+    def validate_single_data_type(self, experiments):
+        """Validate experiments have only one type of sequencing data."""
+        self.validate_has_raw_sequencing_data(experiments)
+        types = defaultdict(list)
+
+        for i in experiments:
+            for j in i['sequencing_data']:
+                file_type = j['file_type']
+
+                if file_type.startswith('FASTQ_'):
+                    file_type = 'FASTQ'
+
+                types[file_type].append(i['system_id'])
+
+        assert len(types) == 1, f'Multiple types not supported: {dict(types)}'
+        return list(types.keys())[0]
+
+    def validate_fastq_only(self, experiments):
+        """Validate sequencing data is only fastq."""
+        dtype = self.validate_single_data_type(experiments)
+        assert dtype == 'FASTQ', f'Only FASTQ supported, found: {dtype}'
+
+    def validate_is_pair(self, targets, references):
+        """Validate targets, references tuple is a pair."""
+        assert len(targets) == 1 and len(references) == 1, 'Pairs only.'
+
+    def validate_one_target(self, targets):
+        """Validate only one target."""
+        assert len(targets) == 1, f'Only 1 target allowed, got: {len(targets)}'
+
+    def validate_one_target_no_references(self, targets, references):
+        """Validate only one sample is passed targets and none on references."""
+        self.validate_one_target(targets)
+        assert not references, f'No reference experiments, got: {len(references)}'
+
+    def validate_at_least_one_target_one_reference(self, targets, references):  # pylint: disable=C0103
+        """Validate that at least one reference and target are passed."""
+        assert targets and references, 'References and targets required.'
+
+    def validate_targets_not_in_references(self, targets, references):
+        """Make sure targets are not passed as references also."""
+        refset = set(i['pk'] for i in references)
+        template = "%s was also used as reference."
+        msg = [template % i['system_id'] for i in targets if i['pk'] in refset]
+        assert not msg, '\n'.join(msg)
+
+    def validate_methods(self, experiments, methods):
+        """Make sure all experiments methods are those expected."""
+        msg = []
+
+        for i in experiments:
+            if i['technique']['method'] not in methods:
+                msg.append(
+                    f"Only '{methods}' sequencing method allowed, "
+                    f"found {i['technique']['method']} for {i['system_id']}.")
+
+        assert not msg, '\n'.join(msg)
+
+    def validate_pdx_only(self, experiments):
+        """Make sure experiments come from PDX samples."""
+        msg = []
+
+        for i in experiments:
+            if not i['sample']['is_pdx']:
+                msg.append(f"{i['system_id']} sample is not PDX derived")
+
+        assert not msg, '\n'.join(msg)
+
+    def validate_dna_only(self, experiments):
+        """Make sure experiments are DNA data."""
+        msg = []
+
+        for i in experiments:
+            if i['technique']['analyte'] != 'DNA':
+                msg.append(f"{i['system_id']} analyte is not DNA")
+
+        assert not msg, '\n'.join(msg)
+
+    def validate_rna_only(self, experiments):
+        """Make sure experiments are RNA data."""
+        msg = []
+
+        for i in experiments:
+            if i['technique']['analyte'] != 'RNA':
+                msg.append(f"{i['system_id']} analyte is not RNA")
+
+        assert not msg, '\n'.join(msg)
+
+    def validate_dna_pairs(self, targets, references):
+        """Validate targets, references tuples for base dna applications."""
+        self.validate_is_pair(targets, references)
+        self.validate_dna_only(targets + references)
+
+    def validate_same_technique(self, targets, references):
+        """Validate targets and references have same bedfile."""
+        ttec = {i['technique']['slug'] for i in targets}
+        rtec = {i['technique']['slug'] for i in references}
+        assert len(rtec) == 1, f'Expected one technique, got: {rtec}'
+        assert len(ttec) == 1, f'Expected one technique, got: {ttec}'
+        assert rtec == ttec, f'Same techniques required: {ttec}, {rtec}'
+
+    def validate_species(self, experiments):
+        """Validate experiments's species is same as application's setting."""
+        msg = []
+
+        for i in experiments:
+            if i['sample']['individual']['species'] != self.SPECIES:
+                msg.append(f'{i["system_id"]} species not supported')
+
+        assert not msg, '\n'.join(msg)
