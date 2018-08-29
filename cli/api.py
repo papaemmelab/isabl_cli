@@ -26,19 +26,19 @@ def chunks(array, size):
 
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
-    auth_url = f'{system_settings.API_BASE_URL}/auth'
+    url = f'{system_settings.API_BASE_URL}/auth'
     headers = {'Authorization': f'Token {user_settings.API_TOKEN}'}
-    response = requests.get(url=auth_url, headers=headers)
+    response = requests.get(url=url, headers=headers)
 
     if not response.ok:
         data = {
             "username": click.prompt('username', type=str, hide_input=False),
-            "password": click.prompt('password', type=str, hide_input=True)
-            }
+            "password": click.prompt('password', type=str, hide_input=True)}
 
-        response = requests.post(url=f'{auth_url}/token', data=data)
+        auth_url = f'{system_settings.API_BASE_URL}/rest-auth/login/'
+        response = requests.post(url=f'{auth_url}', data=data)
         response.raise_for_status()
-        user_settings.API_TOKEN = response.json()['token']
+        user_settings.API_TOKEN = response.json()['key']
         headers = {'Authorization': f'Token {user_settings.API_TOKEN}'}
 
     return headers

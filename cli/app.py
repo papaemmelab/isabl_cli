@@ -47,9 +47,9 @@ class AbstractApplication:
     """
     An Abstract application.
 
-    Whilst this project becomes more mature, the size of `AbstractApplication` is
-    expected to be reduced and split into components. As for now we will leave
-    all logic together so that functionality is transparent.
+    Whilst this project becomes more mature, the size of `AbstractApplication`
+    is expected to be reduced and split into components. As for now we will
+    leave all logic together so that functionality is transparent.
 
     For instance, the analysis execution logic could be included in a backend,
     same as data validation and analyses retrieval and creation.
@@ -186,8 +186,8 @@ class AbstractApplication:
         Merge analyses on a project level basis.
 
         If implemented, a new project level analyses will be created. This
-        function will only be called if no other analysis of the same application
-        is currently running or submitted.
+        function will only be called if no other analysis of the same
+        application is currently running or submitted.
 
         Arguments:
             storage_url (str): path of the project level analysis directory.
@@ -308,10 +308,10 @@ class AbstractApplication:
         """Return the application settings."""
         defaults = self.application_settings.copy()
         import_strings = set(self.application_import_strings)
-        import_strings.add('batch_system')
+        import_strings.add('submit_analyses')
 
-        if 'batch_system' not in defaults:
-            defaults['batch_system'] = 'cli.batch_systems.Local'
+        if 'submit_analyses' not in defaults:
+            defaults['submit_analyses'] = 'cli.batch_systems.submit_local'
 
         return ApplicationSettings(self, defaults, import_strings)
 
@@ -334,8 +334,8 @@ class AbstractApplication:
             assembly={'name': self.ASSEMBLY, 'species': self.SPECIES},
             application_class=application_class)
 
-        if application['application_class'] != application_class:  # pragma: no cover
-            api.patch_instance(
+        if application['application_class'] != application_class:
+            api.patch_instance(  # pragma: no cover
                 endpoint='applications',
                 identifier=application['pk'],
                 application_class=application_class)
@@ -457,8 +457,7 @@ class AbstractApplication:
                     skipped_tuples.append((i, error))
 
         if commit:
-            runner = self.settings.batch_system()
-            run_tuples = runner.submit_analyses(self, command_tuples)
+            run_tuples = self.settings.submit_analyses(self, command_tuples)
         else:
             run_tuples = [(i, 'STAGED') for i, _ in command_tuples]
             api.patch_analyses_status([i for i, _ in command_tuples], 'STAGED')
@@ -786,9 +785,11 @@ class AbstractApplication:
         """
         click.echo("Checking for existing analyses...", file=sys.stderr)
         projects = {j['pk'] for i in tuples for j in i[0][0]['projects']}
-        filters = dict(application=self.application['pk'], projects__pk__in=projects)
         cache = defaultdict(list)
         existing, missing = [], []
+        filters = dict(
+            application=self.application['pk'],
+            projects__pk__in=projects)
 
         def get_cache_key(targets, references):
             return (
