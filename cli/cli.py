@@ -50,8 +50,7 @@ if system_settings.is_admin_user:
         main.add_command(i)
 
     if system_settings.REFERENCE_DATA_IMPORTER:
-        main.add_command(
-            system_settings.REFERENCE_DATA_IMPORTER.as_cli_command())
+        main.add_command(system_settings.REFERENCE_DATA_IMPORTER.as_cli_command())
 
     if system_settings.DATA_IMPORTER:
         main.add_command(system_settings.DATA_IMPORTER.as_cli_command())

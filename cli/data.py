@@ -38,71 +38,75 @@ def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
         dict: patched experiment instance
     """
     utils.check_admin()
-    pk = experiment['pk']
-    bam_files = experiment['bam_files']
+    pk = experiment["pk"]
+    bam_files = experiment["bam_files"]
 
     if bam_files.get(assembly_name, None):
-        raise click.UsageError(f'Experiment {pk} already has {assembly_name} bam')
+        raise click.UsageError(f"Experiment {pk} already has {assembly_name} bam")
 
-    bam_files[assembly_name] = {'url': bam_url, 'analysis': analysis_pk}
-    return api.patch_instance('experiments', pk, bam_files=bam_files)
+    bam_files[assembly_name] = {"url": bam_url, "analysis": analysis_pk}
+    return api.patch_instance("experiments", pk, bam_files=bam_files)
 
 
 def symlink_experiment_to_projects(experiment):
     """Create symlink from experiment directory and projects directories."""
-    for i in experiment['projects']:
-        if not i['storage_url']:  # pragma: no cover
-            i = update_storage_url('projects', i['pk'])
+    for i in experiment["projects"]:
+        if not i["storage_url"]:  # pragma: no cover
+            i = update_storage_url("projects", i["pk"])
 
         utils.force_symlink(
-            experiment['storage_url'],
-            join(i['storage_url'], experiment['system_id']))
+            experiment["storage_url"], join(i["storage_url"], experiment["system_id"])
+        )
 
 
 def symlink_analysis_to_targets(analysis):
     """Create symlink from experiment directory and projects directories."""
-    if analysis['status'] != 'SUCCEEDED':
+    if analysis["status"] != "SUCCEEDED":
         return
 
-    src = analysis['storage_url']
-    dst = '__'.join([
-        analysis['application']['name'].lower().replace(' ', '_'),
-        analysis['application']['version'].lower().replace(' ', '_'),
-        str(analysis['pk'])])
+    src = analysis["storage_url"]
+    dst = "__".join(
+        [
+            analysis["application"]["name"].lower().replace(" ", "_"),
+            analysis["application"]["version"].lower().replace(" ", "_"),
+            str(analysis["pk"]),
+        ]
+    )
 
-    for i in analysis['targets']:
-        if not i['storage_url']:  # pragma: no cover
-            i = update_storage_url('experiments', i['pk'])
-        utils.force_symlink(src, join(i['storage_url'], dst))
+    for i in analysis["targets"]:
+        if not i["storage_url"]:  # pragma: no cover
+            i = update_storage_url("experiments", i["pk"])
+        utils.force_symlink(src, join(i["storage_url"], dst))
 
-    if analysis['project_level_analysis']:
-        i = analysis['project_level_analysis']
-        if not i['storage_url']:
-            i = update_storage_url('projects', i['pk'])
-        utils.force_symlink(src, join(i['storage_url'], dst))
+    if analysis["project_level_analysis"]:
+        i = analysis["project_level_analysis"]
+        if not i["storage_url"]:
+            i = update_storage_url("projects", i["pk"])
+        utils.force_symlink(src, join(i["storage_url"], dst))
 
 
 def trigger_analyses_merge(analysis):
     """Submit project level analyses merge if neccessary."""
-    if analysis['status'] not in {'SUCCEEDED', 'FAILED'}:
+    if analysis["status"] not in {"SUCCEEDED", "FAILED"}:
         return
 
     try:
-        application = import_from_string(analysis['application']['application_class'])()
+        application = import_from_string(analysis["application"]["application_class"])()
     except ImportError:
         return
 
-    if hasattr(application.merge_project_analyses, '__isabstractmethod__'):
+    if hasattr(application.merge_project_analyses, "__isabstractmethod__"):
         return  # pragma: no cover
 
-    projects = {j['pk']: j for i in analysis['targets'] for j in i['projects']}
+    projects = {j["pk"]: j for i in analysis["targets"] for j in i["projects"]}
 
     for i in projects.values():
         pending = api.get_instances_count(
-            endpoint='analyses',
-            status__in='STARTED,SUBMITTED',
-            application=analysis['application']['pk'],
-            projects=i['pk'])
+            endpoint="analyses",
+            status__in="STARTED,SUBMITTED",
+            application=analysis["application"]["pk"],
+            projects=i["pk"],
+        )
 
         if not pending:
             application.submit_project_merge(i)
@@ -110,22 +114,23 @@ def trigger_analyses_merge(analysis):
 
 def trash_analysis_storage(analysis):
     """Move analysis `storage_url` to a trash directory."""
-    if analysis['status'] == 'SUCCEEDED':
+    if analysis["status"] == "SUCCEEDED":
         raise click.UsageError("You can't wipe a succeeded analysis")
 
-    if isdir(analysis['storage_url']):
+    if isdir(analysis["storage_url"]):
         slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
         slug += datetime.now(system_settings.TIME_ZONE).isoformat()
 
         trash_dir = system_settings.MAKE_STORAGE_DIRECTORY(
             root=system_settings.BASE_STORAGE_DIRECTORY,
-            base='.analyses_trash',
+            base=".analyses_trash",
             identifier=analysis["pk"],
-            use_hash=True)
+            use_hash=True,
+        )
 
         dst = join(trash_dir, slug)
         click.echo(f"\ntrashing: {analysis['storage_url']} -> {dst}\n")
-        shutil.move(analysis['storage_url'], dst)
+        shutil.move(analysis["storage_url"], dst)
 
 
 def make_storage_directory(root, base, identifier, use_hash=False):
@@ -151,14 +156,14 @@ def make_storage_directory(root, base, identifier, use_hash=False):
         str: path to instance's data directory.
     """
     if not root:  # pragma: no cover
-        raise click.UsageError('Base storage root directory is required.')
+        raise click.UsageError("Base storage root directory is required.")
 
     if use_hash:
         if not str(identifier).isdigit():  # pragma: no cover
-            raise click.UsageError('`use_hash` only supported for integers.')
+            raise click.UsageError("`use_hash` only supported for integers.")
 
-        hash_1 = f'{identifier:04d}'[-4:-2]
-        hash_2 = f'{identifier:04d}'[-2:]
+        hash_1 = f"{identifier:04d}"[-4:-2]
+        hash_2 = f"{identifier:04d}"[-2:]
         path = join(base, hash_1, hash_2)
     else:
         path = join(base)
@@ -170,17 +175,17 @@ def make_storage_directory(root, base, identifier, use_hash=False):
 
 def update_storage_url(endpoint, identifier, use_hash=False, **data):
     """Make storage directory and return patched instance."""
-    data['storage_url'] = system_settings.MAKE_STORAGE_DIRECTORY(
+    data["storage_url"] = system_settings.MAKE_STORAGE_DIRECTORY(
         root=system_settings.BASE_STORAGE_DIRECTORY,
         base=endpoint,
         identifier=identifier,
-        use_hash=use_hash)
+        use_hash=use_hash,
+    )
 
     return api.patch_instance(endpoint, identifier, **data)
 
 
-class BaseImporter():
-
+class BaseImporter:
     @staticmethod
     def symlink(src, dst):
         """Create symlink from `src` to `dst`."""
@@ -197,8 +202,7 @@ class ReferenceDataImporter(BaseImporter):
     """An import engine for assemblies' `reference_data`."""
 
     @classmethod
-    def import_data(
-            cls, assembly, species, data_src, data_id, symlink, description):
+    def import_data(cls, assembly, species, data_src, data_id, symlink, description):
         """
         Register input_bed_path in technique's storage dir and update `data`.
 
@@ -214,52 +218,54 @@ class ReferenceDataImporter(BaseImporter):
             dict: updated assembly instance as retrieved from API.
         """
         utils.check_admin()
-        data_id = slugify(data_id, separator='_')
+        data_id = slugify(data_id, separator="_")
         click.echo(f'`data_id` set to: {click.style(data_id, fg="green")}')
         assembly = api.create_instance(
-            endpoint='assemblies',
-            name=assembly,
-            species=species)
+            endpoint="assemblies", name=assembly, species=species
+        )
 
-        if data_id in assembly['reference_data']:
+        if data_id in assembly["reference_data"]:
             raise click.UsageError(
                 f"Assembly '{assembly['name']}' "
                 f"has already reference data registered with id '{data_id}':\n"
-                f'\n\t{assembly["reference_data"][data_id]}')
+                f'\n\t{assembly["reference_data"][data_id]}'
+            )
 
-        if not assembly['storage_url']:
-            assembly = update_storage_url('assemblies', assembly['name'])
+        if not assembly["storage_url"]:
+            assembly = update_storage_url("assemblies", assembly["name"])
 
-        data_dir = join(assembly['storage_url'], data_id)
+        data_dir = join(assembly["storage_url"], data_id)
         data_dst = join(data_dir, basename(data_src))
         os.makedirs(data_dir, exist_ok=True)
 
         if symlink:
-            click.echo(f'\nLinking:\n\t{data_src}\n\tto {data_dst}')
+            click.echo(f"\nLinking:\n\t{data_src}\n\tto {data_dst}")
             cls.symlink(data_src, data_dst)
         else:
-            click.echo(f'\nMoving:\n\t{data_src}\n\tto {data_dst}')
+            click.echo(f"\nMoving:\n\t{data_src}\n\tto {data_dst}")
             cls.move(data_src, data_dst)
 
-        click.secho(f'\nSuccess! patching {assembly["name"]}...', fg='green')
-        assembly['reference_data'][data_id] = {}
-        assembly['reference_data'][data_id]['url'] = data_dst
-        assembly['reference_data'][data_id]['description'] = description
+        click.secho(f'\nSuccess! patching {assembly["name"]}...', fg="green")
+        assembly["reference_data"][data_id] = {}
+        assembly["reference_data"][data_id]["url"] = data_dst
+        assembly["reference_data"][data_id]["description"] = description
 
         return api.patch_instance(
-            endpoint='assemblies',
-            identifier=assembly['pk'],
-            storage_usage=utils.get_tree_size(assembly['storage_url']),
-            reference_data=assembly['reference_data'])
+            endpoint="assemblies",
+            identifier=assembly["pk"],
+            storage_usage=utils.get_tree_size(assembly["storage_url"]),
+            reference_data=assembly["reference_data"],
+        )
 
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        @click.command(name='import_reference_data')
-        @click.option('--assembly', help='name of reference genome')
-        @click.option('--species', help='species of reference genome')
-        @click.option('--description', help='reference data description')
-        @click.option('--data-id', help='data identifier (will be slugified)')
+        # build cli command and return it
+        @click.command(name="import_reference_data")
+        @click.option("--assembly", help="name of reference genome")
+        @click.option("--species", help="species of reference genome")
+        @click.option("--description", help="reference data description")
+        @click.option("--data-id", help="data identifier (will be slugified)")
         @options.REFERENCE_DATA_SOURCE
         @options.SYMLINK
         def cmd(assembly, data_id, symlink, description, data_src, species):
@@ -286,34 +292,41 @@ class ReferenceDataImporter(BaseImporter):
                 data_src=data_src,
                 assembly=assembly,
                 species=species,
-                description=description)
+                description=description,
+            )
 
         return cmd
 
 
-class BedImporter():
+class BedImporter:
 
     """An import engine for techniques' bed_files."""
 
     @staticmethod
     def process_bedfile(path):
         """Sort, tabix and gzip a bedfile."""
-        command = ['sort', '-k1,1V', '-k2,2n', path]
+        command = ["sort", "-k1,1V", "-k2,2n", path]
         sorted_bed = subprocess.check_output(command)
 
-        with open(path, '+w') as f:
-            f.write(sorted_bed.decode('utf-8'))
+        with open(path, "+w") as f:
+            f.write(sorted_bed.decode("utf-8"))
 
-        subprocess.check_call(['bgzip', path])
-        subprocess.check_call(['tabix', '-p', 'bed', path + '.gz'])
+        subprocess.check_call(["bgzip", path])
+        subprocess.check_call(["tabix", "-p", "bed", path + ".gz"])
 
-        with open(path, '+w') as f:  # write uncompressed file again
-            f.write(sorted_bed.decode('utf-8'))
+        with open(path, "+w") as f:  # write uncompressed file again
+            f.write(sorted_bed.decode("utf-8"))
 
     @classmethod
     def import_bedfiles(
-            cls, technique_key, targets_path, baits_path,
-            assembly, species, description=None):
+        cls,
+        technique_key,
+        targets_path,
+        baits_path,
+        assembly,
+        species,
+        description=None,
+    ):
         """
         Register input_bed_path in technique's storage dir and update `data`.
 
@@ -329,53 +342,56 @@ class BedImporter():
             dict: updated technique instance as retrieved from API.
         """
         utils.check_admin()
-        technique = api.get_instance('techniques', technique_key)
+        technique = api.get_instance("techniques", technique_key)
 
-        if assembly in technique['bed_files']:
+        if assembly in technique["bed_files"]:
             raise click.UsageError(
                 f"Technique '{technique['slug']}' "
                 f"has registered bed_files for '{assembly}':\n"
                 f'\n\t{technique["bed_files"][assembly]["targets"]}'
-                f'\n\t{technique["bed_files"][assembly]["baits"]}')
+                f'\n\t{technique["bed_files"][assembly]["baits"]}'
+            )
 
-        if not technique['storage_url']:
-            technique = update_storage_url('techniques', technique['pk'])
+        if not technique["storage_url"]:
+            technique = update_storage_url("techniques", technique["pk"])
 
-        api.create_instance('assemblies', name=assembly, species=species)
-        beds_dir = join(technique['storage_url'], 'bed_files', assembly)
+        api.create_instance("assemblies", name=assembly, species=species)
+        beds_dir = join(technique["storage_url"], "bed_files", assembly)
         base_name = f'{technique["slug"]}.{assembly}'
-        targets_dst = join(beds_dir, f'{base_name}.targets.bed')
-        baits_dst = join(beds_dir, f'{base_name}.baits.bed')
+        targets_dst = join(beds_dir, f"{base_name}.targets.bed")
+        baits_dst = join(beds_dir, f"{base_name}.baits.bed")
         os.makedirs(beds_dir, exist_ok=True)
 
         for src, dst in [(targets_path, targets_dst), (baits_path, baits_dst)]:
-            click.echo(f'\nCopying:\n\t{src}\n\tto {dst}')
+            click.echo(f"\nCopying:\n\t{src}\n\tto {dst}")
             shutil.copy(src, dst)
-            click.secho(f'\nProcessing {basename(dst)}...', fg='blue')
+            click.secho(f"\nProcessing {basename(dst)}...", fg="blue")
             cls.process_bedfile(dst)
 
-        click.secho(f'\nSuccess! patching {technique["slug"]}...', fg='green')
-        technique['bed_files'][assembly] = {}
-        technique['bed_files'][assembly]['targets'] = targets_dst
-        technique['bed_files'][assembly]['baits'] = baits_dst
-        technique['bed_files'][assembly]['description'] = description
+        click.secho(f'\nSuccess! patching {technique["slug"]}...', fg="green")
+        technique["bed_files"][assembly] = {}
+        technique["bed_files"][assembly]["targets"] = targets_dst
+        technique["bed_files"][assembly]["baits"] = baits_dst
+        technique["bed_files"][assembly]["description"] = description
 
         return api.patch_instance(
-            endpoint='techniques',
-            identifier=technique['pk'],
-            storage_usage=utils.get_tree_size(technique['storage_url']),
-            bed_files=technique['bed_files'])
+            endpoint="techniques",
+            identifier=technique["pk"],
+            storage_usage=utils.get_tree_size(technique["storage_url"]),
+            bed_files=technique["bed_files"],
+        )
 
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        @click.command(name='import_bedfiles')
+        # build cli command and return it
+        @click.command(name="import_bedfiles")
         @options.TECHNIQUE_PRIMARY_KEY
         @options.TARGETS_PATH
         @options.BAITS_PATH
-        @click.option('--assembly', help='name of reference genome')
-        @click.option('--species', help='name of species')
-        @click.option('--description', help='bed_files description')
+        @click.option("--assembly", help="name of reference genome")
+        @click.option("--species", help="name of species")
+        @click.option("--description", help="bed_files description")
         def cmd(key, assembly, targets_path, baits_path, description, species):
             """
             Register targets and baits bed_files in technique's data directory.
@@ -400,7 +416,8 @@ class BedImporter():
                 baits_path=baits_path,
                 assembly=assembly,
                 species=species,
-                description=description)
+                description=description,
+            )
 
         return cmd
 
@@ -416,13 +433,19 @@ class DataImporter(BaseImporter):
         CRAM_REGEX (str): a regex pattern to match crams.
     """
 
-    BAM_REGEX = r'\.bam$'
-    CRAM_REGEX = r'\.cram$'
-    FASTQ_REGEX = r'(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$'
+    BAM_REGEX = r"\.bam$"
+    CRAM_REGEX = r"\.cram$"
+    FASTQ_REGEX = r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$"
 
     def import_data(
-            self, directories, symlink=False, commit=False,
-            key=lambda x: x['system_id'], files_data=None, **filters):
+        self,
+        directories,
+        symlink=False,
+        commit=False,
+        key=lambda x: x["system_id"],
+        files_data=None,
+        **filters,
+    ):
         """
         Import raw data for multiple experiments.
 
@@ -457,11 +480,10 @@ class DataImporter(BaseImporter):
         # validate files_data
         for i, j in files_data.items():
             if not isinstance(j, dict):  # pragma: no cover
-                raise click.UsageError(
-                    f'Invalid file data, expected dict {i}: {j}')
+                raise click.UsageError(f"Invalid file data, expected dict {i}: {j}")
 
         # get experiments and load cache dictionary
-        for i in api.get_instances('experiments', verbose=True, **filters):
+        for i in api.get_instances("experiments", verbose=True, **filters):
             index = f"primary_key_{i['pk']}"
             using_id = f"{i['system_id']} (Skipped, identifier is NULL)"
             identifier = key(i)
@@ -469,22 +491,23 @@ class DataImporter(BaseImporter):
             if identifier in identifiers:  # duplicated identifiers not valid
                 raise click.UsageError(
                     f"Can't use same identifier for {i['system_id']} "
-                    f'and {identifiers[identifier]}: {identifier}')
+                    f"and {identifiers[identifier]}: {identifier}"
+                )
 
-            if identifier and not i['sequencing_data']:
-                identifiers[identifier] = i['system_id']
+            if identifier and not i["sequencing_data"]:
+                identifiers[identifier] = i["system_id"]
                 patterns.append(self.get_regex_pattern(index, identifier))
                 using_id = f"{i['system_id']} (using {identifier})"
 
-            cache[index]['using_id'] = using_id
-            cache[index]['instance'] = i
-            cache[index]['files'] = []
+            cache[index]["using_id"] = using_id
+            cache[index]["instance"] = i
+            cache[index]["files"] = []
 
         if patterns:
             # see http://stackoverflow.com/questions/8888567 for pattern
-            pattern = re.compile('|'.join(patterns))
+            pattern = re.compile("|".join(patterns))
             data_storage_dir = system_settings.BASE_STORAGE_DIRECTORY
-            label = f'Exploring directories...'
+            label = f"Exploring directories..."
 
             # explore dirs
             for directory in directories:
@@ -495,21 +518,24 @@ class DataImporter(BaseImporter):
                                 path = join(root, i)
                                 index = self.match_path(path, pattern)
                                 if index:
-                                    cache[index]['files'].append(path)
+                                    cache[index]["files"].append(path)
 
             # process files if needed
-            label = 'Processing...'
-            bar = sorted(cache.values(), key=lambda x: x['instance']['pk'])
+            label = "Processing..."
+            bar = sorted(cache.values(), key=lambda x: x["instance"]["pk"])
             with click.progressbar(bar, label=label) as bar:
                 for i in bar:
-                    if commit and i['files']:
-                        experiments_matched.append(self.import_files(
-                            instance=i['instance'],
-                            files=i['files'],
-                            symlink=symlink,
-                            files_data=files_data))
-                    elif i['files']:  # pragma: no cover
-                        experiments_matched.append(i['instance'])
+                    if commit and i["files"]:
+                        experiments_matched.append(
+                            self.import_files(
+                                instance=i["instance"],
+                                files=i["files"],
+                                symlink=symlink,
+                                files_data=files_data,
+                            )
+                        )
+                    elif i["files"]:  # pragma: no cover
+                        experiments_matched.append(i["instance"])
 
         return experiments_matched, self.get_summary(cache)
 
@@ -528,8 +554,8 @@ class DataImporter(BaseImporter):
                 if re.search(self.FASTQ_REGEX.format(i), path):
                     valid = True
 
-            if re.search(r'\.f(ast)?q(\.gz)?$', path) and not valid:
-                msg = f'cant determine if read 1 or read 2 from: {path}'
+            if re.search(r"\.f(ast)?q(\.gz)?$", path) and not valid:
+                msg = f"cant determine if read 1 or read 2 from: {path}"
                 raise click.UsageError(msg)
 
             assert valid
@@ -559,13 +585,12 @@ class DataImporter(BaseImporter):
         sequencing_data = []
         src_dst = []
 
-        if not instance['storage_url']:
+        if not instance["storage_url"]:
             instance = update_storage_url(
-                endpoint='experiments',
-                identifier=instance['pk'],
-                use_hash=True)
+                endpoint="experiments", identifier=instance["pk"], use_hash=True
+            )
 
-        data_dir = join(instance['storage_url'], 'data')
+        data_dir = join(instance["storage_url"], "data")
         os.makedirs(data_dir, exist_ok=True)
 
         for src in files:
@@ -573,32 +598,36 @@ class DataImporter(BaseImporter):
             file_data = files_data.get(file_name, {})
 
             if re.search(self.BAM_REGEX, src):
-                file_type = 'BAM'
+                file_type = "BAM"
                 dtypes.add(file_type)
             elif re.search(self.CRAM_REGEX, src):
-                file_type = 'CRAM'
+                file_type = "CRAM"
                 dtypes.add(file_type)
             else:
                 file_name, file_type = self.format_fastq_name(file_name)
-                dtypes.add('FASTQ')
+                dtypes.add("FASTQ")
 
-            if not file_name.startswith(instance['system_id']):
+            if not file_name.startswith(instance["system_id"]):
                 file_name = f'{instance["system_id"]}_{uuid4().hex}_{file_name}'
 
             dst = join(data_dir, file_name)
             src_dst.append((src, dst))
-            sequencing_data.append(dict(
-                file_url=dst,
-                file_type=file_type,
-                file_data=file_data,
-                hash_value=getsize(src),
-                hash_method="os.path.getsize"))
+            sequencing_data.append(
+                dict(
+                    file_url=dst,
+                    file_type=file_type,
+                    file_data=file_data,
+                    hash_value=getsize(src),
+                    hash_method="os.path.getsize",
+                )
+            )
 
         if len(dtypes) > 1:
             raise click.UsageError(
-                'We should have catched this earlier, but multiple formats are '
+                "We should have catched this earlier, but multiple formats are "
                 f'not supported, these were found for {instance["system_id"]}: '
-                f'{",".join(i["file_url"] for i in sequencing_data)}')
+                f'{",".join(i["file_url"] for i in sequencing_data)}'
+            )
 
         for src, dst in src_dst:
             if symlink:
@@ -607,31 +636,32 @@ class DataImporter(BaseImporter):
                 self.move(src, dst)
 
         return api.patch_instance(
-            endpoint='experiments',
-            identifier=instance['pk'],
-            storage_url=instance['storage_url'],
-            storage_usage=utils.get_tree_size(instance['storage_url']),
-            sequencing_data=sequencing_data)
+            endpoint="experiments",
+            identifier=instance["pk"],
+            storage_url=instance["storage_url"],
+            storage_usage=utils.get_tree_size(instance["storage_url"]),
+            sequencing_data=sequencing_data,
+        )
 
     def format_fastq_name(self, file_name):
         """Return destination file name."""
         suffix = None
 
         for i in [1, 2]:
-            file_type = f'FASTQ_R{i}'
+            file_type = f"FASTQ_R{i}"
 
             if re.search(self.FASTQ_REGEX.format(i), file_name):
-                suffix = f'_{system_settings.FASTQ_READ_PREFIX}{i}.fastq'
+                suffix = f"_{system_settings.FASTQ_READ_PREFIX}{i}.fastq"
                 break
 
         assert suffix, f"Couldn't determine read 1 or read 2 from {file_name}"
-        letter_index_fastq = r'[_.]R{}([_.])?\.f(ast)?q'.format(i)
-        number_index_fastq = r'[_.]{}([_.])?\.f(ast)?q'.format(i)
-        letter_index_any_location = r'[_.]R{}[_.]'.format(i)
-        file_name = re.sub(letter_index_fastq, '.fastq', file_name)
-        file_name = re.sub(number_index_fastq, '.fastq', file_name)
-        file_name = re.sub(letter_index_any_location, '_', file_name)
-        return re.sub(r'[_.]f(ast)?q', suffix, file_name), file_type
+        letter_index_fastq = r"[_.]R{}([_.])?\.f(ast)?q".format(i)
+        number_index_fastq = r"[_.]{}([_.])?\.f(ast)?q".format(i)
+        letter_index_any_location = r"[_.]R{}[_.]".format(i)
+        file_name = re.sub(letter_index_fastq, ".fastq", file_name)
+        file_name = re.sub(number_index_fastq, ".fastq", file_name)
+        file_name = re.sub(letter_index_any_location, "_", file_name)
+        return re.sub(r"[_.]f(ast)?q", suffix, file_name), file_type
 
     @staticmethod
     def get_regex_pattern(group_name, identifier):
@@ -647,40 +677,42 @@ class DataImporter(BaseImporter):
         Returns:
             str: a regex pattern.
         """
-        pattern = re.sub(r'[-_.]', r'[-_.]', identifier)
-        return r'(?P<{}>(^|[-_.])?{}[-_.])'.format(group_name, pattern)
+        pattern = re.sub(r"[-_.]", r"[-_.]", identifier)
+        return r"(?P<{}>(^|[-_.])?{}[-_.])".format(group_name, pattern)
 
     @staticmethod
     def get_summary(cache):
         """Get a summary of the matched, skipped, and missing files."""
-        skipped, missing, matched, total_matched, nl = [], [], [], 0, '\n'
+        skipped, missing, matched, total_matched, nl = [], [], [], 0, "\n"
 
         for i in cache.values():
-            if i['instance']['sequencing_data']:
-                msg = click.style(f"skipped {i['using_id']}\t", fg='cyan')
+            if i["instance"]["sequencing_data"]:
+                msg = click.style(f"skipped {i['using_id']}\t", fg="cyan")
                 skipped.append(msg)
-            elif i['files']:
-                msg = click.style(f"found {i['using_id']}\n\t\t", fg='green')
-                total_matched += len(i['files'])
-                matched.append(msg + '\n\t\t'.join(i['files']))
+            elif i["files"]:
+                msg = click.style(f"found {i['using_id']}\n\t\t", fg="green")
+                total_matched += len(i["files"])
+                matched.append(msg + "\n\t\t".join(i["files"]))
             else:
-                msg = click.style(f"missing {i['using_id']}\t", fg='red')
-                missing.append(msg + 'no files matched')
+                msg = click.style(f"missing {i['using_id']}\t", fg="red")
+                missing.append(msg + "no files matched")
 
         return (
             f"{nl.join([nl] + skipped) if skipped else ''}"
             f"{nl.join([nl] + missing) if missing else ''}"
             f"{nl.join([nl] + matched) if matched else ''}"
-            f'\n\ntotal samples: {len(cache)}'
-            f'\nsamples skipped: {len(skipped)}'
-            f'\nsamples missing: {len(missing)}'
-            f'\nsamples matched: {len(matched)}'
-            f'\ntotal files matched: {total_matched}')
+            f"\n\ntotal samples: {len(cache)}"
+            f"\nsamples skipped: {len(skipped)}"
+            f"\nsamples missing: {len(missing)}"
+            f"\nsamples matched: {len(matched)}"
+            f"\ntotal files matched: {total_matched}"
+        )
 
     @classmethod
     def as_cli_command(cls):
         """Get data importer as a click command line interface."""
-        @click.command(name='import_data')
+        # build cli command and return it
+        @click.command(name="import_data")
         @options.DIRECTORIES
         @options.IDENTIFIER
         @options.FILTERS
@@ -711,14 +743,16 @@ class DataImporter(BaseImporter):
                     LB: Library2
                     ...
             """
+            # function to get nested attributes from dictionary
             def key(experiment):
                 value, types = experiment, (int, str, type(None))
                 for i in identifier:
                     value = value.get(i)
                 if not isinstance(value, types):
                     raise click.UsageError(
-                        f'invalid type for identifier '
-                        f'`{".".join(identifier)}`: {type(value)}')
+                        f"invalid type for identifier "
+                        f'`{".".join(identifier)}`: {type(value)}'
+                    )
                 return value
 
             if files_data:
@@ -728,8 +762,13 @@ class DataImporter(BaseImporter):
                 files_data = {}
 
             matched, summary = cls().import_data(
-                directories=directories, symlink=symlink, commit=commit,
-                key=key, files_data=files_data, **filters)
+                directories=directories,
+                symlink=symlink,
+                commit=commit,
+                key=key,
+                files_data=files_data,
+                **filters,
+            )
 
             click.echo(summary)
 

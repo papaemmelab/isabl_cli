@@ -8,9 +8,5 @@ from cli.app import AbstractApplication
 from cli.exceptions import MissingDataError
 from cli.exceptions import ValidationError
 
-ROOT = abspath(dirname(__file__))  # make sure we use absolute paths
-
-with open(join(ROOT, "VERSION"), "r") as version_file:
-    VERSION = version_file.read().strip()
-
-__version__ = VERSION
+with open(join(abspath(dirname(__file__)), "VERSION"), "r") as version_file:
+    __version__ = version_file.read().strip()

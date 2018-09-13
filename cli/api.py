@@ -15,7 +15,9 @@ from cli.settings import system_settings
 from cli.settings import user_settings
 from cli.settings import import_from_string
 
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)  # pylint: disable=E1101
+requests.packages.urllib3.disable_warnings(  # pylint: disable=E1101
+    InsecureRequestWarning
+)
 
 
 def chunks(array, size):
@@ -26,45 +28,46 @@ def chunks(array, size):
 
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
-    url = f'{system_settings.API_BASE_URL}/auth'
-    headers = {'Authorization': f'Token {user_settings.API_TOKEN}'}
+    url = f"{system_settings.API_BASE_URL}/auth"
+    headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
     response = requests.get(url=url, headers=headers)
 
     if not response.ok:
         data = {
-            "username": click.prompt('username', type=str, hide_input=False),
-            "password": click.prompt('password', type=str, hide_input=True)}
+            "username": click.prompt("username", type=str, hide_input=False),
+            "password": click.prompt("password", type=str, hide_input=True),
+        }
 
-        auth_url = f'{system_settings.API_BASE_URL}/rest-auth/login/'
-        response = requests.post(url=f'{auth_url}', data=data)
+        auth_url = f"{system_settings.API_BASE_URL}/rest-auth/login/"
+        response = requests.post(url=f"{auth_url}", data=data)
         response.raise_for_status()
-        user_settings.API_TOKEN = response.json()['key']
-        headers = {'Authorization': f'Token {user_settings.API_TOKEN}'}
+        user_settings.API_TOKEN = response.json()["key"]
+        headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
 
     return headers
 
 
 def api_request(method, **kwargs):
     """Perform any request operation using a naive retry implementation."""
-    kwargs['headers'] = get_token_headers()
-    kwargs['params'] = kwargs.get('params', {})
-    kwargs['params']['format'] = 'json'
+    kwargs["headers"] = get_token_headers()
+    kwargs["params"] = kwargs.get("params", {})
+    kwargs["params"]["format"] = "json"
 
     for i in [0.2, 0.4, 0.6, 0.8, 5, 10]:  # attempt some retries
         response = getattr(requests, method)(verify=False, **kwargs)
 
-        if not str(response.status_code).startswith('50'):
+        if not str(response.status_code).startswith("50"):
             break
         else:  # pragma: no cover
             time.sleep(i)
 
     if not response.ok:
         try:
-            msg = click.style(str(response.json()), fg='red', blink=True)
+            msg = click.style(str(response.json()), fg="red", blink=True)
         except Exception:  # pylint: disable=broad-except
-            msg = ''
+            msg = ""
 
-        click.echo(f'Request Error: {response.url}\n{msg}')
+        click.echo(f"Request Error: {response.url}\n{msg}")
         response.raise_for_status()
 
     return response
@@ -85,15 +88,15 @@ def process_api_filters(**filters):
 
     for key, value in filters.items():
         if isinstance(value, (str, int, float, type(None))):
-            if key == 'fields' and 'pk' not in value:  # pk is required
-                value = ','.join(value.split(',') + ['pk'])
+            if key == "fields" and "pk" not in value:  # pk is required
+                value = ",".join(value.split(",") + ["pk"])
             filters_dict[key] = value
         elif isinstance(value, collections.Iterable):
-            is_in = key.endswith('__in') or key.endswith('__in!')
+            is_in = key.endswith("__in") or key.endswith("__in!")
             value = list(map(str, value))
-            filters_dict[key] = [','.join(value)] if is_in else value
+            filters_dict[key] = [",".join(value)] if is_in else value
         else:  # pragma: no cover
-            raise click.UsageError(f'Invalid filter: {key}, {value}')
+            raise click.UsageError(f"Invalid filter: {key}, {value}")
 
     return filters_dict
 
@@ -109,18 +112,18 @@ def iterate(url, **filters):
     Returns:
         list: of objects in the 'results' key of the API response.
     """
-    limit = int(filters.get('limit', 5000))  # default limit to 5000 per hit
-    filters['limit'] = limit
+    limit = int(filters.get("limit", 5000))  # default limit to 5000 per hit
+    filters["limit"] = limit
     filters = process_api_filters(**filters)
     nexturl = url
     objects = []
 
     while nexturl:
         filters = filters if nexturl == url else {}  # nexturl includes params
-        response = api_request('get', url=nexturl, params=filters)
+        response = api_request("get", url=nexturl, params=filters)
         results = response.json()
-        nexturl = results['next']
-        objects += results['results']
+        nexturl = results["next"]
+        objects += results["results"]
 
         if len(objects) >= limit:  # pragma: no cover
             message = f'retrieved {len(objects)} ouf of {results["count"]}...'
@@ -140,8 +143,8 @@ def get_instance(endpoint, identifier):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
-    return api_request('get', url=url).json()
+    url = f"{system_settings.API_BASE_URL}/{endpoint}/{identifier}"
+    return api_request("get", url=url).json()
 
 
 def create_instance(endpoint, **data):
@@ -155,8 +158,8 @@ def create_instance(endpoint, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f'{system_settings.API_BASE_URL}/{endpoint}'
-    return api_request('post', url=url, json=data).json()
+    url = f"{system_settings.API_BASE_URL}/{endpoint}"
+    return api_request("post", url=url, json=data).json()
 
 
 def patch_instance(endpoint, identifier, **data):
@@ -171,14 +174,14 @@ def patch_instance(endpoint, identifier, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
-    instance = api_request('patch', url=url, json=data).json()
+    url = f"{system_settings.API_BASE_URL}/{endpoint}/{identifier}"
+    instance = api_request("patch", url=url, json=data).json()
 
-    if endpoint == 'analyses' and instance.get('status'):
-        _run_signals('analyses', instance, system_settings.ON_STATUS_CHANGE)
+    if endpoint == "analyses" and instance.get("status"):
+        _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
 
-    if endpoint == 'experiments' and instance.get('sequencing_data'):
-        _run_signals('experiments', instance, system_settings.ON_DATA_IMPORT)
+    if endpoint == "experiments" and instance.get("sequencing_data"):
+        _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
     return instance
 
@@ -191,8 +194,8 @@ def delete_instance(endpoint, identifier):
         identifier (str): a primary key, system_id, email or username.
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
     """
-    url = f'{system_settings.API_BASE_URL}/{endpoint}/{identifier}'
-    api_request('delete', url=url)
+    url = f"{system_settings.API_BASE_URL}/{endpoint}/{identifier}"
+    api_request("delete", url=url)
 
 
 def get_instances(endpoint, identifiers=None, verbose=False, **filters):
@@ -214,21 +217,21 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
     Returns:
         list: of types.SimpleNamespace objects loaded with dicts from API.
     """
-    check_system_id = endpoint in {'individuals', 'samples', 'experiments'}
-    url = f'{system_settings.API_BASE_URL}/{endpoint}'
+    check_system_id = endpoint in {"individuals", "samples", "experiments"}
+    url = f"{system_settings.API_BASE_URL}/{endpoint}"
     instances = []
     keys = set()
 
     if verbose:
         count = get_instances_count(endpoint, **filters)
         count += len(identifiers or [])
-        ids_msg = ' at least ' if identifiers else ' '  # ids may be in filters
-        count = f'Retrieving{ids_msg}{count} from {endpoint} API endpoint...'
+        ids_msg = " at least " if identifiers else " "  # ids may be in filters
+        count = f"Retrieving{ids_msg}{count} from {endpoint} API endpoint..."
         click.echo(count, err=True)
 
     if filters or identifiers is None:
         instances += iterate(url, **filters)
-        keys = {i['pk'] for i in instances if i.get('pk')}
+        keys = {i["pk"] for i in instances if i.get("pk")}
 
     for chunk in chunks(identifiers or [], 10000):
         primary_keys = set()
@@ -240,16 +243,16 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
             elif check_system_id:
                 system_ids.add(i)
             else:  # pragma: no cover
-                msg = f'msg invalid identifier for {endpoint}: {i}'
+                msg = f"msg invalid identifier for {endpoint}: {i}"
                 raise click.UsageError(msg)
 
         if primary_keys:
-            kwargs = {'pk__in': ','.join(primary_keys), 'url': url}
-            instances += [i for i in iterate(**kwargs) if i['pk'] not in keys]
+            kwargs = {"pk__in": ",".join(primary_keys), "url": url}
+            instances += [i for i in iterate(**kwargs) if i["pk"] not in keys]
 
         if system_ids:
-            kwargs = {'system_id__in': ','.join(system_ids), 'url': url}
-            instances += [i for i in iterate(**kwargs) if i['pk'] not in keys]
+            kwargs = {"system_id__in": ",".join(system_ids), "url": url}
+            instances += [i for i in iterate(**kwargs) if i["pk"] not in keys]
 
     return instances
 
@@ -265,20 +268,20 @@ def get_instances_count(endpoint, **filters):
     Returns:
         int: count of objects matching the provided filters.
     """
-    url = f'{system_settings.API_BASE_URL}/{endpoint}'
+    url = f"{system_settings.API_BASE_URL}/{endpoint}"
     filters = process_api_filters(**filters)
-    filters['limit'] = 1
-    return int(api_request('get', url=url, params=filters).json()['count'])
+    filters["limit"] = 1
+    return int(api_request("get", url=url, params=filters).json()["count"])
 
 
 def get_tree(identifier):
     """Get everything for an individual."""
-    return get_instance('individuals/tree', identifier)
+    return get_instance("individuals/tree", identifier)
 
 
 def get_trees(identifiers=None, **filters):
     """Get everything for multiple individuals."""
-    return get_instances('individuals/tree', identifiers, **filters)
+    return get_instances("individuals/tree", identifiers, **filters)
 
 
 def patch_analyses_status(analyses, status):
@@ -295,19 +298,19 @@ def patch_analyses_status(analyses, status):
     Returns:
         list: of updated analyses.
     """
-    data = {'ids': [], 'status': status, 'ran_by': system_settings.api_username}
-    url = f'{system_settings.API_BASE_URL}/analyses/bulk_update/'
-    assert status in {'SUBMITTED', 'STAGED'}, f'status not supported: {status}'
+    data = {"ids": [], "status": status, "ran_by": system_settings.api_username}
+    url = f"{system_settings.API_BASE_URL}/analyses/bulk_update/"
+    assert status in {"SUBMITTED", "STAGED"}, f"status not supported: {status}"
 
     for i in analyses:  # change locally, bulk_update doesn't return instances
-        i['status'] = status
-        i['ran_by'] = data.get('ran_by', i['ran_by'])
-        data['ids'].append(i['pk'])
+        i["status"] = status
+        i["ran_by"] = data.get("ran_by", i["ran_by"])
+        data["ids"].append(i["pk"])
 
-    api_request('patch', url=url, json=data)
+    api_request("patch", url=url, json=data)
 
     for i in analyses:
-        _run_signals('analyses', i, system_settings.ON_STATUS_CHANGE)
+        _run_signals("analyses", i, system_settings.ON_STATUS_CHANGE)
 
     return analyses
 
@@ -325,40 +328,40 @@ def patch_analysis_status(analysis, status):
     Returns:
         dict: patched analysis instance.
     """
-    data = {'status': status}
-    application = analysis['application']
-    storage_url = analysis['storage_url']
+    data = {"status": status}
+    application = analysis["application"]
+    storage_url = analysis["storage_url"]
 
-    if status in {'FAILED', 'SUCCEEDED', 'IN_PROGRESS'}:
-        data['storage_usage'] = utils.get_tree_size(storage_url)
+    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS"}:
+        data["storage_usage"] = utils.get_tree_size(storage_url)
 
     # admin must own directory of regular analyses
-    if status == 'SUCCEEDED' and not analysis['project_level_analysis']:
+    if status == "SUCCEEDED" and not analysis["project_level_analysis"]:
         utils.check_admin()
 
-        if analysis['ran_by'] != system_settings.api_username:
-            src = storage_url + '__tmp'
+        if analysis["ran_by"] != system_settings.api_username:
+            src = storage_url + "__tmp"
             shutil.move(storage_url, src)
-            cmd = utils.get_rsync_command(src, storage_url, chmod='a-w')
+            cmd = utils.get_rsync_command(src, storage_url, chmod="a-w")
             subprocess.check_call(cmd, shell=True)
 
-    if status in {'SUCCEEDED', 'IN_PROGRESS'}:
+    if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
-            application = import_from_string(application['application_class'])()
+            application = import_from_string(application["application_class"])()
             get_results = application.get_analysis_results
 
-            if analysis['project_level_analysis']:
+            if analysis["project_level_analysis"]:
                 get_results = application.get_project_analysis_results
 
-            data['results'] = get_results(analysis)
+            data["results"] = get_results(analysis)
         except ImportError:
             pass
         except Exception as error:  # pragma: no cover
-            data['status'] = 'FAILED'
-            patch_instance('analyses', analysis['pk'], **data)
+            data["status"] = "FAILED"
+            patch_instance("analyses", analysis["pk"], **data)
             raise error
 
-    return patch_instance('analyses', analysis['pk'], **data)
+    return patch_instance("analyses", analysis["pk"], **data)
 
 
 def _run_signals(endpoint, instance, signals):

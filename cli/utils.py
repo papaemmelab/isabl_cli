@@ -12,12 +12,13 @@ from cli.settings import system_settings
 
 
 def get_results(
-        experiment,
-        application_key,
-        result_key,
-        targets=None,
-        references=None,
-        analyses=None):
+    experiment,
+    application_key,
+    result_key,
+    targets=None,
+    references=None,
+    analyses=None,
+):
     """
     Match results from a experiment object.
 
@@ -38,15 +39,15 @@ def get_results(
         list: of tuples (result_value, analysis primary key).
     """
     results = []
-    targets = {i['pk'] for i in targets or []}
-    references = {i['pk'] for i in references or []}
-    analyses = {i['pk'] for i in analyses or []}
+    targets = {i["pk"] for i in targets or []}
+    references = {i["pk"] for i in references or []}
+    analyses = {i["pk"] for i in analyses or []}
 
-    for i in experiment['results']:
-        if i['application']['pk'] == application_key:
-            i_targets = {j['pk'] for j in i['targets']}
-            i_references = {j['pk'] for j in i['references']}
-            i_analyses = set(i['analyses'])
+    for i in experiment["results"]:
+        if i["application"]["pk"] == application_key:
+            i_targets = {j["pk"] for j in i["targets"]}
+            i_references = {j["pk"] for j in i["references"]}
+            i_analyses = set(i["analyses"])
 
             if targets and i_targets.difference(targets):
                 continue
@@ -57,12 +58,12 @@ def get_results(
             if analyses and not analyses.issubset(i_analyses):
                 continue
 
-            if result_key == 'storage_url':
-                result = i['storage_url']
+            if result_key == "storage_url":
+                result = i["storage_url"]
             else:
-                result = i['results'][result_key]
+                result = i["results"][result_key]
 
-            results.append((result, i['pk']))
+            results.append((result, i["pk"]))
 
     return results
 
@@ -76,7 +77,7 @@ def get_result(*args, **kwargs):
     """
     results = get_results(*args, **kwargs)
     result, key = results[0]
-    assert len(results) == 1, f'Multiple results returned {results}'
+    assert len(results) == 1, f"Multiple results returned {results}"
     return result, key
 
 
@@ -97,9 +98,9 @@ def traverse_dict(dictionary, keys, serialize=False):
 
     for i in keys:
         try:
-            value = value.get(i, f'INVALID KEY ({i})')
+            value = value.get(i, f"INVALID KEY ({i})")
         except AttributeError:
-            value = f'INVALID KEY ({i})'
+            value = f"INVALID KEY ({i})"
 
     if serialize:
         if isinstance(value, dict):
@@ -116,6 +117,7 @@ def apply_decorators(decorators):
 
     See: http://stackoverflow.com/questions/4122815
     """
+
     def decorator(f):
         for i in reversed(decorators):
             f = i(f)
@@ -124,13 +126,14 @@ def apply_decorators(decorators):
     return decorator
 
 
-def get_rsync_command(src, dst, chmod='a-w'):
+def get_rsync_command(src, dst, chmod="a-w"):
     """Get str for commant to move `src` directory to `dst`."""
     return (
-        f'rsync -va --append-verify --chmod={chmod} '
-        f'--remove-source-files {src}/ {dst}/ && '
-        f'find {src}/ -depth -type d -empty '
-        r'-exec rmdir "{}" \;')
+        f"rsync -va --append-verify --chmod={chmod} "
+        f"--remove-source-files {src}/ {dst}/ && "
+        f"find {src}/ -depth -type d -empty "
+        r'-exec rmdir "{}" \;'
+    )
 
 
 def get_tree_size(path, follow_symlinks=False):
@@ -171,7 +174,7 @@ def tar_dir(output_path, source_dir):
 def check_admin(msg=None):
     """Raise `PermissionError` if user is not `system_settings.ADMIN_USER`."""
     admin = system_settings.ADMIN_USER
-    msg = msg or f'Operation can only be performed by {admin}'
+    msg = msg or f"Operation can only be performed by {admin}"
 
     if getpass.getuser() != admin:
         raise PermissionError(msg)
@@ -179,7 +182,7 @@ def check_admin(msg=None):
 
 def echo_add_commit_message():
     """Echo add `--commit` flag message."""
-    click.secho('\nAdd --commit to proceed.\n', fg='green', blink=True)
+    click.secho("\nAdd --commit to proceed.\n", fg="green", blink=True)
 
 
 def echo_title(title, color="cyan", blink=False):

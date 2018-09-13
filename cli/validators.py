@@ -68,14 +68,14 @@ def validate_pairs(pairs):
         return []
 
     ids = {i for pair in pairs for i in pair}
-    experiments = {i['system_id']: i for i in get_instances('experiments', ids)}
+    experiments = {i["system_id"]: i for i in get_instances("experiments", ids)}
     ret = []
 
     for target, reference in pairs:
         if not target in experiments.keys():
-            raise exceptions.ValidationError(f'Experiment {target} not found.')
+            raise exceptions.ValidationError(f"Experiment {target} not found.")
         if not reference in experiments.keys():
-            raise exceptions.ValidationError(f'Experiment {reference} not found.')
+            raise exceptions.ValidationError(f"Experiment {reference} not found.")
         ret.append(([experiments[str(target)]], [experiments[str(reference)]]))
 
     return ret
@@ -91,9 +91,9 @@ def validate_pairs_from_file(ctx, _, path):
                 continue
 
             try:
-                ids = i.strip().split('\t')
+                ids = i.strip().split("\t")
                 pairs.append((ids[0], ids[1]))
             except IndexError:
-                raise exceptions.ValidationError(f'two columns required: {i}')
+                raise exceptions.ValidationError(f"two columns required: {i}")
 
     return validate_pairs(pairs)
