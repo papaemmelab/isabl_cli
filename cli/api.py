@@ -28,7 +28,7 @@ def chunks(array, size):
 
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
-    url = f"{system_settings.API_BASE_URL}/auth"
+    url = f"{system_settings.API_BASE_URL}/rest-auth/user/"
     headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
     response = requests.get(url=url, headers=headers)
 

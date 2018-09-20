@@ -178,8 +178,8 @@ class SystemSettings(BaseSettings):
         """Get current username from database."""
         from cli.api import api_request
 
-        response = api_request("get", url=f"{self.API_BASE_URL}/preferences")
-        return response.json()["user"]
+        response = api_request("get", url=f"{self.API_BASE_URL}/rest-auth/user/")
+        return response.json()["username"]
 
     @property
     def _settings(self):
