@@ -19,6 +19,7 @@ class TestApplication(AbstractApplication):
     VERSION = 'STILL_TESTING'
     ASSEMBLY = 'GRCh4000'
     SPECIES = 'HUMAN'
+    HOMEPAGE = 'http://www.fake-test-app.org'
 
     cli_help = "This is a test application"
     cli_options = [options.TARGETS]
@@ -94,6 +95,7 @@ def test_engine(tmpdir):
 
     experiments = [api.create_instance('experiments', **i) for i in experiments]
     tuples = [([i], []) for i in experiments]
+
     command = TestApplication.as_cli_command()
     application = TestApplication()
     ran_analyses, _, __ = application.run(tuples, commit=True)
@@ -108,6 +110,12 @@ def test_engine(tmpdir):
     assert "--commit" in result.output
     assert "--force" in result.output
     assert "--verbose" in result.output
+    assert "--homepage" in result.output
+
+    runner = CliRunner()
+    result = runner.invoke(command, ["--homepage"])
+
+    assert 'http://www.fake-test-app.org' in result.output
 
     pks = ','.join(str(i['pk']) for i in experiments)
     args = ['-fi', 'pk__in', pks, '--verbose']

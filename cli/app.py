@@ -78,6 +78,7 @@ class AbstractApplication:
         VERSION (object): TODO.
         ASSEMBLY (object): TODO.
         SPECIES (object): TODO.
+        URL (object): TODO.
         import_strings (object): TODO.
         application_settings (object): TODO.
         cli_help (object): TODO.
@@ -91,6 +92,9 @@ class AbstractApplication:
     VERSION = None
     ASSEMBLY = None
     SPECIES = None
+
+    # optional application info
+    URL = None
 
     # utils
     get_result = utils.get_result
@@ -128,7 +132,7 @@ class AbstractApplication:
 
     def validate_experiments(self, targets, references):  # pylint: disable=W9008
         """
-        Must raise UsageError if tuple combination isnt valid else return True.
+        Must raise UsageError if tuple combination isn't valid else return True.
 
         Arguments:
             targets (list): list of targets dictionaries.
@@ -332,6 +336,7 @@ class AbstractApplication:
             name=self.NAME,
             version=self.VERSION,
             assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
+            url=self.URL,
             application_class=application_class,
         )
 
@@ -358,7 +363,26 @@ class AbstractApplication:
         """Get application as click command line interface."""
         pipe = cls()
 
-        @click.command(help=cls.cli_help, name=pipe.get_cli_command_name())
+        def print_url(ctx, _, value):
+            """Print the application url url."""
+            if value:
+                url = pipe.application["url"]
+                if url:
+                    click.secho("\nApplication URL:\n", fg="green")
+                    click.secho(url)
+                else:
+                    click.secho("\nApplication has no url defined.\n")
+                ctx.exit()
+
+        @click.command(name=pipe.get_cli_command_name(), help=cls.cli_help)
+        @click.option(
+            "--url",
+            help="Show the url or main repo of the app.",
+            is_eager=True,
+            is_flag=True,
+            expose_value=False,
+            callback=print_url,
+        )
         @utils.apply_decorators(cls.cli_options + [COMMIT, FORCE, VERBOSE])
         def command(commit, force, verbose, **cli_options):
             """Click command to be used in the CLI."""
