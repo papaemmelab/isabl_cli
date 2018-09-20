@@ -9,7 +9,7 @@
 
 ## Documentation
 
-Learn about the bee ecosystem in the [documentation] and the [API guide] for this project.
+Learn about the [bee] ecosystem in the [documentation] and the [API guide] for this project.
 
 ## Contributing
 
@@ -17,8 +17,7 @@ Contributions are welcome, and they are greatly appreciated, check our [contribu
 
 ## Credits
 
-This package was created using [Cookiecutter] and the
-[leukgen/cookiecutter-toil] project template.
+This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil] project template.
 
 [api guide]: https://leukgen.github.io/guide/#/guides/cli
 [bee]: https://leukgen.github.io/guide
@@ -29,6 +28,7 @@ This package was created using [Cookiecutter] and the
 [contributing guidelines]: .github/CONTRIBUTING.md
 [cookiecutter]: https://github.com/audreyr/cookiecutter
 [documentation]: https://leukgen.github.io/guide
+[leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
 [pypi_badge]: https://img.shields.io/pypi/v/cli.svg
 [pypi_base]: https://pypi.python.org/pypi/cli
 [travis_badge]: https://img.shields.io/travis/leukgen/cli.svg
