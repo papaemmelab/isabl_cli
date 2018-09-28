@@ -175,6 +175,7 @@ disable =
     superfluous-parens,
     keyword-arg-before-vararg,
     missing-docstring,
+    C0330
 
 [REPORTS]
 

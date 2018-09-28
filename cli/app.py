@@ -340,11 +340,15 @@ class AbstractApplication:
             application_class=application_class,
         )
 
-        if application["application_class"] != application_class:
+        if (
+            application["application_class"] != application_class
+            or application["url"] != self.URL
+        ):
             api.patch_instance(  # pragma: no cover
                 endpoint="applications",
                 identifier=application["pk"],
                 application_class=application_class,
+                url=self.URL,
             )
 
         return application
