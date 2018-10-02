@@ -17,11 +17,11 @@ from slugify import slugify
 import click
 import yaml
 
-from cli import api
-from cli import options
-from cli import utils
-from cli.settings import system_settings
-from cli.settings import import_from_string
+from isabl import api
+from isabl import options
+from isabl import utils
+from isabl.settings import system_settings
+from isabl.settings import import_from_string
 
 
 def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
@@ -260,7 +260,7 @@ class ReferenceDataImporter(BaseImporter):
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        # build cli command and return it
+        # build isabl command and return it
         @click.command(name="import_reference_data")
         @click.option("--assembly", help="name of reference genome")
         @click.option("--species", help="species of reference genome")
@@ -384,7 +384,7 @@ class BedImporter:
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        # build cli command and return it
+        # build isabl command and return it
         @click.command(name="import_bedfiles")
         @options.TECHNIQUE_PRIMARY_KEY
         @options.TARGETS_PATH
@@ -711,7 +711,7 @@ class DataImporter(BaseImporter):
     @classmethod
     def as_cli_command(cls):
         """Get data importer as a click command line interface."""
-        # build cli command and return it
+        # build isabl command and return it
         @click.command(name="import_data")
         @options.DIRECTORIES
         @options.IDENTIFIER

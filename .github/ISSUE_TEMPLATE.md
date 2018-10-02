@@ -1,4 +1,4 @@
-* cli version:
+* isabl version:
 * Python version:
 * Operating System:
 

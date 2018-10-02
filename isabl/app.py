@@ -14,27 +14,12 @@ from click import progressbar
 from slugify import slugify
 import click
 
-from cli import api
-from cli import data
-from cli import exceptions
-from cli import utils
-from cli.settings import ApplicationSettings
-from cli.settings import system_settings
-
-
-COMMIT = click.option(
-    "--commit", show_default=True, is_flag=True, help="Commit results."
-)
-
-
-VERBOSE = click.option(
-    "--verbose", show_default=True, is_flag=True, help="Verbose output."
-)
-
-
-FORCE = click.option(
-    "--force", help="Wipe all analyses and start from scratch.", is_flag=True
-)
+from isabl import api
+from isabl import data
+from isabl import exceptions
+from isabl import utils
+from isabl.settings import ApplicationSettings
+from isabl.settings import system_settings
 
 
 class AbstractApplication:
@@ -314,7 +299,7 @@ class AbstractApplication:
         import_strings.add("submit_analyses")
 
         if "submit_analyses" not in defaults:
-            defaults["submit_analyses"] = "cli.batch_systems.submit_local"
+            defaults["submit_analyses"] = "isabl.batch_systems.submit_local"
 
         return ApplicationSettings(self, defaults, import_strings)
 
@@ -367,6 +352,18 @@ class AbstractApplication:
         """Get application as click command line interface."""
         pipe = cls()
 
+        commit = click.option(
+            "--commit", show_default=True, is_flag=True, help="Commit results."
+        )
+
+        verbose = click.option(
+            "--verbose", show_default=True, is_flag=True, help="Verbose output."
+        )
+
+        force = click.option(
+            "--force", help="Wipe all analyses and start from scratch.", is_flag=True
+        )
+
         def print_url(ctx, _, value):
             """Print the application url url."""
             if value:
@@ -387,7 +384,7 @@ class AbstractApplication:
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(cls.cli_options + [COMMIT, FORCE, VERBOSE])
+        @utils.apply_decorators(cls.cli_options + [commit, force, verbose])
         def command(commit, force, verbose, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
@@ -408,7 +405,7 @@ class AbstractApplication:
         return command
 
     def get_cli_command_name(self):
-        """Get name for cli command."""
+        """Get name for isabl command."""
         name = f"{self.NAME} {self.VERSION} {self.ASSEMBLY}"
         return slugify(name, separator="_")
 
@@ -544,7 +541,7 @@ class AbstractApplication:
     @staticmethod
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
-        return f"cli patch_status --key {key} --status {status}"
+        return f"isabl patch_status --key {key} --status {status}"
 
     def _get_dependencies(self, targets, references):
         missing = []

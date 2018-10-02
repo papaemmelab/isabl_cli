@@ -1,14 +1,14 @@
-"""cli validators tests."""
+"""isabl validators tests."""
 
 from os.path import join
 
 import click
 import pytest
 
-from cli import api
-from cli import exceptions
-from cli import factories
-from cli import validators
+from isabl import api
+from isabl import exceptions
+from isabl import factories
+from isabl import validators
 
 
 def test_validate_patterns_are_files(tmpdir):

@@ -2,8 +2,8 @@
 
 import click
 
-from cli import api
-from cli import validators
+from isabl import api
+from isabl import validators
 
 
 def _get_experiments(filter_tuples):

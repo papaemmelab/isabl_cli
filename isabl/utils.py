@@ -1,4 +1,4 @@
-"""cli utils."""
+"""isabl utils."""
 
 import getpass
 import json
@@ -8,7 +8,7 @@ import tarfile
 
 import click
 
-from cli.settings import system_settings
+from isabl.settings import system_settings
 
 
 def get_results(
@@ -117,9 +117,10 @@ def apply_decorators(decorators):
 
     See: http://stackoverflow.com/questions/4122815
     """
+    decorators = reversed(decorators)
 
     def decorator(f):
-        for i in reversed(decorators):
+        for i in decorators:
             f = i(f)
         return f
 

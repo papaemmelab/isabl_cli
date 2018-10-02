@@ -10,10 +10,10 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import click
 import requests
 
-from cli import utils
-from cli.settings import system_settings
-from cli.settings import user_settings
-from cli.settings import import_from_string
+from isabl import utils
+from isabl.settings import system_settings
+from isabl.settings import user_settings
+from isabl.settings import import_from_string
 
 requests.packages.urllib3.disable_warnings(  # pylint: disable=E1101
     InsecureRequestWarning

@@ -10,9 +10,9 @@ Follow these steps for local development:
 
 1. Bet you've read the [Zen Of Python].
 
-1. Clone your cli locally:
+1. Clone your isabl locally:
 
-        git clone git@github.com:leukgen/cli.git
+        git clone git@github.com:isabl-io/isabl-cli.git
 
 1. Create a branch for local development:
 
@@ -23,7 +23,7 @@ Follow these steps for local development:
 
 1. Create a test in:
 
-        cli/tests
+        isabl/tests
 
 1. Run [pytest] with [coverage], [pylint] and [pydocstyle] using [tox]:
 
@@ -31,12 +31,12 @@ Follow these steps for local development:
 
     To just run [pytest]:
 
-        py.test tests --cov=cli
+        py.test tests --cov=isabl
 
     To just check that your changes pass our [pylint] and [pydocstyle] requirements:
 
-        pylint --rcfile=.pylintrc cli
-        pydocstyle --config=.pydocstylerc cli
+        pylint --rcfile=.pylintrc isabl
+        pydocstyle --config=.pydocstylerc isabl
 
 1. Run tests inside the docker container:
 
@@ -58,27 +58,27 @@ Follow these steps for local development:
     | 📝    | `:memo:`             | changes to documentation    |
     | 🎨    | `:art:`              | formatting  no code change  |
     | 🔧    | `:wrench:`           | refactoring production code |
-    | ✅    | `:white_check_mark:` | adding/editing test logic   |
+    | ✅     | `:white_check_mark:` | adding/editing test logic   |
     | 👕    | `:shirt:`            | no production code change   |
     | 💎    | `:gem:`              | bump to new version         |
 
     If you are suggesting a new version make sure you are following the [semantic versioning] guidelines and then update the [`VERSION`] file:
 
-        git add cli/VERSION
+        git add isabl/VERSION
         git commit -m ":gem: bump to version 0.1.0"
 
 1. Submit a [pull request] through the GitHub website.
 
 <!-- References -->
-[`VERSION`]: ../leukgen/VERSION
+[`VERSION`]: ../isabl-io/VERSION
 [`.gitmessage`]: ../.gitmessage
 [pytest]: https://docs.pytest.org/en/latest/
 [pytest-env]: https://github.com/MobileDynasty/pytest-env
 [semantic versioning]: http://semver.org/
 [tox]: http://tox.readthedocs.io/
-[pulls]: https://github.com/leukgen/cli/pulls
+[pulls]: https://github.com/isabl-io/isabl/pulls
 [pydocstyle]: http://www.pydocstyle.org/en
 [pylint]: https://www.pylint.org/
 [coverage]:https://coverage.readthedocs.io
-[pull request]: https://github.com/leukgen/cli/compare
+[pull request]: https://github.com/isabl-io/isabl/compare
 [zen of python]: https://www.python.org/dev/peps/pep-0020/#the-zen-of-python

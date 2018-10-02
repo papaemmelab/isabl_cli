@@ -8,10 +8,10 @@ import click
 import pytest
 import yaml
 
-from cli import api
-from cli import data
-from cli import factories
-from cli.settings import _DEFAULTS
+from isabl import api
+from isabl import data
+from isabl import factories
+from isabl.settings import _DEFAULTS
 
 
 def test_trash_analysis_storage():

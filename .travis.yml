@@ -18,10 +18,10 @@ after_success:
 deploy:
   provider: pypi
   distributions: sdist bdist_wheel
-  user: leukgen
+  user: isabl-io
   password: <TO REPLACE THIS RUN `travis encrypt --add deploy.password`>
   on:
     tags: true
-    repo: leukgen/cli
+    repo: isabl-io/isabl
     python: 3.6
     branch: master

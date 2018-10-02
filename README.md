@@ -1,4 +1,4 @@
-# cli
+# isabl
 
 [![pypi badge][pypi_badge]][pypi_base]
 [![travis badge][travis_badge]][travis_base]
@@ -17,19 +17,19 @@ Contributions are welcome, and they are greatly appreciated, check our [contribu
 
 ## Credits
 
-This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil] project template.
+This package was created using [Cookiecutter] and the [isabl-io/cookiecutter-toil] project template.
 
-[api guide]: https://leukgen.github.io/guide/#/guides/cli
-[bee]: https://leukgen.github.io/guide
+[api guide]: https://isabl-io.github.io/guide/#/guides/isabl
+[bee]: https://isabl-io.github.io/guide
 [black_badge]: https://img.shields.io/badge/code%20style-black-000000.svg
 [black_base]: https://github.com/ambv/black
-[codecov_badge]: https://codecov.io/gh/leukgen/cli/branch/master/graph/badge.svg
-[codecov_base]: https://codecov.io/gh/leukgen/cli
+[codecov_badge]: https://codecov.io/gh/isabl-io/isabl/branch/master/graph/badge.svg
+[codecov_base]: https://codecov.io/gh/isabl-io/isabl
 [contributing guidelines]: .github/CONTRIBUTING.md
 [cookiecutter]: https://github.com/audreyr/cookiecutter
-[documentation]: https://leukgen.github.io/guide
-[leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
-[pypi_badge]: https://img.shields.io/pypi/v/cli.svg
-[pypi_base]: https://pypi.python.org/pypi/cli
-[travis_badge]: https://img.shields.io/travis/leukgen/cli.svg
-[travis_base]: https://travis-ci.org/leukgen/cli
+[documentation]: https://isabl-io.github.io/guide
+[isabl-io/cookiecutter-toil]: https://github.com/isabl-io/cookiecutter-toil
+[pypi_badge]: https://img.shields.io/pypi/v/isabl.svg
+[pypi_base]: https://pypi.python.org/pypi/isabl
+[travis_badge]: https://img.shields.io/travis/isabl-io/isabl.svg
+[travis_base]: https://travis-ci.org/isabl-io/isabl
