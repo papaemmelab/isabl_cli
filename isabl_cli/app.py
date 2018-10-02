@@ -14,12 +14,12 @@ from click import progressbar
 from slugify import slugify
 import click
 
-from isabl import api
-from isabl import data
-from isabl import exceptions
-from isabl import utils
-from isabl.settings import ApplicationSettings
-from isabl.settings import system_settings
+from isabl_cli import api
+from isabl_cli import data
+from isabl_cli import exceptions
+from isabl_cli import utils
+from isabl_cli.settings import ApplicationSettings
+from isabl_cli.settings import system_settings
 
 
 class AbstractApplication:
@@ -299,7 +299,7 @@ class AbstractApplication:
         import_strings.add("submit_analyses")
 
         if "submit_analyses" not in defaults:
-            defaults["submit_analyses"] = "isabl.batch_systems.submit_local"
+            defaults["submit_analyses"] = "isabl_cli.batch_systems.submit_local"
 
         return ApplicationSettings(self, defaults, import_strings)
 
@@ -405,7 +405,7 @@ class AbstractApplication:
         return command
 
     def get_cli_command_name(self):
-        """Get name for isabl command."""
+        """Get name for isabl_cli command."""
         name = f"{self.NAME} {self.VERSION} {self.ASSEMBLY}"
         return slugify(name, separator="_")
 
@@ -541,7 +541,7 @@ class AbstractApplication:
     @staticmethod
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
-        return f"isabl patch_status --key {key} --status {status}"
+        return f"isabl_cli patch_status --key {key} --status {status}"
 
     def _get_dependencies(self, targets, references):
         missing = []

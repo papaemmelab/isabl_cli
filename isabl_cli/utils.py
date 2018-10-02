@@ -1,4 +1,4 @@
-"""isabl utils."""
+"""isabl_cli utils."""
 
 import getpass
 import json
@@ -8,7 +8,7 @@ import tarfile
 
 import click
 
-from isabl.settings import system_settings
+from isabl_cli.settings import system_settings
 
 
 def get_results(

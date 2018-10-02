@@ -5,10 +5,10 @@ from os.path import join
 
 import click
 
-from isabl import api
-from isabl import options
-from isabl import utils
-from isabl.settings import import_from_string
+from isabl_cli import api
+from isabl_cli import options
+from isabl_cli import utils
+from isabl_cli.settings import import_from_string
 
 
 @click.command()

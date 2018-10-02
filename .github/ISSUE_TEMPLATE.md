@@ -1,4 +1,4 @@
-* isabl version:
+* isabl_cli version:
 * Python version:
 * Operating System:
 

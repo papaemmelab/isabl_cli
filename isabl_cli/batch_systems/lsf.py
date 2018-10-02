@@ -13,9 +13,9 @@ import subprocess
 
 import click
 
-from isabl import api
-from isabl import utils
-from isabl.settings import system_settings
+from isabl_cli import api
+from isabl_cli import utils
+from isabl_cli.settings import system_settings
 
 
 def submit_lsf(app, command_tuples):  # pragma: no cover

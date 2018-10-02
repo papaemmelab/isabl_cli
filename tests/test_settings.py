@@ -1,6 +1,6 @@
 from os import environ
 
-from isabl.settings import system_settings
+from isabl_cli.settings import system_settings
 
 
 def test_assert_read_settings_from_yaml(tmpdir):

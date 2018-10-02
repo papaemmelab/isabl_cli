@@ -10,9 +10,9 @@ Follow these steps for local development:
 
 1. Bet you've read the [Zen Of Python].
 
-1. Clone your isabl locally:
+1. Clone your isabl_cli locally:
 
-        git clone git@github.com:isabl-io/isabl-cli.git
+        git clone git@github.com:isabl_cli-io/isabl_cli-cli.git
 
 1. Create a branch for local development:
 
@@ -23,7 +23,7 @@ Follow these steps for local development:
 
 1. Create a test in:
 
-        isabl/tests
+        isabl_cli/tests
 
 1. Run [pytest] with [coverage], [pylint] and [pydocstyle] using [tox]:
 
@@ -31,12 +31,12 @@ Follow these steps for local development:
 
     To just run [pytest]:
 
-        py.test tests --cov=isabl
+        py.test tests --cov=isabl_cli
 
     To just check that your changes pass our [pylint] and [pydocstyle] requirements:
 
-        pylint --rcfile=.pylintrc isabl
-        pydocstyle --config=.pydocstylerc isabl
+        pylint --rcfile=.pylintrc isabl_cli
+        pydocstyle --config=.pydocstylerc isabl_cli
 
 1. Run tests inside the docker container:
 
@@ -64,21 +64,20 @@ Follow these steps for local development:
 
     If you are suggesting a new version make sure you are following the [semantic versioning] guidelines and then update the [`VERSION`] file:
 
-        git add isabl/VERSION
+        git add isabl_cli/VERSION
         git commit -m ":gem: bump to version 0.1.0"
 
 1. Submit a [pull request] through the GitHub website.
 
-<!-- References -->
-[`VERSION`]: ../isabl-io/VERSION
 [`.gitmessage`]: ../.gitmessage
-[pytest]: https://docs.pytest.org/en/latest/
-[pytest-env]: https://github.com/MobileDynasty/pytest-env
-[semantic versioning]: http://semver.org/
-[tox]: http://tox.readthedocs.io/
-[pulls]: https://github.com/isabl-io/isabl/pulls
+[`VERSION`]: ../isabl_cli/VERSION
+[coverage]:https://coverage.readthedocs.io
+[pull request]: https://github.com/isabl-io/cli/compare
+[pulls]: https://github.com/isabl-io/cli/pulls
 [pydocstyle]: http://www.pydocstyle.org/en
 [pylint]: https://www.pylint.org/
-[coverage]:https://coverage.readthedocs.io
-[pull request]: https://github.com/isabl-io/isabl/compare
+[pytest-env]: https://github.com/MobileDynasty/pytest-env
+[pytest]: https://docs.pytest.org/en/latest/
+[semantic versioning]: http://semver.org/
+[tox]: http://tox.readthedocs.io/
 [zen of python]: https://www.python.org/dev/peps/pep-0020/#the-zen-of-python

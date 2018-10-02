@@ -1,6 +1,6 @@
 from click.testing import CliRunner
 
-from isabl import cli
+from isabl_cli import cli
 
 
 def test_main():

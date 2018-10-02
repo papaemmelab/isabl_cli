@@ -1,6 +1,6 @@
-"""isabl version test."""
+"""isabl_cli version test."""
 
-from isabl import __version__
+from isabl_cli import __version__
 
 
 def test_version():

@@ -1,4 +1,4 @@
-"""isabl utils tests."""
+"""isabl_cli utils tests."""
 
 from os.path import join
 import os
@@ -6,8 +6,8 @@ import tarfile
 
 import pytest
 
-from isabl import utils
-from isabl.settings import _DEFAULTS
+from isabl_cli import utils
+from isabl_cli.settings import _DEFAULTS
 
 
 def test_force_symlink(tmpdir):

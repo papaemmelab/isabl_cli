@@ -4,13 +4,13 @@ from click.testing import CliRunner
 import click
 import pytest
 
-from isabl import api
-from isabl import factories
-from isabl import exceptions
-from isabl import options
-from isabl import AbstractApplication
-from isabl.settings import system_settings
-from isabl.settings import _DEFAULTS
+from isabl_cli import api
+from isabl_cli import factories
+from isabl_cli import exceptions
+from isabl_cli import options
+from isabl_cli import AbstractApplication
+from isabl_cli.settings import system_settings
+from isabl_cli.settings import _DEFAULTS
 
 
 class TestApplication(AbstractApplication):

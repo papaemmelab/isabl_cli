@@ -3,10 +3,10 @@ import click
 import pytest
 import requests
 
-from isabl import api
-from isabl import factories
-from isabl.settings import system_settings
-from isabl.settings import user_settings
+from isabl_cli import api
+from isabl_cli import factories
+from isabl_cli.settings import system_settings
+from isabl_cli.settings import user_settings
 
 
 def test_get_token_headers():

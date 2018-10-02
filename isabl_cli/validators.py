@@ -1,10 +1,10 @@
-"""isabl validators."""
+"""isabl_cli validators."""
 
 from glob import glob
 import os
 
-from isabl import exceptions
-from isabl.api import get_instances
+from isabl_cli import exceptions
+from isabl_cli.api import get_instances
 
 
 def validate_patterns_are_files(patterns, check_size=True):

@@ -17,11 +17,11 @@ from slugify import slugify
 import click
 import yaml
 
-from isabl import api
-from isabl import options
-from isabl import utils
-from isabl.settings import system_settings
-from isabl.settings import import_from_string
+from isabl_cli import api
+from isabl_cli import options
+from isabl_cli import utils
+from isabl_cli.settings import system_settings
+from isabl_cli.settings import import_from_string
 
 
 def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
@@ -260,7 +260,7 @@ class ReferenceDataImporter(BaseImporter):
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        # build isabl command and return it
+        # build isabl_cli command and return it
         @click.command(name="import_reference_data")
         @click.option("--assembly", help="name of reference genome")
         @click.option("--species", help="species of reference genome")
@@ -384,7 +384,7 @@ class BedImporter:
     @classmethod
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
-        # build isabl command and return it
+        # build isabl_cli command and return it
         @click.command(name="import_bedfiles")
         @options.TECHNIQUE_PRIMARY_KEY
         @options.TARGETS_PATH
@@ -646,18 +646,19 @@ class DataImporter(BaseImporter):
     def format_fastq_name(self, file_name):
         """Return destination file name."""
         suffix = None
+        index = 1
 
-        for i in [1, 2]:
-            file_type = f"FASTQ_R{i}"
+        for index in [1, 2]:
+            file_type = f"FASTQ_R{index}"
 
-            if re.search(self.FASTQ_REGEX.format(i), file_name):
-                suffix = f"_{system_settings.FASTQ_READ_PREFIX}{i}.fastq"
+            if re.search(self.FASTQ_REGEX.format(index), file_name):
+                suffix = f"_{system_settings.FASTQ_READ_PREFIX}{index}.fastq"
                 break
 
         assert suffix, f"Couldn't determine read 1 or read 2 from {file_name}"
-        letter_index_fastq = r"[_.]R{}([_.])?\.f(ast)?q".format(i)
-        number_index_fastq = r"[_.]{}([_.])?\.f(ast)?q".format(i)
-        letter_index_any_location = r"[_.]R{}[_.]".format(i)
+        letter_index_fastq = r"[_.]R{}([_.])?\.f(ast)?q".format(index)
+        number_index_fastq = r"[_.]{}([_.])?\.f(ast)?q".format(index)
+        letter_index_any_location = r"[_.]R{}[_.]".format(index)
         file_name = re.sub(letter_index_fastq, ".fastq", file_name)
         file_name = re.sub(number_index_fastq, ".fastq", file_name)
         file_name = re.sub(letter_index_any_location, "_", file_name)
@@ -711,7 +712,7 @@ class DataImporter(BaseImporter):
     @classmethod
     def as_cli_command(cls):
         """Get data importer as a click command line interface."""
-        # build isabl command and return it
+        # build isabl_cli command and return it
         @click.command(name="import_data")
         @options.DIRECTORIES
         @options.IDENTIFIER

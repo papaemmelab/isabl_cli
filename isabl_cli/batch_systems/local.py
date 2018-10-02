@@ -3,7 +3,7 @@ import os
 
 from click import progressbar
 
-from isabl import api
+from isabl_cli import api
 
 
 def submit_local(app, command_tuples):

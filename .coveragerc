@@ -1,14 +1,14 @@
 [paths]
 source =
-   isabl
-   */isabl
+   isabl_cli
+   */isabl_cli
 
 [run]
 source =
-    isabl
+    isabl_cli
 
 omit =
-    *isabl/__main__.py
+    *isabl_cli/__main__.py
 
 [report]
 exclude_lines =

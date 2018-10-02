@@ -1,8 +1,8 @@
 from click.testing import CliRunner
 
-from isabl import api
-from isabl import commands
-from isabl import factories
+from isabl_cli import api
+from isabl_cli import commands
+from isabl_cli import factories
 
 
 def test_commands(tmpdir):

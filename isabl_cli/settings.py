@@ -15,15 +15,15 @@ import pytz
 import six
 import yaml
 
-from isabl import exceptions
+from isabl_cli import exceptions
 
 _DEFAULTS = {
     "API_BASE_URL": "http://0.0.0.0:8000/api/v1",
-    "MAKE_STORAGE_DIRECTORY": "isabl.data.make_storage_directory",
-    "TRASH_ANALYSIS_STORAGE": "isabl.data.trash_analysis_storage",
-    "REFERENCE_DATA_IMPORTER": "isabl.data.ReferenceDataImporter",
-    "DATA_IMPORTER": "isabl.data.DataImporter",
-    "BED_IMPORTER": "isabl.data.BedImporter",
+    "MAKE_STORAGE_DIRECTORY": "isabl_cli.data.make_storage_directory",
+    "TRASH_ANALYSIS_STORAGE": "isabl_cli.data.trash_analysis_storage",
+    "REFERENCE_DATA_IMPORTER": "isabl_cli.data.ReferenceDataImporter",
+    "DATA_IMPORTER": "isabl_cli.data.DataImporter",
+    "BED_IMPORTER": "isabl_cli.data.BedImporter",
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
     "FASTQ_READ_PREFIX": "",
     "ADMIN_USER": getpass.getuser(),
@@ -31,21 +31,21 @@ _DEFAULTS = {
     "APPLICATIONS_SETTINGS": {},
     "INSTALLED_APPLICATIONS": [],
     "CUSTOM_COMMANDS": [],
-    "ON_DATA_IMPORT": ["isabl.data.symlink_experiment_to_projects"],
+    "ON_DATA_IMPORT": ["isabl_cli.data.symlink_experiment_to_projects"],
     "ON_STATUS_CHANGE": [
-        "isabl.data.symlink_analysis_to_targets",
-        "isabl.data.trigger_analyses_merge",
+        "isabl_cli.data.symlink_analysis_to_targets",
+        "isabl_cli.data.trigger_analyses_merge",
     ],
     "ON_SIGNAL_FAILURE": None,
-    "ADMIN_COMMANDS": ["isabl.commands.processed_finished"],
+    "ADMIN_COMMANDS": ["isabl_cli.commands.processed_finished"],
     "SYSTEM_COMMANDS": [
-        "isabl.commands.get_attributes",
-        "isabl.commands.get_bams",
-        "isabl.commands.get_count",
-        "isabl.commands.get_paths",
-        "isabl.commands.get_sequencing_data",
-        "isabl.commands.merge_project_analyses",
-        "isabl.commands.patch_status",
+        "isabl_cli.commands.get_attributes",
+        "isabl_cli.commands.get_bams",
+        "isabl_cli.commands.get_count",
+        "isabl_cli.commands.get_paths",
+        "isabl_cli.commands.get_sequencing_data",
+        "isabl_cli.commands.merge_project_analyses",
+        "isabl_cli.commands.patch_status",
     ],
 }
 
@@ -176,7 +176,7 @@ class SystemSettings(BaseSettings):
     @cached_property
     def api_username(self):
         """Get current username from database."""
-        from isabl.api import api_request
+        from isabl_cli.api import api_request
 
         response = api_request("get", url=f"{self.API_BASE_URL}/rest-auth/user/")
         return response.json()["username"]

@@ -5,7 +5,7 @@ from click import UsageError
 
 class PackageBaseException(Exception):
 
-    """A base exception for isabl."""
+    """A base exception for isabl_cli."""
 
 
 class ValidationError(PackageBaseException, UsageError, AssertionError):

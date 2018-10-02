@@ -1,4 +1,4 @@
-"""isabl setup.py."""
+"""isabl_cli setup.py."""
 
 from os.path import join
 from os.path import abspath
@@ -15,7 +15,7 @@ with open(join(ROOT, "setup.json"), "r") as f:
     SETUP = json.load(f)
 
 # see 4 > https://packaging.python.org/guides/single-sourcing-package-version/
-with open(join(ROOT, "isabl", "VERSION"), "r") as f:
+with open(join(ROOT, "isabl_cli", "VERSION"), "r") as f:
     VERSION = f.read().strip()
 
 setup(
@@ -23,7 +23,7 @@ setup(
     version=VERSION,
 
     # in combination with recursive-includes in MANIFEST.in, non-python files
-    # within the isabl will be copied into the
+    # within the isabl_cli will be copied into the
     # site-packages and wheels installation directories
     include_package_data=True,
 
