@@ -77,7 +77,7 @@ def test_tar_dir(tmpdir):
         (join(source_dir, "1"), "first file."),
         (join(source_dir, "2"), "second file."),
         (join(source_dir, "3"), "third file."),
-        )
+    )
 
     os.makedirs(source_dir)
     os.makedirs(dst_dir)
@@ -105,11 +105,11 @@ def test_tar_dir(tmpdir):
 
 
 def test_get_tree_size(tmpdir):
-    tmpdir.mkdir('l1').mkdir('l2').join('test').write('foo')
-    tmpdir.mkdir('l3').mkdir('l2').join('test').write('foo')
-    sym_false = utils.get_tree_size(tmpdir.join('l1'), follow_symlinks=False)
-    os.symlink(tmpdir.join('l3'), tmpdir.join('l1').join('l3'))
-    sym_true = utils.get_tree_size(tmpdir.join('l1'), follow_symlinks=True)
+    tmpdir.mkdir("l1").mkdir("l2").join("test").write("foo")
+    tmpdir.mkdir("l3").mkdir("l2").join("test").write("foo")
+    sym_false = utils.get_tree_size(tmpdir.join("l1"), follow_symlinks=False)
+    os.symlink(tmpdir.join("l3"), tmpdir.join("l1").join("l3"))
+    sym_true = utils.get_tree_size(tmpdir.join("l1"), follow_symlinks=True)
 
     assert sym_false
     assert sym_true
@@ -117,11 +117,11 @@ def test_get_tree_size(tmpdir):
 
 
 def test_check_admin():
-    admin = _DEFAULTS['ADMIN_USER']
-    _DEFAULTS['ADMIN_USER'] = 'not the admin'
+    admin = _DEFAULTS["ADMIN_USER"]
+    _DEFAULTS["ADMIN_USER"] = "not the admin"
 
     with pytest.raises(PermissionError) as error:
         utils.check_admin()
 
-    assert 'not the admin' in str(error.value)
-    _DEFAULTS['ADMIN_USER'] = admin
+    assert "not the admin" in str(error.value)
+    _DEFAULTS["ADMIN_USER"] = admin

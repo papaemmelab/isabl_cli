@@ -77,17 +77,18 @@ def test_validate_patterns_are_dirs(tmpdir):
     with pytest.raises(exceptions.ValidationError):
         validators.validate_patterns_are_dirs(file_patterns)
 
+
 def test_validate_pairs(tmpdir):
     """test_validate_pairs."""
     data = [factories.ExperimentFactory() for i in range(3)]
-    instance_a = api.create_instance('experiments', **data[0])
-    instance_b = api.create_instance('experiments', **data[1])
-    instance_c = api.create_instance('experiments', **data[2])
+    instance_a = api.create_instance("experiments", **data[0])
+    instance_b = api.create_instance("experiments", **data[1])
+    instance_c = api.create_instance("experiments", **data[2])
 
     # pairs that exist
     real_pairs = [
-        (instance_a['system_id'],instance_b['system_id']),
-        (instance_c['system_id'],instance_b['system_id'])
+        (instance_a["system_id"], instance_b["system_id"]),
+        (instance_c["system_id"], instance_b["system_id"]),
     ]
     parsed_pairs = validators.validate_pairs(real_pairs)
     assert parsed_pairs[0] == ([instance_a], [instance_b])
@@ -98,23 +99,24 @@ def test_validate_pairs(tmpdir):
     with pytest.raises(exceptions.ValidationError):
         validators.validate_pairs(fake_pair)
 
+
 def test_validate_pairs_from_file(tmpdir):
     """test_validate_pairs_from_file."""
     tmpdir_path = str(tmpdir)
     data = [factories.ExperimentFactory() for i in range(3)]
-    instance_a = api.create_instance('experiments', **data[0])
-    instance_b = api.create_instance('experiments', **data[1])
-    instance_c = api.create_instance('experiments', **data[2])
+    instance_a = api.create_instance("experiments", **data[0])
+    instance_b = api.create_instance("experiments", **data[1])
+    instance_c = api.create_instance("experiments", **data[2])
 
-    realpairdf = join(tmpdir_path, 'realpairdf.tsv')
-    with open(realpairdf, 'w') as f:
-        f.write('# I am the header\n')
-        f.write(instance_a['system_id'] + '\t' + instance_b['system_id'] + '\n')
-        f.write(instance_c['system_id'] + '\t' + instance_b['system_id'] + '\n')
+    realpairdf = join(tmpdir_path, "realpairdf.tsv")
+    with open(realpairdf, "w") as f:
+        f.write("# I am the header\n")
+        f.write(instance_a["system_id"] + "\t" + instance_b["system_id"] + "\n")
+        f.write(instance_c["system_id"] + "\t" + instance_b["system_id"] + "\n")
 
-    badpairdf = join(tmpdir_path, 'badpairdf.tsv')
-    with open(badpairdf, 'w') as f:
-        f.write('\t'.join([instance_a['system_id']]))
+    badpairdf = join(tmpdir_path, "badpairdf.tsv")
+    with open(badpairdf, "w") as f:
+        f.write("\t".join([instance_a["system_id"]]))
 
     # valid pair file
     parsed_pairs = validators.validate_pairs_from_file(None, None, realpairdf)

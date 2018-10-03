@@ -21,15 +21,12 @@ with open(join(ROOT, "isabl_cli", "VERSION"), "r") as f:
 setup(
     # single source package version
     version=VERSION,
-
     # in combination with recursive-includes in MANIFEST.in, non-python files
     # within the isabl_cli will be copied into the
     # site-packages and wheels installation directories
     include_package_data=True,
-
     # return a list all Python packages found within the ROOT directory
     packages=find_packages(),
-
     # pass parameters loaded from setup.json including author and version
     **SETUP
-    )
+)

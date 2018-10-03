@@ -324,4 +324,3 @@ def test_validate_same_technique():
         application.validate_same_technique(targets, references)
 
     assert "Expected one technique, got:" in str(error.value)
-
