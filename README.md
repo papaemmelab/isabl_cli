@@ -20,7 +20,7 @@ Contributions are welcome, and they are greatly appreciated, check our [contribu
 This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil] project template.
 
 [`isabl`]: https://isabl-io.github.io/docs
-[api guide]: https://isabl-io.github.io/guide/#/docs/cli
+[api guide]: https://isabl-io.github.io/docs/#/cli
 [black_badge]: https://img.shields.io/badge/code%20style-black-000000.svg
 [black_base]: https://github.com/ambv/black
 [codecov_badge]: https://codecov.io/gh/isabl-io/cli/branch/master/graph/badge.svg
