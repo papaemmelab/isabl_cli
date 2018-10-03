@@ -25,7 +25,7 @@ This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil
 [black_base]: https://github.com/ambv/black
 [codecov_badge]: https://codecov.io/gh/isabl-io/cli/branch/master/graph/badge.svg
 [codecov_base]: https://codecov.io/gh/isabl-io/cli
-[contributing guidelines]: .github/CONTRIBUTING.md
+[contributing guidelines]: https://isabl-io.github.io/docs/#/tutorials/contributing
 [cookiecutter]: https://github.com/audreyr/cookiecutter
 [documentation]: https://isabl-io.github.io/docs
 [leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
