@@ -22,7 +22,7 @@ from isabl_cli.settings import ApplicationSettings
 from isabl_cli.settings import system_settings
 
 
-class AbstractApplication:
+class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     """
     An Abstract application.

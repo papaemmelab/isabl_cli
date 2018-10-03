@@ -34,14 +34,18 @@ def get_token_headers():
 
     if not response.ok:
         data = {
-            "username": click.prompt("username", type=str, hide_input=False),
-            "password": click.prompt("password", type=str, hide_input=True),
+            "username": click.prompt(
+                "username", type=str, hide_input=False, default="admin"
+            ),
+            "password": click.prompt(
+                "password", type=str, hide_input=True, default="admin"
+            ),
         }
 
         auth_url = f"{system_settings.API_BASE_URL}/rest-auth/login/"
         response = requests.post(url=f"{auth_url}", data=data)
         response.raise_for_status()
-        user_settings.API_TOKEN = response.json()["key"]
+        user_settings.API_TOKEN = response.json()["key"]  # pylint: disable=invalid-name
         headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
 
     return headers

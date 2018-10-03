@@ -65,6 +65,7 @@ class TechniqueFactory(BaseFactory):
 
     @factory.lazy_attribute
     def method(self):
+        """Get method as a function of the analyte."""
         if self.analyte == "RNA":
             return random.choice(["TR", "WT"])
         return random.choice(["CS", "TD", "WE", "WG", "MD"])
