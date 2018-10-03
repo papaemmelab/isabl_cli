@@ -175,7 +175,8 @@ disable =
     superfluous-parens,
     keyword-arg-before-vararg,
     missing-docstring,
-    C0330
+    C0330,
+    cyclic-import
 
 [REPORTS]
 
@@ -296,10 +297,10 @@ const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
 const-name-hint=(([A-Z_][A-Z0-9_]*)|(__.*__))$
 
 # Regular expression matching correct attribute names
-attr-rgx=[a-z_][a-z0-9_]{2,30}$
+attr-rgx=[A-Za-z_][A-Za-z0-9_]{2,30}$
 
 # Naming hint for attribute names
-attr-name-hint=[a-z_][a-z0-9_]{2,30}$
+attr-name-hint=[A-Za-z_][A-Za-z0-9_]{2,30}$
 
 # Regular expression matching correct argument names
 argument-rgx=[a-z_][a-z0-9_]{2,30}$
