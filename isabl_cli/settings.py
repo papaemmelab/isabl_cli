@@ -152,10 +152,7 @@ class BaseSettings:
         try:
             val = self._settings[attr]
         except KeyError:
-            try:
-                val = environ[f"ISABL_{attr}"]
-            except KeyError:
-                val = self.defaults[attr]
+            val = self.defaults[attr]
 
         if attr in self.import_strings:  # coerce import strings into object
             val = perform_import(val, attr)

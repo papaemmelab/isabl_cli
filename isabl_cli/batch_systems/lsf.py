@@ -51,8 +51,8 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
             submit_lsf_array(
                 commands=commands,
                 requirements=requirements,
-                extra_args=os.environ.get("BEE_LSF_EXTRA_ARGS", ""),
-                throttle_by=os.environ.get("BEE_LSF_THROTTLE_BY", 50),
+                extra_args=os.environ.get("ISABL_LSF_EXTRA_ARGS", ""),
+                throttle_by=os.environ.get("ISABL_LSF_THROTTLE_BY", 50),
                 jobname=f"Array | application: {app.primary_key} | "
                 f"methods: {methods} | projects: {projects}",
             )
