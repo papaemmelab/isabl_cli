@@ -11,7 +11,7 @@
     ],
     "entry_points": {
         "console_scripts": [
-            "ibl=isabl_cli.cli:main"
+            "isabl=isabl_cli.cli:main"
         ]
     },
     "setup_requires": [
