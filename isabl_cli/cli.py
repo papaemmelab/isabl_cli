@@ -15,6 +15,8 @@ cause problems, the code will get executed twice:
 Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 """
 
+from collections import defaultdict
+from slugify import slugify
 import click
 
 from isabl_cli import __version__
@@ -24,17 +26,22 @@ from isabl_cli.settings import system_settings
 @click.group()
 @click.version_option(version=__version__)
 def main():  # pragma: no cover
-    """CLI command line tools."""
+    """run isabl command line tools."""
     pass
 
 
-@click.group()
-def apps():  # pragma: no cover
-    """Run registered applications."""
-    pass
+def add_apps_groups(apps):
+    """Group apps by assembly."""
+    apps_dict = defaultdict(dict)
 
+    for i in apps:  # pylint: disable=W0621
+        command = i.as_cli_command()
+        apps_dict[i.ASSEMBLY][command.name] = command
 
-main.add_command(apps)
+    for i, j in apps_dict.items():
+        name, _help = f"apps-{slugify(i)}", f"{i} applications."
+        main.add_command(click.Group(name=name, commands=j, help=_help))
+
 
 for i in system_settings.SYSTEM_COMMANDS:
     main.add_command(i)
@@ -42,8 +49,8 @@ for i in system_settings.SYSTEM_COMMANDS:
 for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
-for i in system_settings.INSTALLED_APPLICATIONS:  # pragma: no cover
-    apps.add_command(i.as_cli_command())
+if system_settings.INSTALLED_APPLICATIONS:
+    add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
 
 if system_settings.is_admin_user:
     for i in system_settings.ADMIN_COMMANDS:
