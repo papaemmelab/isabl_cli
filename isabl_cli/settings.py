@@ -43,6 +43,7 @@ _DEFAULTS = {
         "isabl_cli.commands.get_count",
         "isabl_cli.commands.get_paths",
         "isabl_cli.commands.get_sequencing_data",
+        "isabl_cli.commands.login",
         "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.patch_status",
     ],

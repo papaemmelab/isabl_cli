@@ -2,6 +2,7 @@
 
 from itertools import islice
 import collections
+import json
 import time
 import shutil
 import subprocess
@@ -29,24 +30,39 @@ def chunks(array, size):
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
     url = f"{system_settings.API_BASE_URL}/rest-auth/user/"
-    headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
+    headers = {"Authorization": f"Token {user_settings.api_token}"}
     response = requests.get(url=url, headers=headers, verify=False)
 
-    if not response.ok:
+    try:
+        assert "username" in response.json()
+    except (json.JSONDecodeError, AssertionError):
         data = {
             "username": click.prompt(
-                "username", type=str, hide_input=False, default="admin"
+                "username",
+                type=str,
+                hide_input=False,
+                default="admin",
+                show_default=False,
             ),
             "password": click.prompt(
-                "password", type=str, hide_input=True, default="admin"
+                "password",
+                type=str,
+                hide_input=True,
+                default="admin",
+                show_default=False,
             ),
         }
 
         auth_url = f"{system_settings.API_BASE_URL}/rest-auth/login/"
         response = requests.post(url=f"{auth_url}", data=data, verify=False)
-        response.raise_for_status()
-        user_settings.API_TOKEN = response.json()["key"]  # pylint: disable=invalid-name
-        headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
+
+        if not response.ok and "non_field_errors" in response.text:
+            click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
+            return get_token_headers()
+
+        user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
+        headers = {"Authorization": f"Token {user_settings.api_token}"}
+        click.secho("Successful authorization! Token stored.", fg="green")
 
     return headers
 

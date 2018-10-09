@@ -9,6 +9,14 @@ from isabl_cli import api
 from isabl_cli import options
 from isabl_cli import utils
 from isabl_cli.settings import import_from_string
+from isabl_cli.settings import user_settings
+
+
+@click.command()
+def login():  # pragma: no cover
+    """Login with isabl credentials."""
+    user_settings.api_token = None
+    api.get_token_headers()
 
 
 @click.command()
