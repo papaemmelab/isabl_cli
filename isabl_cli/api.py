@@ -30,7 +30,7 @@ def get_token_headers():
     """Get an API token and store it in user's home directory."""
     url = f"{system_settings.API_BASE_URL}/rest-auth/user/"
     headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
-    response = requests.get(url=url, headers=headers)
+    response = requests.get(url=url, headers=headers, verify=False)
 
     if not response.ok:
         data = {
@@ -43,7 +43,7 @@ def get_token_headers():
         }
 
         auth_url = f"{system_settings.API_BASE_URL}/rest-auth/login/"
-        response = requests.post(url=f"{auth_url}", data=data)
+        response = requests.post(url=f"{auth_url}", data=data, verify=False)
         response.raise_for_status()
         user_settings.API_TOKEN = response.json()["key"]  # pylint: disable=invalid-name
         headers = {"Authorization": f"Token {user_settings.API_TOKEN}"}
