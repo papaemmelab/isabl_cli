@@ -28,7 +28,6 @@ _DEFAULTS = {
     "FASTQ_READ_PREFIX": "",
     "ADMIN_USER": getpass.getuser(),
     "TIME_ZONE": "America/New_York",
-    "APPLICATIONS_SETTINGS": {},
     "INSTALLED_APPLICATIONS": [],
     "CUSTOM_COMMANDS": [],
     "ON_DATA_IMPORT": ["isabl_cli.data.symlink_experiment_to_projects"],
@@ -183,8 +182,8 @@ class SystemSettings(BaseSettings):
         """Return dictionary system with settings."""
         settings = {}
 
-        if "CLI_SETTINGS_PATH" in environ:
-            with open(environ["CLI_SETTINGS_PATH"], "r") as f:
+        if "ISABL_CLI_SETTINGS_PATH" in environ:
+            with open(environ["ISABL_CLI_SETTINGS_PATH"], "r") as f:
                 settings = yaml.load(f.read())
 
         return settings

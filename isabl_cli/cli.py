@@ -29,12 +29,12 @@ def main():  # pragma: no cover
 
 
 @click.group()
-def applications():  # pragma: no cover
+def apps():  # pragma: no cover
     """Run registered applications."""
     pass
 
 
-main.add_command(applications)
+main.add_command(apps)
 
 for i in system_settings.SYSTEM_COMMANDS:
     main.add_command(i)
@@ -43,7 +43,7 @@ for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
 for i in system_settings.INSTALLED_APPLICATIONS:  # pragma: no cover
-    applications.add_command(i.as_cli_command())
+    apps.add_command(i.as_cli_command())
 
 if system_settings.is_admin_user:
     for i in system_settings.ADMIN_COMMANDS:

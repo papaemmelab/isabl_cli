@@ -45,7 +45,7 @@ def patch_results(filters):
         api.patch_instance("analyses", i["pk"], results=results)
 
 
-@click.command()
+@click.command(hidden=True)
 @options.ANALYSIS_PRIMARY_KEY
 @options.ANALYSIS_STATUS
 def patch_status(key, status):
@@ -85,7 +85,7 @@ def get_count(endpoint, filters):
 @options.FILTERS
 def get_paths(endpoint, pattern, filters):
     """Get storage directories, use `pattern` to match files inside dirs."""
-    filters.update(fields="storage_url", limit=100000)
+    filters.update(fields="storage_url", limit=100_000)
     for i in api.get_instances(endpoint, verbose=True, **filters):
         if i["storage_url"]:
             if pattern:
@@ -99,7 +99,7 @@ def get_paths(endpoint, pattern, filters):
 @options.VERBOSE
 def get_sequencing_data(filters, verbose):
     """Get storage directories, use `pattern` to match files inside dirs."""
-    filters.update(fields="sequencing_data,system_id", limit=100000)
+    filters.update(fields="sequencing_data,system_id", limit=100_000)
     for i in api.get_instances("experiments", verbose=True, **filters):
         system_id = i["system_id"]
 
@@ -116,7 +116,7 @@ def get_sequencing_data(filters, verbose):
 @click.option("--assembly", help="when bams available for multiple assemblies")
 def get_bams(filters, assembly, verbose):
     """Get storage directories, use `pattern` to match files inside dirs."""
-    filters.update(fields="bam_files,system_id", limit=100000)
+    filters.update(fields="bam_files,system_id", limit=100_000)
     for i in api.get_instances("experiments", verbose=True, **filters):
         bam_path = None
         system_id = i["system_id"]

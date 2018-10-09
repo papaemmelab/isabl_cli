@@ -261,7 +261,7 @@ class ReferenceDataImporter(BaseImporter):
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
         # build isabl_cli command and return it
-        @click.command(name="import_reference_data")
+        @click.command(name="import-reference-data")
         @click.option("--assembly", help="name of reference genome")
         @click.option("--species", help="species of reference genome")
         @click.option("--description", help="reference data description")
@@ -385,7 +385,7 @@ class BedImporter:
     def as_cli_command(cls):
         """Get bed importer as click command line interface."""
         # build isabl_cli command and return it
-        @click.command(name="import_bedfiles")
+        @click.command(name="import-bedfiles")
         @options.TECHNIQUE_PRIMARY_KEY
         @options.TARGETS_PATH
         @options.BAITS_PATH
@@ -713,7 +713,7 @@ class DataImporter(BaseImporter):
     def as_cli_command(cls):
         """Get data importer as a click command line interface."""
         # build isabl_cli command and return it
-        @click.command(name="import_data")
+        @click.command(name="import-data")
         @options.DIRECTORIES
         @options.IDENTIFIER
         @options.FILTERS
@@ -722,7 +722,7 @@ class DataImporter(BaseImporter):
         @options.FILES_DATA
         def cmd(identifier, commit, filters, directories, symlink, files_data):
             """
-            Find and import data for multiple experiments from many directories.
+            Find and import experiments data from many directories.
 
             Search is recursive and any cram, bam or fastq file that matches
             the experiment identifier will be imported. Multiple data types for
