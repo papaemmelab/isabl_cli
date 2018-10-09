@@ -375,7 +375,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     click.secho("\nApplication has no url defined.\n")
                 ctx.exit()
 
-        @click.command(name=pipe.get_cli_command_name(), help=cls.cli_help)
+        @click.command(name=pipe.get_cli_command_name(), help=pipe.cli_help)
         @click.option(
             "--url",
             help="Show the url or main repo of the app.",
@@ -384,7 +384,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(cls.cli_options + [commit, force, verbose])
+        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose])
         def command(commit, force, verbose, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
