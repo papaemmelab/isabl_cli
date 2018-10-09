@@ -24,53 +24,7 @@ from isabl_cli.settings import system_settings
 
 class AbstractApplication:  # pylint: disable=too-many-public-methods
 
-    """
-    An Abstract application.
-
-    Whilst this project becomes more mature, the size of `AbstractApplication`
-    is expected to be reduced and split into components. As for now we will
-    leave all logic together so that functionality is transparent.
-
-    For instance, the analysis execution logic could be included in a backend,
-    same as data validation and analyses retrieval and creation.
-
-    **User Implementations**
-
-    TODO
-
-    **Project Level Merge**
-
-    TODO
-
-    **Command Line Interface**
-
-    TODO
-
-    **Analyses Execution**
-
-    TODO
-
-    **Analyses Creation**
-
-    TODO
-
-    **Data Validation**
-
-    TODO
-
-    Attributes:
-        NAME (object): TODO.
-        VERSION (object): TODO.
-        ASSEMBLY (object): TODO.
-        SPECIES (object): TODO.
-        URL (object): TODO.
-        import_strings (object): TODO.
-        application_settings (object): TODO.
-        cli_help (object): TODO.
-        cli_options (object): TODO.
-        skip_status (object): TODO.
-        skip_exceptions (object): TODO.
-    """
+    """An Abstract application."""
 
     # application unique together definition
     NAME = None
