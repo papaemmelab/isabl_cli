@@ -406,8 +406,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_cli_command_name(self):
         """Get name for isabl_cli command."""
-        name = f"{self.NAME} {self.VERSION} {self.ASSEMBLY}"
-        return slugify(name, separator="-")
+        return f"{slugify(self.NAME)}-{slugify(self.VERSION, separator='.')}"
 
     # ------------------------
     # ANALYSES EXECUTION LOGIC
