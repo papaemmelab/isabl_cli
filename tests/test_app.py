@@ -1,16 +1,18 @@
-from os.path import join
 from os.path import isfile
+from os.path import join
+import os
+
 from click.testing import CliRunner
 import click
 import pytest
 
-from isabl_cli import api
-from isabl_cli import factories
-from isabl_cli import exceptions
-from isabl_cli import options
 from isabl_cli import AbstractApplication
-from isabl_cli.settings import system_settings
+from isabl_cli import api
+from isabl_cli import exceptions
+from isabl_cli import factories
+from isabl_cli import options
 from isabl_cli.settings import _DEFAULTS
+from isabl_cli.settings import system_settings
 
 
 class TestApplication(AbstractApplication):
@@ -61,12 +63,13 @@ class TestApplication(AbstractApplication):
         return {"project_result_key": None}
 
 
-def test_application_settings():
+def test_application_settings(tmpdir):
     application = TestApplication()
     application.application_settings = {
         "test_reference": "reference_data_id:test_id",
         "needs_to_be_implemented": NotImplemented,
         "from_system_settings": None,
+        "foo": NotImplemented,
     }
 
     application.assembly["reference_data"]["test_id"] = dict(url="FOO")
@@ -77,6 +80,11 @@ def test_application_settings():
 
     assert "is required" in str(error.value)
     assert application.settings.system_settings == system_settings
+
+    settings_yml = tmpdir.join("test.yml")
+    settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
+    os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
+    assert application.settings.foo == "from_the_env"
 
 
 def test_engine(tmpdir):
