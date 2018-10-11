@@ -195,7 +195,7 @@ class ApplicationSettings:
         """Get application settings from system settings."""
         self._key = f"{application.NAME} {application.VERSION} {application.ASSEMBLY}"
         self.defaults = defaults
-        self.application = application.application
+        self.application = application
         self.reference_data = application.assembly["reference_data"] or {}
         self.import_strings = import_strings or {}
 
@@ -212,9 +212,12 @@ class ApplicationSettings:
         required = self.defaults[attr] is NotImplemented
 
         try:
-            val = self.application["settings"][attr]
+            val = self.application.application["settings"][attr]
         except KeyError:
-            val = self.defaults[attr]
+            try:
+                val = self._settings[attr]
+            except KeyError:
+                val = self.defaults[attr]
 
         if isinstance(val, str) and "reference_data_id:" in val:
             val = self.reference_data.get(val.split(":", 1)[1])
@@ -228,6 +231,17 @@ class ApplicationSettings:
             raise exceptions.MissingRequirementError(msg)
 
         return val
+
+    @property
+    def _settings(self):
+        """Return dictionary system with settings."""
+        settings = {}
+
+        if "ISABL_DEFAULT_APPS_SETTINGS_PATH" in environ:
+            with open(environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"], "r") as f:
+                settings = yaml.load(f.read())
+
+        return settings.get(self.application.primary_key, {})
 
 
 # pylint: disable=C0103
