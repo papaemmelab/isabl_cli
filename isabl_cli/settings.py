@@ -18,7 +18,6 @@ import yaml
 from isabl_cli import exceptions
 
 _DEFAULTS = {
-    "API_BASE_URL": "http://0.0.0.0:8000/api/v1",
     "MAKE_STORAGE_DIRECTORY": "isabl_cli.data.make_storage_directory",
     "TRASH_ANALYSIS_STORAGE": "isabl_cli.data.trash_analysis_storage",
     "REFERENCE_DATA_IMPORTER": "isabl_cli.data.ReferenceDataImporter",
@@ -175,19 +174,14 @@ class SystemSettings(BaseSettings):
         """Get current username from database."""
         from isabl_cli.api import api_request
 
-        response = api_request("get", url=f"{self.API_BASE_URL}/rest-auth/user/")
-        return response.json()["username"]
+        return api_request("get", url="/rest-auth/user/").json()["username"]
 
-    @property
+    @cached_property
     def _settings(self):
         """Return dictionary system with settings."""
-        settings = {}
+        from isabl_cli.api import api_request
 
-        if "ISABL_CLI_SETTINGS_PATH" in environ:
-            with open(environ["ISABL_CLI_SETTINGS_PATH"], "r") as f:
-                settings = yaml.load(f.read())
-
-        return settings
+        return api_request("get", "/client/settings/", authenticate=False).json()
 
 
 class ApplicationSettings:

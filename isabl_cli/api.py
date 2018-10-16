@@ -1,20 +1,22 @@
 """Logic to interact with API."""
 
 from itertools import islice
+from os import environ
+from urllib.parse import urljoin
 import collections
 import json
-import time
 import shutil
 import subprocess
+import time
 
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import click
 import requests
 
 from isabl_cli import utils
+from isabl_cli.settings import import_from_string
 from isabl_cli.settings import system_settings
 from isabl_cli.settings import user_settings
-from isabl_cli.settings import import_from_string
 
 requests.packages.urllib3.disable_warnings(  # pylint: disable=E1101
     InsecureRequestWarning
@@ -27,35 +29,49 @@ def chunks(array, size):
     return iter(lambda: tuple(islice(array, size)), ())
 
 
+def get_api_url(url):
+    """Get an API URL."""
+    base_url = environ.get("ISABL_API_URL", "http://0.0.0.0:8000/api/v1")
+
+    if not url.startswith(base_url):
+        url = urljoin(base_url, url[1:] if url.startswith("/") else url)
+
+    return url
+
+
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
-    url = f"{system_settings.API_BASE_URL}/rest-auth/user/"
     headers = {"Authorization": f"Token {user_settings.api_token}"}
-    response = requests.get(url=url, headers=headers, verify=False)
+    auth_url = get_api_url("/rest-auth/user/")
+    response = requests.get(url=auth_url, headers=headers, verify=False)
 
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
-        data = {
-            "username": click.prompt(
-                "username",
-                type=str,
-                hide_input=False,
-                default="admin",
-                show_default=False,
-            ),
-            "password": click.prompt(
-                "password",
-                type=str,
-                hide_input=True,
-                default="admin",
-                show_default=False,
-            ),
-        }
+        response = requests.post(
+            verify=False,
+            url=get_api_url("/rest-auth/login/"),
+            data={
+                "username": click.prompt(
+                    "username",
+                    type=str,
+                    hide_input=False,
+                    default="admin",
+                    show_default=False,
+                ),
+                "password": click.prompt(
+                    "password",
+                    type=str,
+                    hide_input=True,
+                    default="admin",
+                    show_default=False,
+                ),
+            },
+        )
 
-        auth_url = f"{system_settings.API_BASE_URL}/rest-auth/login/"
-        response = requests.post(url=f"{auth_url}", data=data, verify=False)
+        import ipdb
 
+        ipdb.set_trace()
         if not response.ok and "non_field_errors" in response.text:
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
             return get_token_headers()
@@ -67,11 +83,14 @@ def get_token_headers():
     return headers
 
 
-def api_request(method, **kwargs):
+def api_request(method, url, authenticate=True, **kwargs):
     """Perform any request operation using a naive retry implementation."""
-    kwargs["headers"] = get_token_headers()
     kwargs["params"] = kwargs.get("params", {})
     kwargs["params"]["format"] = "json"
+    kwargs["url"] = get_api_url(url)
+
+    if authenticate:
+        kwargs["headers"] = get_token_headers()
 
     for i in [0.2, 0.4, 0.6, 0.8, 5, 10]:  # attempt some retries
         response = getattr(requests, method)(verify=False, **kwargs)
@@ -163,8 +182,7 @@ def get_instance(endpoint, identifier):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f"{system_settings.API_BASE_URL}/{endpoint}/{identifier}"
-    return api_request("get", url=url).json()
+    return api_request("get", url=f"/{endpoint}/{identifier}").json()
 
 
 def create_instance(endpoint, **data):
@@ -178,8 +196,7 @@ def create_instance(endpoint, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f"{system_settings.API_BASE_URL}/{endpoint}"
-    return api_request("post", url=url, json=data).json()
+    return api_request("post", url=endpoint, json=data).json()
 
 
 def patch_instance(endpoint, identifier, **data):
@@ -194,8 +211,7 @@ def patch_instance(endpoint, identifier, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    url = f"{system_settings.API_BASE_URL}/{endpoint}/{identifier}"
-    instance = api_request("patch", url=url, json=data).json()
+    instance = api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
 
     if endpoint == "analyses" and instance.get("status"):
         _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
@@ -214,8 +230,7 @@ def delete_instance(endpoint, identifier):
         identifier (str): a primary key, system_id, email or username.
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
     """
-    url = f"{system_settings.API_BASE_URL}/{endpoint}/{identifier}"
-    api_request("delete", url=url)
+    api_request("delete", url=f"/{endpoint}/{identifier}")
 
 
 def get_instances(endpoint, identifiers=None, verbose=False, **filters):
@@ -238,7 +253,6 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
         list: of types.SimpleNamespace objects loaded with dicts from API.
     """
     check_system_id = endpoint in {"individuals", "samples", "experiments"}
-    url = f"{system_settings.API_BASE_URL}/{endpoint}"
     instances = []
     keys = set()
 
@@ -250,7 +264,7 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
         click.echo(count, err=True)
 
     if filters or identifiers is None:
-        instances += iterate(url, **filters)
+        instances += iterate(endpoint, **filters)
         keys = {i["pk"] for i in instances if i.get("pk")}
 
     for chunk in chunks(identifiers or [], 10000):
@@ -267,11 +281,11 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
                 raise click.UsageError(msg)
 
         if primary_keys:
-            kwargs = {"pk__in": ",".join(primary_keys), "url": url}
+            kwargs = {"pk__in": ",".join(primary_keys), "url": endpoint}
             instances += [i for i in iterate(**kwargs) if i["pk"] not in keys]
 
         if system_ids:
-            kwargs = {"system_id__in": ",".join(system_ids), "url": url}
+            kwargs = {"system_id__in": ",".join(system_ids), "url": endpoint}
             instances += [i for i in iterate(**kwargs) if i["pk"] not in keys]
 
     return instances
@@ -288,10 +302,9 @@ def get_instances_count(endpoint, **filters):
     Returns:
         int: count of objects matching the provided filters.
     """
-    url = f"{system_settings.API_BASE_URL}/{endpoint}"
     filters = process_api_filters(**filters)
     filters["limit"] = 1
-    return int(api_request("get", url=url, params=filters).json()["count"])
+    return int(api_request("get", url=endpoint, params=filters).json()["count"])
 
 
 def get_tree(identifier):
@@ -319,7 +332,6 @@ def patch_analyses_status(analyses, status):
         list: of updated analyses.
     """
     data = {"ids": [], "status": status, "ran_by": system_settings.api_username}
-    url = f"{system_settings.API_BASE_URL}/analyses/bulk_update/"
     assert status in {"SUBMITTED", "STAGED"}, f"status not supported: {status}"
 
     for i in analyses:  # change locally, bulk_update doesn't return instances
@@ -327,7 +339,7 @@ def patch_analyses_status(analyses, status):
         i["ran_by"] = data.get("ran_by", i["ran_by"])
         data["ids"].append(i["pk"])
 
-    api_request("patch", url=url, json=data)
+    api_request("patch", url="/analyses/bulk_update/", json=data)
 
     for i in analyses:
         _run_signals("analyses", i, system_settings.ON_STATUS_CHANGE)
