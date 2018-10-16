@@ -23,7 +23,7 @@ def test_get_token_headers():
 
 
 def test_api_request():
-    assert api.api_request("get", url=f"{system_settings.API_BASE_URL}/auth").ok
+    assert api.api_request("get", url="auth").ok
     with pytest.raises(requests.HTTPError):
         api.api_request("delete", url="http://google.com")
 
