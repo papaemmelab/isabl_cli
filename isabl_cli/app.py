@@ -747,8 +747,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     analysis["application_inputs"] = inputs
                     created_analyses.append(analysis)
                 except (exceptions.ValidationError, AssertionError) as error:
-                    error = exceptions.ValidationError(error)
-                    invalid_tuples.append((i, error))
+                    invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
 
         return existing_analyses + created_analyses, invalid_tuples
 

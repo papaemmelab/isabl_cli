@@ -31,7 +31,9 @@ def chunks(array, size):
 
 def get_api_url(url):
     """Get an API URL."""
-    base_url = environ.get("ISABL_API_URL", "http://0.0.0.0:8000/api/v1")
+    # hmm, don't like this messing around with slashes
+    base_url = environ.get("ISABL_API_URL", "http://0.0.0.0:8000/api/v1/")
+    base_url = base_url if base_url[-1] == "/" else f"{base_url}/"
 
     if not url.startswith(base_url):
         url = urljoin(base_url, url[1:] if url.startswith("/") else url)
