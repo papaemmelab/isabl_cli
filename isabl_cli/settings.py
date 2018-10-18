@@ -24,7 +24,7 @@ _DEFAULTS = {
     "DATA_IMPORTER": "isabl_cli.data.DataImporter",
     "BED_IMPORTER": "isabl_cli.data.BedImporter",
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
-    "FASTQ_READ_PREFIX": "",
+    "FASTQ_READ_SUFFIX": "",
     "ADMIN_USER": getpass.getuser(),
     "TIME_ZONE": "America/New_York",
     "INSTALLED_APPLICATIONS": [],
