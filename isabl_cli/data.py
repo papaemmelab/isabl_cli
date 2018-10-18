@@ -652,7 +652,7 @@ class DataImporter(BaseImporter):
             file_type = f"FASTQ_R{index}"
 
             if re.search(self.FASTQ_REGEX.format(index), file_name):
-                suffix = f"_{system_settings.FASTQ_READ_PREFIX}{index}.fastq"
+                suffix = f"_{system_settings.FASTQ_READ_SUFFIX}{index}.fastq"
                 break
 
         assert suffix, f"Couldn't determine read 1 or read 2 from {file_name}"
