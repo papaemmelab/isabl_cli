@@ -2,9 +2,11 @@
 # pylint: disable=R0201,C0103
 
 from collections import defaultdict
-from os.path import join
+from contextlib import redirect_stderr
+from contextlib import redirect_stdout
 from os.path import isdir
 from os.path import isfile
+from os.path import join
 import abc
 import os
 import sys
@@ -41,6 +43,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     # application configuration
     application_inputs = {}
+    application_results = {}
+    application_project_level_results = {}
     application_settings = {}
     application_import_strings = {}
     cli_help = ""
@@ -52,6 +56,30 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         exceptions.ConfigurationError,
         exceptions.MissingOutputError,
     )
+
+    # private result keys
+    _command_script_key = "command_script"
+    _command_log_key = "command_log"
+    _command_err_key = "command_err"
+
+    # private result specs
+    _command_script_specs = {
+        "frontend_type": "text-file",
+        "description": "Script used to execute the analysis.",
+        "verbose_name": "Analysis Script",
+    }
+
+    _command_log_specs = {
+        "frontend_type": "text-file",
+        "description": "Analysis standard output.",
+        "verbose_name": "Standard Output",
+    }
+
+    _command_err_specs = {
+        "frontend_type": "text-file",
+        "description": "Analysis standard error.",
+        "verbose_name": "Standard Error",
+    }
 
     # -----------------------------
     # USER REQUIRED IMPLEMENTATIONS
@@ -191,15 +219,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         )
 
         if analyses:
-            try:
-                analysis = self.get_project_analysis(project)
-                oldmask = os.umask(0o22)
-                self.merge_project_analyses(analysis["storage_url"], analyses)
-                os.umask(oldmask)
-                api.patch_analysis_status(analysis, "SUCCEEDED")
-            except Exception as error:  # pragma: no cover pylint: disable=W0703
-                api.patch_analysis_status(analysis, "FAILED")
-                raise error
+            error = None
+            analysis = self.get_project_analysis(project)
+            stdout_path = self.get_command_log_path(analysis)
+            stderr_path = self.get_command_log_path(analysis)
+            oldmask = os.umask(0o22)
+
+            with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
+                with redirect_stdout(out), redirect_stderr(err):
+                    try:
+                        self.merge_project_analyses(analysis["storage_url"], analyses)
+                        api.patch_analysis_status(analysis, "SUCCEEDED")
+                    except Exception as e:  # pragma: no cover pylint: disable=W0703
+                        click.echo(e, file=sys.stderr)
+                        api.patch_analysis_status(analysis, "FAILED")
+                        error = e
+
+            os.umask(oldmask)
+            if error is not None:
+                raise Exception(error)
 
     def submit_project_merge(self, project):
         """
@@ -275,20 +313,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             name=self.NAME,
             version=self.VERSION,
             assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
-            url=self.URL,
-            application_class=application_class,
         )
 
-        if (
-            application["application_class"] != application_class
-            or application["url"] != self.URL
-        ):
-            api.patch_instance(  # pragma: no cover
-                endpoint="applications",
-                identifier=application["pk"],
-                application_class=application_class,
-                url=self.URL,
-            )
+        api.patch_instance(  # pragma: no cover
+            endpoint="applications",
+            identifier=application["pk"],
+            application_class=application_class,
+            results=self._application_results,
+            project_level_results=self._application_project_level_results,
+            url=self.URL,
+        )
 
         return application
 
@@ -296,6 +330,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def assembly(self):
         """Get assembly database object."""
         return self.application["assembly"]
+
+    @property
+    def _application_results(self):
+        ret = self.application_results
+        ret[self._command_script_key] = self._command_script_specs
+        ret[self._command_log_key] = self._command_log_specs
+        ret[self._command_err_key] = self._command_err_specs
+        return ret
+
+    @property
+    def _application_project_level_results(self):
+        ret = self.application_project_level_results
+        ret[self._command_log_key] = self._command_log_specs
+        ret[self._command_err_key] = self._command_err_specs
+        return ret
 
     # ----------------------------
     # COMMAND LINE INTERFACE LOGIC
@@ -512,9 +561,27 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return analyses, inputs
 
-    # --------------
+    def _get_analysis_results(self, analysis):
+        """Get results dictionary and append head job script, logs and error files."""
+        if analysis["project_level_analysis"]:
+            specification = self.application_project_level_results
+            results = self.get_project_analysis_results(analysis)
+        else:
+            specification = self.application_results
+            results = self.get_analysis_results(analysis)
+            results[self._command_script_key] = self.get_command_script_path(analysis)
+
+        results[self._command_log_key] = self.get_command_log_path(analysis)
+        results[self._command_err_key] = self.get_command_err_path(analysis)
+
+        for i in specification:
+            assert i in results, f"Missing expected result {i} in: {results}"
+
+        return results
+
+    # -----------------
     # APPLICATION UTILS
-    # --------------
+    # -----------------
 
     @staticmethod
     def get_job_name(analysis):
