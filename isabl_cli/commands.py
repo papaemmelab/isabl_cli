@@ -49,7 +49,7 @@ def patch_results(filters):
 
     for i in api.get_instances("analyses", **filters):
         application = import_from_string(i["application"]["application_class"])()
-        results = application.get_analysis_results(i)
+        results = application._get_analysis_results(i)
         api.patch_instance("analyses", i["pk"], results=results)
 
 

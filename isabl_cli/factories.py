@@ -92,7 +92,6 @@ class ExperimentFactory(BaseFactory):
     cell_type = fuzzy.FuzzyChoice(["SINGLE", "BULK"])
     center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     portion_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    projects = []
     read_length = fuzzy.FuzzyChoice(["100", "150"])
     read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
     research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
@@ -101,3 +100,8 @@ class ExperimentFactory(BaseFactory):
     sequencing_platform = factory.SubFactory(PlatformFactory)
     sample = factory.SubFactory(SampleFactory)
     technique = factory.SubFactory(TechniqueFactory)
+
+    @factory.lazy_attribute
+    def projects(self):
+        """Get method as a function of the analyte."""
+        return [ProjectFactory()]

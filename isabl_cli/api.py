@@ -71,9 +71,6 @@ def get_token_headers():
             },
         )
 
-        import ipdb
-
-        ipdb.set_trace()
         if not response.ok and "non_field_errors" in response.text:
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
             return get_token_headers()
@@ -382,11 +379,7 @@ def patch_analysis_status(analysis, status):
     if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
             application = import_from_string(application["application_class"])()
-            get_results = application.get_analysis_results
-
-            if analysis["project_level_analysis"]:
-                get_results = application.get_project_analysis_results
-
+            get_results = application._get_analysis_results
             data["results"] = get_results(analysis)
         except ImportError:
             pass
