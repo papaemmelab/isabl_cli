@@ -21,9 +21,9 @@ def test_trash_analysis_storage():
     assert "You can't wipe a succeeded analysis" in str(error.value)
 
 
-def test_make_storage_directory(tmpdir):
-    i = data.make_storage_directory(tmpdir.strpath, "test", 12345, use_hash=True)
-    j = data.make_storage_directory(tmpdir.strpath, "test", 12345, use_hash=False)
+def test__make_storage_directory(tmpdir):
+    i = data._make_storage_directory(tmpdir.strpath, "test", 12345, use_hash=True)
+    j = data._make_storage_directory(tmpdir.strpath, "test", 12345, use_hash=False)
     assert "/test/23/45/12345" in i
     assert "/test/12345" in j
 

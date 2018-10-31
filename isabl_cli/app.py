@@ -42,6 +42,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     get_results = utils.get_results
 
     # application configuration
+    application_description = ""
     application_inputs = {}
     application_results = {}
     application_project_level_results = {}
@@ -218,6 +219,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             status="SUCCEEDED",
         )
 
+        with open(self.get_command_script_path, "w") as f:
+            f.write(
+                f"isabl merge-project-analyses --project {project['pk']} "
+                f"--application {self.primary_key}\n"
+            )
+
         if analyses:
             error = None
             analysis = self.get_project_analysis(project)
@@ -316,6 +323,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         )
 
         api.patch_instance(  # pragma: no cover
+            description=self.application_description,
             endpoint="applications",
             identifier=application["pk"],
             application_class=application_class,
@@ -561,18 +569,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return analyses, inputs
 
-    def _get_analysis_results(self, analysis):
+    def _get_analysis_results(self, analysis, created=False):
         """Get results dictionary and append head job script, logs and error files."""
+        results = {
+            self._command_log_key: self.get_command_log_path(analysis),
+            self._command_err_key: self.get_command_err_path(analysis),
+            self._command_script_key: self.get_command_script_path(analysis),
+        }
+
+        if created:
+            return results
+
         if analysis["project_level_analysis"]:
             specification = self.application_project_level_results
-            results = self.get_project_analysis_results(analysis)
+            get_results = self.get_project_analysis_results
         else:
             specification = self.application_results
-            results = self.get_analysis_results(analysis)
-            results[self._command_script_key] = self.get_command_script_path(analysis)
+            get_results = self.get_analysis_results
 
-        results[self._command_log_key] = self.get_command_log_path(analysis)
-        results[self._command_err_key] = self.get_command_err_path(analysis)
+        results.update(get_results(analysis))
 
         for i in specification:
             assert i in results, f"Missing expected result {i} in: {results}"
@@ -807,8 +822,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                         analyses=analyses,
                     )
 
-                    analysis = data.update_storage_url(
+                    analysis["storage_url"] = data.get_storage_url(
                         endpoint="analyses", identifier=analysis["pk"], use_hash=True
+                    )
+
+                    analysis = api.patch_instance(
+                        "analyses",
+                        analysis["pk"],
+                        storage_url=analysis["storage_url"],
+                        results=self._get_analysis_results(analysis, created=True),
                     )
 
                     analysis["application_inputs"] = inputs
