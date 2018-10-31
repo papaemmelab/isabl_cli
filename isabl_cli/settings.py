@@ -18,7 +18,7 @@ import yaml
 from isabl_cli import exceptions
 
 _DEFAULTS = {
-    "MAKE_STORAGE_DIRECTORY": "isabl_cli.data.make_storage_directory",
+    "MAKE_STORAGE_DIRECTORY": "isabl_cli.data._make_storage_directory",
     "TRASH_ANALYSIS_STORAGE": "isabl_cli.data.trash_analysis_storage",
     "REFERENCE_DATA_IMPORTER": "isabl_cli.data.ReferenceDataImporter",
     "DATA_IMPORTER": "isabl_cli.data.DataImporter",

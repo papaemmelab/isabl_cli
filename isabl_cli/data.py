@@ -133,7 +133,7 @@ def trash_analysis_storage(analysis):
         shutil.move(analysis["storage_url"], dst)
 
 
-def make_storage_directory(root, base, identifier, use_hash=False):
+def _make_storage_directory(root, base, identifier, use_hash=False):
     """
     Get and create path to a data directory.
 
@@ -173,15 +173,19 @@ def make_storage_directory(root, base, identifier, use_hash=False):
     return storage_directory
 
 
-def update_storage_url(endpoint, identifier, use_hash=False, **data):
+def get_storage_url(endpoint, identifier, use_hash=False):
     """Make storage directory and return patched instance."""
-    data["storage_url"] = system_settings.MAKE_STORAGE_DIRECTORY(
+    return system_settings.MAKE_STORAGE_DIRECTORY(
         root=system_settings.BASE_STORAGE_DIRECTORY,
         base=endpoint,
         identifier=identifier,
         use_hash=use_hash,
     )
 
+
+def update_storage_url(endpoint, identifier, use_hash=False, **data):
+    """Make storage directory and return patched instance."""
+    data["storage_url"] = get_storage_url(endpoint, identifier, use_hash)
     return api.patch_instance(endpoint, identifier, **data)
 
 
