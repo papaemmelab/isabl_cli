@@ -63,23 +63,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     _command_log_key = "command_log"
     _command_err_key = "command_err"
 
-    # private result specs
-    _command_script_specs = {
-        "frontend_type": "text-file",
-        "description": "Script used to execute the analysis.",
-        "verbose_name": "Analysis Script",
-    }
-
-    _command_log_specs = {
-        "frontend_type": "text-file",
-        "description": "Analysis standard output.",
-        "verbose_name": "Standard Output",
-    }
-
-    _command_err_specs = {
-        "frontend_type": "text-file",
-        "description": "Analysis standard error.",
-        "verbose_name": "Standard Error",
+    # base results
+    _base_results = {
+        _command_script_key: {
+            "frontend_type": "text-file",
+            "description": "Script used to execute the analysis.",
+            "verbose_name": "Analysis Script",
+        },
+        _command_log_key: {
+            "frontend_type": "text-file",
+            "description": "Analysis standard output.",
+            "verbose_name": "Standard Output",
+        },
+        _command_err_key: {
+            "frontend_type": "text-file",
+            "description": "Analysis standard error.",
+            "verbose_name": "Standard Error",
+        },
     }
 
     # -----------------------------
@@ -151,7 +151,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -----------------------------
 
     @abc.abstractmethod  # add __isabstractmethod__ property to method
-    def merge_project_analyses(self, storage_url, analyses):
+    def merge_project_analyses(self, analysis, analyses):
         """
         Merge analyses on a project level basis.
 
@@ -160,10 +160,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         application is currently running or submitted.
 
         Arguments:
-            storage_url (str): path of the project level analysis directory.
+            analysis (dict): the project level analysis.
             analyses (list): list of succeeded analyses instances.
         """
         raise NotImplementedError("No merging logic available!")
+
+    def validate_project_analyses(self, project, analyses):
+        """Raise AssertionError if project level analysis logic shouldn't happen."""
+        return
 
     def get_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
         """
@@ -219,23 +223,31 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             status="SUCCEEDED",
         )
 
-        with open(self.get_command_script_path, "w") as f:
-            f.write(
-                f"isabl merge-project-analyses --project {project['pk']} "
-                f"--application {self.primary_key}\n"
-            )
-
         if analyses:
             error = None
-            analysis = self.get_project_analysis(project)
+
+            try:
+                self.validate_project_analyses(project, analyses)
+                analysis = self.get_project_analysis(project)
+            except AssertionError as error:
+                click.echo(f"Project analysis not created, validation failed: {error}")
+                return
+
+            with open(self.get_command_script_path(analysis), "w") as f:
+                f.write(
+                    f"isabl merge-project-analyses --project {project['pk']} "
+                    f"--application {self.primary_key}\n"
+                )
+
             stdout_path = self.get_command_log_path(analysis)
-            stderr_path = self.get_command_log_path(analysis)
+            stderr_path = self.get_command_err_path(analysis)
             oldmask = os.umask(0o22)
 
             with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
                 with redirect_stdout(out), redirect_stderr(err):
                     try:
-                        self.merge_project_analyses(analysis["storage_url"], analyses)
+                        api.patch_analysis_status(analysis, "STARTED")
+                        self.merge_project_analyses(analysis, analyses)
                         api.patch_analysis_status(analysis, "SUCCEEDED")
                     except Exception as e:  # pragma: no cover pylint: disable=W0703
                         click.echo(e, file=sys.stderr)
@@ -268,18 +280,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             dict: analysis instance.
         """
-        analysis = api.create_instance(
-            endpoint="analyses",
-            project_level_analysis=project,
-            application=self.application,
-        )
-
-        if not analysis["storage_url"]:
-            analysis = data.update_storage_url(
-                endpoint="analyses", identifier=analysis["pk"], use_hash=True
+        return self._patch_analysis(
+            api.create_instance(
+                endpoint="analyses",
+                project_level_analysis=project,
+                application=self.application,
             )
-
-        return analysis
+        )
 
     # ----------
     # PROPERTIES
@@ -342,16 +349,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @property
     def _application_results(self):
         ret = self.application_results
-        ret[self._command_script_key] = self._command_script_specs
-        ret[self._command_log_key] = self._command_log_specs
-        ret[self._command_err_key] = self._command_err_specs
+        ret.update(self._base_results)
         return ret
 
     @property
     def _application_project_level_results(self):
         ret = self.application_project_level_results
-        ret[self._command_log_key] = self._command_log_specs
-        ret[self._command_err_key] = self._command_err_specs
+        ret.update(self._base_results)
         return ret
 
     # ----------------------------
@@ -496,6 +500,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     skipped_tuples.append((i, error))
 
         if commit:
+            click.echo("Running analyses...")
             run_tuples = self.settings.submit_analyses(self, command_tuples)
         else:
             run_tuples = [(i, "STAGED") for i, _ in command_tuples]
@@ -813,24 +818,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     targets, references, analyses, inputs = i
                     self.validate_species(targets + references)
                     self.validate_experiments(targets, references)
-
-                    analysis = api.create_instance(
-                        endpoint="analyses",
-                        application=self.application,
-                        targets=targets,
-                        references=references,
-                        analyses=analyses,
-                    )
-
-                    analysis["storage_url"] = data.get_storage_url(
-                        endpoint="analyses", identifier=analysis["pk"], use_hash=True
-                    )
-
-                    analysis = api.patch_instance(
-                        "analyses",
-                        analysis["pk"],
-                        storage_url=analysis["storage_url"],
-                        results=self._get_analysis_results(analysis, created=True),
+                    analysis = self._patch_analysis(
+                        api.create_instance(
+                            endpoint="analyses",
+                            application=self.application,
+                            targets=targets,
+                            references=references,
+                            analyses=analyses,
+                        )
                     )
 
                     analysis["application_inputs"] = inputs
@@ -883,6 +878,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 missing.append((targets, references, analyses, inputs))
 
         return existing, missing
+
+    def _patch_analysis(self, analysis):
+        analysis["storage_url"] = data.get_storage_url(
+            endpoint="analyses", identifier=analysis["pk"], use_hash=True
+        )
+
+        return api.patch_instance(
+            "analyses",
+            analysis["pk"],
+            results=self._get_analysis_results(analysis, created=True),
+            storage_url=analysis["storage_url"],
+        )
 
     # -------------------------
     # ANALYSES VALIDATION UTILS

@@ -50,7 +50,7 @@ class TestApplication(AbstractApplication):
 
         return f"echo {analysis['targets'][0]['system_id']}"
 
-    def merge_project_analyses(self, storage_url, analyses):
+    def merge_project_analyses(self, analysis, analyses):
         assert len(analyses) == 2, f"Expected 2, got: {len(analyses)}"
 
         with open(join(storage_url, "test.merge"), "w") as f:

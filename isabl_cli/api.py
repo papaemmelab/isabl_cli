@@ -388,6 +388,9 @@ def patch_analysis_status(analysis, status):
             patch_instance("analyses", analysis["pk"], **data)
             raise error
 
+    if status == "STARTED":
+        data["ran_by"] = system_settings.api_username
+
     return patch_instance("analyses", analysis["pk"], **data)
 
 
