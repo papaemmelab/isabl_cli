@@ -268,6 +268,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             project (dict): a project instance.
         """
+        api.patch_analysis_status(analysis, "SUBMITTED")
         self.run_project_merge(project)
 
     def get_project_analysis(self, project):
