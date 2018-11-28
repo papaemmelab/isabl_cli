@@ -514,7 +514,7 @@ class DataImporter(BaseImporter):
             label = f"Exploring directories..."
 
             # explore dirs
-            for directory in directories:
+            for directory in set(directories):
                 with click.progressbar(os.walk(directory), label=label) as bar:
                     for root, _, files in bar:
                         if not root.startswith(data_storage_dir):
@@ -614,17 +614,19 @@ class DataImporter(BaseImporter):
             if not file_name.startswith(instance["system_id"]):
                 file_name = f'{instance["system_id"]}_{uuid4().hex}_{file_name}'
 
-            dst = join(data_dir, file_name)
-            src_dst.append((src, dst))
-            sequencing_data.append(
-                dict(
-                    file_url=dst,
-                    file_type=file_type,
-                    file_data=file_data,
-                    hash_value=getsize(src),
-                    hash_method="os.path.getsize",
+            # make sure we don't add the same file twice
+            if all(i != src for i, _ in src_dst):
+                dst = join(data_dir, file_name)
+                src_dst.append((src, dst))
+                sequencing_data.append(
+                    dict(
+                        file_url=dst,
+                        file_type=file_type,
+                        file_data=file_data,
+                        hash_value=getsize(src),
+                        hash_method="os.path.getsize",
+                    )
                 )
-            )
 
         if len(dtypes) > 1:
             raise click.UsageError(
