@@ -246,6 +246,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
                 with redirect_stdout(out), redirect_stderr(err):
                     try:
+                        # TODO: setting to submitted here temporarily, will fix later
+                        api.patch_analysis_status(analysis, "SUBMITTED")
                         api.patch_analysis_status(analysis, "STARTED")
                         self.merge_project_analyses(analysis, analyses)
                         api.patch_analysis_status(analysis, "SUCCEEDED")
@@ -268,7 +270,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             project (dict): a project instance.
         """
-        api.patch_analysis_status(analysis, "SUBMITTED")
         self.run_project_merge(project)
 
     def get_project_analysis(self, project):
@@ -285,7 +286,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             api.create_instance(
                 endpoint="analyses",
                 project_level_analysis=project,
-                application=self.application,
+                application=self.project_level_application,
             )
         )
 
@@ -313,8 +314,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def application(self):
         """Get application database object."""
-        application_class = f"{self.__module__}.{self.__class__.__name__}"
-
         if not all([self.NAME, self.VERSION, self.ASSEMBLY, self.SPECIES]):
             raise NotImplementedError(
                 f"NAME must be set: {self.NAME}\n"
@@ -334,9 +333,29 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             description=self.application_description,
             endpoint="applications",
             identifier=application["pk"],
-            application_class=application_class,
+            application_class=f"{self.__module__}.{self.__class__.__name__}",
             results=self._application_results,
-            project_level_results=self._application_project_level_results,
+            url=self.URL,
+        )
+
+        return application
+
+    @cached_property
+    def project_level_application(self):
+        """Get or create a project level application database object."""
+        application = api.create_instance(
+            endpoint="applications",
+            name=f"{self.NAME} Project Application",
+            version=self.VERSION,
+            assembly=self.application["assembly"],
+        )
+
+        api.patch_instance(  # pragma: no cover
+            description=f"{self.NAME} {self.VERSION} Project Level Application.",
+            endpoint="applications",
+            identifier=application["pk"],
+            results=self._application_project_level_results,
+            application_class=self.application["application_class"],
             url=self.URL,
         )
 
@@ -995,7 +1014,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if not i["sample"]["is_pdx"]:
+            if not i["is_pdx"]:
                 msg.append(f"{i['system_id']} sample is not PDX derived")
 
         assert not msg, "\n".join(msg)
