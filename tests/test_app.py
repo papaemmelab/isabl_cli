@@ -27,6 +27,20 @@ class TestApplication(AbstractApplication):
     cli_options = [options.TARGETS]
     application_settings = {"foo": "bar"}
     application_inputs = {"bar": None}
+    application_results = {
+        "analysis_result_key": {
+            "frontend_type": "number",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
+    application_project_level_results = {
+        "project_result_key": {
+            "frontend_type": "text-file",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
 
     def process_cli_options(self, targets):
         return [([i], []) for i in targets]
@@ -53,14 +67,16 @@ class TestApplication(AbstractApplication):
     def merge_project_analyses(self, analysis, analyses):
         assert len(analyses) == 2, f"Expected 2, got: {len(analyses)}"
 
-        with open(join(storage_url, "test.merge"), "w") as f:
+        with open(join(analysis["storage_url"], "test.merge"), "w") as f:
             f.write(str(len(analyses)))
 
     def get_analysis_results(self, analysis):
-        return {"analysis_result_key": None}
+        return {"analysis_result_key": 1}
 
     def get_project_analysis_results(self, analysis):
-        return {"project_result_key": None}
+        # please note that ipdb wont work here as this function will
+        # be submitted by a subprocess call
+        return {"project_result_key": join(analysis["storage_url"], "test.merge")}
 
 
 def test_application_settings(tmpdir):
@@ -124,12 +140,14 @@ def test_engine(tmpdir):
 
     assert "http://www.fake-test-app.org" in result.output
 
+    # check project level results
     pks = ",".join(str(i["pk"]) for i in experiments)
     args = ["-fi", "pk__in", pks, "--verbose"]
     result = runner.invoke(command, args, catch_exceptions=False)
     analysis = application.get_project_analysis(project)
     merged = join(analysis["storage_url"], "test.merge")
 
+    assert analysis["status"] == "SUCCEEDED", f"Project Analysis failed {analysis}"
     assert "FAILED" in result.output
     assert "SUCCEEDED" in result.output
     assert "SKIPPED 3" in result.output
