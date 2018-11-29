@@ -3,6 +3,8 @@
 from collections import defaultdict
 from datetime import datetime
 from getpass import getuser
+from glob import glob
+from os.path import dirname
 from os.path import basename
 from os.path import getsize
 from os.path import isdir
@@ -201,14 +203,16 @@ class BaseImporter:
         return os.rename(os.path.realpath(src), dst)
 
 
-class ReferenceDataImporter(BaseImporter):
+class LocalReferenceDataImporter(BaseImporter):
 
-    """An import engine for assemblies' `reference_data`."""
+    """An import engine for assemblies' reference_data."""
 
     @classmethod
-    def import_data(cls, assembly, species, data_src, data_id, symlink, description):
+    def import_data(
+        cls, assembly, species, data_src, data_id, symlink, description, sub_dir=None
+    ):
         """
-        Register input_bed_path in technique's storage dir and update `data`.
+        Register reference resources for a given assembly.
 
         Arguments:
             assembly (str): name of assembly.
@@ -217,6 +221,7 @@ class ReferenceDataImporter(BaseImporter):
             data_id (str): identifier that will be used for reference data.
             symlink (str): symlink instead of move.
             description (str): reference data description.
+            sub_dir (str): target sub dir for the resource, default is data_id.
 
         Returns:
             dict: updated assembly instance as retrieved from API.
@@ -238,7 +243,7 @@ class ReferenceDataImporter(BaseImporter):
         if not assembly["storage_url"]:
             assembly = update_storage_url("assemblies", assembly["name"])
 
-        data_dir = join(assembly["storage_url"], data_id)
+        data_dir = join(assembly["storage_url"], sub_dir or data_id)
         data_dst = join(data_dir, basename(data_src))
         os.makedirs(data_dir, exist_ok=True)
 
@@ -263,21 +268,23 @@ class ReferenceDataImporter(BaseImporter):
 
     @classmethod
     def as_cli_command(cls):
-        """Get bed importer as click command line interface."""
+        """Get reference data importer as click command line interface."""
         # build isabl_cli command and return it
         @click.command(name="import-reference-data")
         @click.option("--assembly", help="name of reference genome")
         @click.option("--species", help="species of reference genome")
         @click.option("--description", help="reference data description")
         @click.option("--data-id", help="data identifier (will be slugified)")
+        @click.option("--sub-dir", help="target resource sub dir, default is data-id")
         @options.REFERENCE_DATA_SOURCE
         @options.SYMLINK
-        def cmd(assembly, data_id, symlink, description, data_src, species):
+        def cmd(assembly, data_id, symlink, description, data_src, species, sub_dir):
             """
-            Register reference data in assembly's data directory.
+            Register reference data in the assembly's data directory.
 
-            Incoming data (files or directories) will moved unless `--symlink`
-            is provided.
+            If you want to import a Reference Genome please refer to the
+            import_reference_genome command. Incoming data (files or directories) will
+            moved unless `--symlink` is provided.
 
             Assembly's `storage_url`, `storage_usage` and `reference_data`
             fields are updated, setting the latter to:
@@ -297,12 +304,110 @@ class ReferenceDataImporter(BaseImporter):
                 assembly=assembly,
                 species=species,
                 description=description,
+                sub_dir=sub_dir,
             )
 
         return cmd
 
 
-class BedImporter:
+class LocalReferenceGenomeImporter:
+
+    """An import engine for an assembly reference genome."""
+
+    @classmethod
+    def as_cli_command(cls):
+        """Get reference data importer as click command line interface."""
+        # build isabl_cli command and return it
+        @click.command(name="import-reference-genome")
+        @click.option("--assembly", help="name of reference genome")
+        @click.option("--species", help="species of reference genome")
+        @click.option(
+            "--genome-path",
+            show_default=True,
+            type=click.Path(resolve_path=True, exists=True, readable=True),
+            help="path to reference genome (.fq, .fasta, .fasta.gz)",
+        )
+        @click.option(
+            "--dont-index",
+            is_flag=True,
+            show_default=True,
+            help="Do not attempt to generate indexes, I'll do it myself",
+        )
+        @options.SYMLINK
+        def cmd(assembly, symlink, genome_path, species, dont_index):
+            """
+            Register an assembly reference genome.
+
+            By default, an attempt to create indexes will be perfomed.
+            """
+            assembly = LocalReferenceDataImporter.import_data(
+                data_id="genome_fasta",
+                symlink=symlink,
+                data_src=genome_path,
+                assembly=assembly,
+                species=species,
+                description="Reference Genome Fasta File.",
+            )
+
+            genome_fasta = assembly["reference_data"]["genome_fasta"]["url"]
+            genome_dir = dirname(genome_fasta)
+            commands = [
+                ["bwa", "index", genome_fasta],
+                ["samtools", "faidx", genome_fasta],
+                [
+                    "samtools",
+                    "dict",
+                    genome_fasta,
+                    "-a",
+                    assembly["name"],
+                    "-s",
+                    assembly["species"],
+                    "-o",
+                    join(genome_fasta + ".dict"),
+                ],
+            ]
+
+            for i in commands:
+                if dont_index:
+                    click.secho(f"Skipping indexing:\n\n\t{' '.join(i)}", fg="orange")
+                    continue
+
+                try:
+                    subprocess.check_call(i)
+                except subprocess.CalledProcessError:
+                    click.secho(
+                        f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}", fg="red"
+                    )
+
+            indexes = {
+                "bwa index": ["amb", "ann", "bwt", "pac", "sa"],
+                "samtools faidx": ["fai"],
+                "samtools dict": ["dict"],
+            }
+
+            for i, indexes in indexes.items():
+                for j in indexes:
+                    assembly["reference_data"][f"genome_fasta_{j}"] = {
+                        "url": join(genome_fasta + f".{j}"),
+                        "description": f"Index generated by: {i}",
+                    }
+
+            for i in glob(genome_fasta.split(".", 1)[0] + "*"):
+                dst = join(genome_dir, assembly["name"] + "." + i.split(".", 1)[-1])
+                if i != dst:
+                    utils.force_symlink(i, dst)
+
+            api.patch_instance(
+                endpoint="assemblies",
+                identifier=assembly["pk"],
+                storage_usage=utils.get_tree_size(assembly["storage_url"]),
+                reference_data=assembly["reference_data"],
+            )
+
+        return cmd
+
+
+class LocalBedImporter:
 
     """An import engine for techniques' bed_files."""
 
@@ -426,7 +531,7 @@ class BedImporter:
         return cmd
 
 
-class DataImporter(BaseImporter):
+class LocalDataImporter(BaseImporter):
 
     """
     A Data import engine for experiments.

@@ -20,9 +20,10 @@ from isabl_cli import exceptions
 _DEFAULTS = {
     "MAKE_STORAGE_DIRECTORY": "isabl_cli.data._make_storage_directory",
     "TRASH_ANALYSIS_STORAGE": "isabl_cli.data.trash_analysis_storage",
-    "REFERENCE_DATA_IMPORTER": "isabl_cli.data.ReferenceDataImporter",
-    "DATA_IMPORTER": "isabl_cli.data.DataImporter",
-    "BED_IMPORTER": "isabl_cli.data.BedImporter",
+    "REFERENCE_DATA_IMPORTER": "isabl_cli.data.LocalReferenceDataImporter",
+    "REFERENCE_GENOME_IMPORTER": "isabl_cli.data.LocalReferenceGenomeImporter",
+    "DATA_IMPORTER": "isabl_cli.data.LocalDataImporter",
+    "BED_IMPORTER": "isabl_cli.data.LocalBedImporter",
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
     "FASTQ_READ_SUFFIX": "",
     "ADMIN_USER": getpass.getuser(),
@@ -61,6 +62,7 @@ _IMPORT_STRINGS = {
     "DATA_IMPORTER",
     "BED_IMPORTER",
     "REFERENCE_DATA_IMPORTER",
+    "REFERENCE_GENOME_IMPORTER",
 }
 
 _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}

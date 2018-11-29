@@ -36,7 +36,7 @@ def test_import_reference_data(tmpdir):
     reference_test = tmpdir.join("test.fasta")
     reference_test.write("foo")
 
-    assembly = data.ReferenceDataImporter.import_data(
+    assembly = data.LocalReferenceDataImporter.import_data(
         assembly=assembly_name,
         species=species,
         data_src=reference_test.strpath,
@@ -51,7 +51,7 @@ def test_import_reference_data(tmpdir):
         == "test description"
     )
 
-    assembly = data.ReferenceDataImporter.import_data(
+    assembly = data.LocalReferenceDataImporter.import_data(
         assembly=assembly_name,
         species=species,
         data_src=reference_test.strpath,
@@ -64,7 +64,7 @@ def test_import_reference_data(tmpdir):
     assert not os.path.islink(assembly["reference_data"]["reference_move"]["url"])
 
     reference_test.write("foo")
-    command = data.ReferenceDataImporter.as_cli_command()
+    command = data.LocalReferenceDataImporter.as_cli_command()
     runner = CliRunner()
     args = [
         "--assembly",
@@ -96,7 +96,7 @@ def test_import_bedfiles(tmpdir):
     baits.write("2\t1\t2\n1\t1\t2\n")
     species = "HUMAN"
 
-    technique = data.BedImporter.import_bedfiles(
+    technique = data.LocalBedImporter.import_bedfiles(
         species=species,
         technique_key=technique["pk"],
         targets_path=targets.strpath,
@@ -114,7 +114,7 @@ def test_import_bedfiles(tmpdir):
         ) as f:  # test bed is sorted
             assert next(f).startswith("1")
 
-    command = data.BedImporter.as_cli_command()
+    command = data.LocalBedImporter.as_cli_command()
     runner = CliRunner()
     args = [
         "--targets-path",
@@ -143,7 +143,7 @@ def test_local_data_import(tmpdir):
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     keys = [i["pk"] for i in experiments]
 
-    importer = data.DataImporter()
+    importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
     obtained = len(summary.rsplit("no files matched"))
     assert obtained == 3 + 1
@@ -223,7 +223,7 @@ def test_local_data_import(tmpdir):
             default_flow_style=False,
         )
 
-    command = data.DataImporter.as_cli_command()
+    command = data.LocalDataImporter.as_cli_command()
     runner = CliRunner()
     args = [
         "-di",
@@ -250,7 +250,7 @@ def test_local_data_import(tmpdir):
 
 
 def test_get_dst():
-    importer = data.DataImporter()
+    importer = data.LocalDataImporter()
     bam_test = ["sample.bam"]
     cram_test = ["sample.cram"]
     fastq_test = [
