@@ -379,8 +379,7 @@ def patch_analysis_status(analysis, status):
     if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
             application = import_from_string(application["application_class"])()
-            get_results = application._get_analysis_results
-            data["results"] = get_results(analysis)
+            data["results"] = application._get_analysis_results(analysis)
         except ImportError:
             pass
         except Exception as error:  # pragma: no cover

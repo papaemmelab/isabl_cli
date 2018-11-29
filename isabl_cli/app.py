@@ -228,7 +228,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
             try:
                 self.validate_project_analyses(project, analyses)
-                analysis = self.get_project_analysis(project)
+                analysis = self.get_project_analysis(project, patch=True)
             except AssertionError as error:
                 click.echo(f"Project analysis not created, validation failed: {error}")
                 return
@@ -272,23 +272,24 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         self.run_project_merge(project)
 
-    def get_project_analysis(self, project):
+    def get_project_analysis(self, project, patch=False):
         """
         Get or create project level analysis.
 
         Arguments:
             project (dict): project instance.
+            patch (dict): whether or not results and storage_url should be patched.
 
         Returns:
             dict: analysis instance.
         """
-        return self._patch_analysis(
-            api.create_instance(
-                endpoint="analyses",
-                project_level_analysis=project,
-                application=self.project_level_application,
-            )
+        analysis = api.create_instance(
+            endpoint="analyses",
+            project_level_analysis=project,
+            application=self.project_level_application,
         )
+
+        return self._patch_analysis(analysis) if patch else analysis
 
     # ----------
     # PROPERTIES
