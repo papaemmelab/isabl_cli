@@ -120,9 +120,6 @@ def trash_analysis_storage(analysis):
         raise click.UsageError("You can't wipe a succeeded analysis")
 
     if isdir(analysis["storage_url"]):
-        slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
-        slug += datetime.now(system_settings.TIME_ZONE).isoformat()
-
         trash_dir = system_settings.MAKE_STORAGE_DIRECTORY(
             root=system_settings.BASE_STORAGE_DIRECTORY,
             base=".analyses_trash",
@@ -130,6 +127,8 @@ def trash_analysis_storage(analysis):
             use_hash=True,
         )
 
+        slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
+        slug += datetime.now(system_settings.TIME_ZONE).isoformat()
         dst = join(trash_dir, slug)
         click.echo(f"\ntrashing: {analysis['storage_url']} -> {dst}\n")
         shutil.move(analysis["storage_url"], dst)
