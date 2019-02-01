@@ -1,11 +1,11 @@
-# isabl cli
+# Isabl CLI
 
 [![pypi badge][pypi_badge]][pypi_base]
 [![travis badge][travis_badge]][travis_base]
 [![codecov badge][codecov_badge]][codecov_base]
 [![code formatting][black_badge]][black_base]
 
-Command Line Client and SDK for the [`isabl`] infrastructure.
+Command Line Client and SDK for the [`Isabl`] infrastructure.
 
 ## Documentation
 
