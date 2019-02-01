@@ -507,9 +507,10 @@ class LocalBedImporter:
             Incoming bed_files will be compressed and tabixed.
             Both gzipped and uncompressed versions are kept.
 
-            Instance's `storage_url`, `storage_usage` and `bed_files` fields
+            Instance's storage_url, storage_usage and bed_files fields
             are updated, setting the latter to:
 
+            \b
                 'bed_files': {
                     <assembly name>: {
                         'targets': path/to/targets_bedfile.bed,
