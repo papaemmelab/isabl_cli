@@ -76,11 +76,11 @@ ANALYSIS_PRIMARY_KEY = click.option(
     required=True,
 )
 
-TECHNIQUE_PRIMARY_KEY = click.option(
-    "--key",
-    help="technique primary key",
+TECHNIQUE_SLUG = click.option(
+    "--technique-slug",
+    help="technique slug",
     show_default=True,
-    type=click.INT,
+    type=click.STRING,
     required=True,
 )
 

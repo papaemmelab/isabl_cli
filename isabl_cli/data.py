@@ -428,7 +428,7 @@ class LocalBedImporter:
     @classmethod
     def import_bedfiles(
         cls,
-        technique_key,
+        technique_slug,
         targets_path,
         baits_path,
         assembly,
@@ -439,7 +439,7 @@ class LocalBedImporter:
         Register input_bed_path in technique's storage dir and update `data`.
 
         Arguments:
-            technique_key (int): technique primary key.
+            technique_slug (str): technique slug.
             targets_path (str): path to targets bedfile.
             baits_path (str): path to baits bedfile.
             assembly (str): name of reference genome for bedfile.
@@ -450,7 +450,7 @@ class LocalBedImporter:
             dict: updated technique instance as retrieved from API.
         """
         utils.check_admin()
-        technique = api.get_instance("techniques", technique_key)
+        technique = api.get_instances("techniques", slug=technique_slug)[0]
 
         if assembly in technique["bed_files"]:
             raise click.UsageError(
@@ -494,13 +494,15 @@ class LocalBedImporter:
         """Get bed importer as click command line interface."""
         # build isabl_cli command and return it
         @click.command(name="import-bedfiles")
-        @options.TECHNIQUE_PRIMARY_KEY
+        @options.TECHNIQUE_SLUG
         @options.TARGETS_PATH
         @options.BAITS_PATH
         @click.option("--assembly", help="name of reference genome")
         @click.option("--species", help="name of species")
         @click.option("--description", help="bed_files description")
-        def cmd(key, assembly, targets_path, baits_path, description, species):
+        def cmd(
+            technique_slug, assembly, targets_path, baits_path, description, species
+        ):
             """
             Register targets and baits bed_files in technique's data directory.
 
@@ -520,7 +522,7 @@ class LocalBedImporter:
                     }
             """
             cls().import_bedfiles(
-                technique_key=key,
+                technique_slug=technique_slug,
                 targets_path=targets_path,
                 baits_path=baits_path,
                 assembly=assembly,
@@ -789,8 +791,8 @@ class LocalDataImporter(BaseImporter):
         Returns:
             str: a regex pattern.
         """
-        pattern = re.sub(r"[-_.]", r"[-_.]", identifier)
-        return r"(?P<{}>(^|[-_.])?{}[-_.])".format(group_name, pattern)
+        pattern = re.sub(r"[-_. ]", r"[-_. ]", identifier)
+        return r"(?P<{}>(^|[-_. ])?{}[-_. ])".format(group_name, pattern)
 
     @staticmethod
     def get_summary(cache):
