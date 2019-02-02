@@ -106,7 +106,7 @@ def get_paths(endpoint, pattern, filters):
 @options.FILTERS
 @options.VERBOSE
 def get_sequencing_data(filters, verbose):
-    """Get storage directories, use `pattern` to match files inside dirs."""
+    """Get file paths for experiments sequencing data."""
     filters.update(fields="sequencing_data,system_id", limit=100_000)
     for i in api.get_instances("experiments", verbose=True, **filters):
         system_id = i["system_id"]
@@ -115,7 +115,7 @@ def get_sequencing_data(filters, verbose):
             raise click.UsageError(f"No data for {system_id}, ignore with --verbose")
 
         for j in i["sequencing_data"] or ["None"]:
-            click.echo(j if not verbose else f"{system_id} {j}")
+            click.echo(j["file_url"] if not verbose else f"{system_id} {j}")
 
 
 @click.command()

@@ -125,6 +125,8 @@ def process_api_filters(**filters):
     filters_dict = {}
 
     for key, value in filters.items():
+        key = key.replace(".", "__")
+
         if isinstance(value, (str, int, float, type(None))):
             if key == "fields" and "pk" not in value:  # pk is required
                 value = ",".join(value.split(",") + ["pk"])
