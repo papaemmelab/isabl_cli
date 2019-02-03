@@ -9,7 +9,6 @@ from os.path import basename
 from os.path import getsize
 from os.path import isdir
 from os.path import join
-from uuid import uuid4
 import os
 import re
 import shutil
@@ -427,19 +426,13 @@ class LocalBedImporter:
 
     @classmethod
     def import_bedfiles(
-        cls,
-        technique_slug,
-        targets_path,
-        baits_path,
-        assembly,
-        species,
-        description=None,
+        cls, technique, targets_path, baits_path, assembly, species, description=None
     ):
         """
         Register input_bed_path in technique's storage dir and update `data`.
 
         Arguments:
-            technique_slug (str): technique slug.
+            technique (str): technique slug.
             targets_path (str): path to targets bedfile.
             baits_path (str): path to baits bedfile.
             assembly (str): name of reference genome for bedfile.
@@ -450,7 +443,7 @@ class LocalBedImporter:
             dict: updated technique instance as retrieved from API.
         """
         utils.check_admin()
-        technique = api.get_instances("techniques", slug=technique_slug)[0]
+        technique = api.get_instance("techniques", technique)
 
         if assembly in technique["bed_files"]:
             raise click.UsageError(
@@ -478,8 +471,8 @@ class LocalBedImporter:
 
         click.secho(f'\nSuccess! patching {technique["slug"]}...', fg="green")
         technique["bed_files"][assembly] = {}
-        technique["bed_files"][assembly]["targets"] = targets_dst
-        technique["bed_files"][assembly]["baits"] = baits_dst
+        technique["bed_files"][assembly]["targets"] = targets_dst + ".gz"
+        technique["bed_files"][assembly]["baits"] = baits_dst + ".gz"
         technique["bed_files"][assembly]["description"] = description
 
         return api.patch_instance(
@@ -494,15 +487,13 @@ class LocalBedImporter:
         """Get bed importer as click command line interface."""
         # build isabl_cli command and return it
         @click.command(name="import-bedfiles")
-        @options.TECHNIQUE_SLUG
+        @options.TECHNIQUE_IDENTIFIER
         @options.TARGETS_PATH
         @options.BAITS_PATH
-        @click.option("--assembly", help="name of reference genome")
-        @click.option("--species", help="name of species")
+        @click.option("--assembly", help="name of reference genome", required=True)
+        @click.option("--species", help="name of species", required=True)
         @click.option("--description", help="bed_files description")
-        def cmd(
-            technique_slug, assembly, targets_path, baits_path, description, species
-        ):
+        def cmd(technique, assembly, targets_path, baits_path, description, species):
             """
             Register targets and baits bed_files in technique's data directory.
 
@@ -522,7 +513,7 @@ class LocalBedImporter:
                     }
             """
             cls().import_bedfiles(
-                technique_slug=technique_slug,
+                technique=technique,
                 targets_path=targets_path,
                 baits_path=baits_path,
                 assembly=assembly,
@@ -718,8 +709,10 @@ class LocalDataImporter(BaseImporter):
                 file_name, file_type = self.format_fastq_name(file_name)
                 dtypes.add("FASTQ")
 
+            # make sure there are no duplicate file names
             if not file_name.startswith(instance["system_id"]):
-                file_name = f'{instance["system_id"]}_{uuid4().hex}_{file_name}'
+                file_hash = hex(abs(hash(dirname(src))))[2:]
+                file_name = f'{instance["system_id"]}_{file_hash}_{file_name}'
 
             # make sure we don't add the same file twice
             if all(i != src for i, _ in src_dst):
