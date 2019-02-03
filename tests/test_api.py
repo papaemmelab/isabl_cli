@@ -42,7 +42,8 @@ def test_api_methods():
     assert api.get_instances_count(endpoint, pk=pk) == 1
     assert len(api.get_instances(endpoint)) == api.get_instances_count(endpoint)
     assert len(api.get_instances(endpoint, pks)) == 2
-    assert len(api.get_instances(endpoint, pk__in=pks)) == 2
+    assert len(api.get_instances(endpoint, pks, pk__in=pks)) == 2
+    assert len(api.get_instances(endpoint, pks, pk__in=pks[0])) == 1
 
     for i in created:
         assert api.delete_instance(endpoint, i["pk"]) is None
