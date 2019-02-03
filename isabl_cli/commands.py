@@ -2,6 +2,10 @@
 
 from glob import glob
 from os.path import join
+from collections import OrderedDict
+import json
+import shutil
+import subprocess
 
 import click
 
@@ -62,21 +66,47 @@ def patch_status(key, status):
     api.patch_analysis_status(analysis, status)
 
 
-@click.command()
+@click.command(
+    epilog="Learn more about fx: "
+    "https://github.com/antonmedv/fx/blob/master/docs.md#interactive-mode"
+)
 @options.ENDPOINT
 @options.FIELDS
 @options.NULLABLE_FILTERS
 @options.NO_HEADERS
-def get_attributes(endpoint, field, filters, no_headers):
-    """Get database attributes from API."""
-    result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
-    filters["fields"] = ",".join(i[0] for i in field)
+@options.NULLABLE_IDENTIFIERS
+@click.option("--json", "json_", help="Print as JSON", is_flag=True)
+@click.option("--fx", help="Visualize json with fx", is_flag=True)
+def get_metadata(
+    identifiers, endpoint, field, filters, no_headers, json_, fx
+):  # pylint: disable=invalid-name
+    """Retrieve metadata for multiple instances."""
+    if field:
+        filters["fields"] = ",".join(i[0] for i in field)
+    elif not (json_ or fx):
+        raise click.UsageError("Pass --field or use --json/--fx")
 
-    for i in api.get_instances(endpoint, verbose=True, **filters):
-        values = [utils.traverse_dict(i, j, serialize=True) for j in field]
-        result.append("\t".join(values))
+    if fx and not shutil.which("fx"):
+        raise click.UsageError("fx is not installed")
 
-    click.echo("\n".join(result).expandtabs(30))
+    identifiers = identifiers or None
+    instances = api.get_instances(endpoint, identifiers, verbose=True, **filters)
+    results = instances
+
+    if field:  # if fields were passed, update the results list
+        results = [
+            OrderedDict([(".".join(j), utils.traverse_dict(i, j)) for j in field])
+            for i in instances
+        ]
+
+    if json_:
+        click.echo(json.dumps(results, sort_keys=True, indent=4))
+    elif fx:
+        subprocess.check_call(["bash", "-c", f"echo '{json.dumps(results)}' | fx"])
+    else:
+        result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
+        result += ["\t".join(map(str, i.values())) for i in results]
+        click.echo("\n".join(result).expandtabs(30))
 
 
 @click.command()
@@ -105,7 +135,7 @@ def get_paths(endpoint, pattern, filters):
 @click.command()
 @options.FILTERS
 @options.VERBOSE
-def get_sequencing_data(filters, verbose):
+def get_data(filters, verbose):
     """Get file paths for experiments sequencing data."""
     filters.update(fields="sequencing_data,system_id", limit=100_000)
     for i in api.get_instances("experiments", verbose=True, **filters):
@@ -119,9 +149,39 @@ def get_sequencing_data(filters, verbose):
 
 
 @click.command()
+@options.BED_TYPE
+@click.option("--assembly", help="required if multiple options for assembly")
+@click.argument("technique", required=True)
+def get_bed(technique, bed_type, assembly):
+    """Get a BED file for a given Sequencing Tehcnique."""
+    instance = api.get_instance("techniques", technique)
+
+    if not instance["bed_files"]:
+        raise click.UsageError("No BED files registered yet...")
+    elif len(instance["bed_files"]) > 1 and not assembly:
+        raise click.UsageError(f"Multiple BEDs for {technique}, pass --assembly")
+    else:
+        assembly = list(instance["bed_files"].keys())[0]
+
+    click.echo(instance["bed_files"][assembly][bed_type])
+
+
+@click.command()
+@click.argument("assembly", required=True)
+@click.option("--data-id", help="data identifier", default="genome_fasta")
+def get_reference(assembly, data_id):
+    """Get reference resource for an Assembly."""
+    try:
+        assembly = api.get_instance("assemblies", assembly)
+        click.echo(assembly["reference_data"][data_id]["url"])
+    except KeyError:
+        click.UsageError(f"No {data_id} reference for {assembly['name']}.")
+
+
+@click.command()
 @options.FILTERS
 @options.VERBOSE
-@click.option("--assembly", help="when bams available for multiple assemblies")
+@click.option("--assembly", help="required if multiple options for assembly")
 def get_bams(filters, assembly, verbose):
     """Get storage directories, use `pattern` to match files inside dirs."""
     filters.update(fields="bam_files,system_id", limit=100_000)

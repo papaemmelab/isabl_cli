@@ -10,6 +10,9 @@ def _get_experiments(filter_tuples):
     return api.get_instances("experiments", **dict(filter_tuples))
 
 
+NULLABLE_IDENTIFIERS = click.argument("identifiers", nargs=-1, required=False)
+
+
 IDENTIFIER = click.option(
     "--identifier",
     "-id",
@@ -26,7 +29,7 @@ FIELDS = click.option(
     multiple=True,
     help="fields to be retrieved (traverse with dot, e.g. `sample.disease`)",
     callback=lambda _, __, i: [j.split(".") for j in i],
-    required=True,
+    required=False,
 )
 
 ANALYSIS_STATUS = click.option(
@@ -48,12 +51,8 @@ ANALYSIS_STATUS = click.option(
     ),
 )
 
-ENDPOINT = click.option(
-    "--endpoint",
-    "-e",
-    help="API endpoint to be queried",
-    default="analyses",
-    show_default=True,
+ENDPOINT = click.argument(
+    "endpoint",
     required=True,
     type=click.Choice(
         [
@@ -76,12 +75,20 @@ ANALYSIS_PRIMARY_KEY = click.option(
     required=True,
 )
 
-TECHNIQUE_SLUG = click.option(
-    "--technique-slug",
-    help="technique slug",
+TECHNIQUE_IDENTIFIER = click.option(
+    "--technique",
+    help="technique identifier",
     show_default=True,
     type=click.STRING,
     required=True,
+)
+
+BED_TYPE = click.option(
+    "--bed-type",
+    help="technique BED file type.",
+    show_default=True,
+    default="targets",
+    type=click.Choice(["targets", "baits"]),
 )
 
 COMMIT = click.option(

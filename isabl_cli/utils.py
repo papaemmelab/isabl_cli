@@ -91,14 +91,17 @@ def traverse_dict(dictionary, keys, serialize=False):
         serialize (bool): force to string, if value is dict use json.dumps.
 
     Returns:
-        str:  if `serialize` is True.
+        str: if `serialize` is True.
         object: if `serialize` is false.
     """
     value = dictionary
 
     for i in keys:
         try:
-            value = value.get(i, f"INVALID KEY ({i})")
+            if isinstance(value, list):
+                value = [j.get(i, f"INVALID KEY ({i})") for j in value]
+            else:
+                value = value.get(i, f"INVALID KEY ({i})")
         except AttributeError:
             value = f"INVALID KEY ({i})"
 
