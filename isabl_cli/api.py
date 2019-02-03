@@ -238,7 +238,8 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
     """
     Return instances from a list API endpoint.
 
-    if not `identifiers` and not `filters` retrieves all objects in database.
+    If not `identifiers` and not `filters` retrieves all objects in database.
+    if `identifiers` and `filters`, identifieres might be filtered.
 
     Arguments:
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
@@ -254,40 +255,44 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
         list: of types.SimpleNamespace objects loaded with dicts from API.
     """
     check_system_id = endpoint in {"individuals", "samples", "experiments"}
+    check_name = endpoint in {"assemblies", "techniques", "tags"}
     instances = []
-    keys = set()
 
     if verbose:
-        count = get_instances_count(endpoint, **filters)
-        count += len(identifiers or [])
-        ids_msg = " at least " if identifiers else " "  # ids may be in filters
+        count = len(identifiers or [])
+        count += 0 if identifiers else get_instances_count(endpoint, **filters)
+        ids_msg = " at most " if identifiers else " "  # ids may be in filters
         count = f"Retrieving{ids_msg}{count} from {endpoint} API endpoint..."
         click.echo(count, err=True)
 
-    if filters or identifiers is None:
+    if identifiers is None:
         instances += iterate(endpoint, **filters)
-        keys = {i["pk"] for i in instances if i.get("pk")}
+    else:
+        for chunk in chunks(identifiers or [], 10000):
+            filters["url"] = endpoint
+            primary_keys = set()
+            names = set()
+            ids = set()
 
-    for chunk in chunks(identifiers or [], 10000):
-        primary_keys = set()
-        system_ids = set()
+            for i in map(str, chunk):
+                if i.isdigit():
+                    primary_keys.add(i)
+                elif check_name:
+                    names.add(i)
+                elif check_system_id:
+                    ids.add(i)
+                else:  # pragma: no cover
+                    msg = f"msg invalid identifier for {endpoint}: {i}"
+                    raise click.UsageError(msg)
 
-        for i in map(str, chunk):
-            if i.isdigit():
-                primary_keys.add(i)
-            elif check_system_id:
-                system_ids.add(i)
-            else:  # pragma: no cover
-                msg = f"msg invalid identifier for {endpoint}: {i}"
-                raise click.UsageError(msg)
+            if primary_keys:
+                instances += iterate(**{"pk__in": ",".join(primary_keys), **filters})
 
-        if primary_keys:
-            kwargs = {"pk__in": ",".join(primary_keys), "url": endpoint}
-            instances += [i for i in iterate(**kwargs) if i["pk"] not in keys]
+            if ids:
+                instances += iterate(**{"system_id__in": ",".join(ids), **filters})
 
-        if system_ids:
-            kwargs = {"system_id__in": ",".join(system_ids), "url": endpoint}
-            instances += [i for i in iterate(**kwargs) if i["pk"] not in keys]
+            if names:
+                instances += iterate(**{"name__in": ",".join(names), **filters})
 
     return instances
 
