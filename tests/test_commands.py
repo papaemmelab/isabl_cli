@@ -11,7 +11,7 @@ def test_commands(tmpdir):
         project_level_analysis=factories.ProjectFactory(),
         storage_url=tmpdir.strpath,
         status="FINISHED",
-        **factories.AnalysisFactory(ran_by=None)
+        **factories.AnalysisFactory(ran_by=None),
     )
 
     path = tmpdir.join("test.path")
@@ -46,7 +46,7 @@ def test_commands(tmpdir):
         "invalid.nested_attr",
     ]
 
-    result = runner.invoke(commands.get_attributes, args, catch_exceptions=False)
+    result = runner.invoke(commands.get_metadata, args, catch_exceptions=False)
     assert analysis["application"]["name"] in result.output
     assert "application.name" in result.output
     assert '"name": ' in result.output
