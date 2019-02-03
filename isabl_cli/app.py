@@ -974,6 +974,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def validate_is_pair(self, targets, references):
         """Validate targets, references tuple is a pair."""
         assert len(targets) == 1 and len(references) == 1, "Pairs only."
+        assert (
+            targets[0]["pk"] != references[0]["pk"]
+        ), "Target can't be same as reference."
 
     def validate_one_target(self, targets):
         """Validate only one target."""
