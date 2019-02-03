@@ -26,7 +26,7 @@ from isabl_cli.settings import system_settings
 @click.group()
 @click.version_option(version=__version__)
 def main():  # pragma: no cover
-    """run isabl command line tools."""
+    """Run Isabl command line tools."""
     pass
 
 

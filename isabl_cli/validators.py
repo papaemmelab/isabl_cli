@@ -85,15 +85,16 @@ def validate_pairs_from_file(ctx, _, path):
     """Return pairs from tsv file."""
     pairs = []
 
-    with open(path, "r") as f:
-        for i in f:
-            if i.startswith("#"):
-                continue
+    if path:
+        with open(path, "r") as f:
+            for i in f:
+                if i.startswith("#"):
+                    continue
 
-            try:
-                ids = i.strip().split("\t")
-                pairs.append((ids[0], ids[1]))
-            except IndexError:
-                raise exceptions.ValidationError(f"two columns required: {i}")
+                try:
+                    ids = i.strip().split("\t")
+                    pairs.append((ids[0], ids[1]))
+                except IndexError:
+                    raise exceptions.ValidationError(f"two columns required: {i}")
 
     return validate_pairs(pairs)
