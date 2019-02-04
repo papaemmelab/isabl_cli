@@ -172,18 +172,20 @@ def iterate(url, **filters):
     return objects
 
 
-def get_instance(endpoint, identifier):
+def get_instance(endpoint, identifier, fields=None):
     """
     Get database instance.
 
     Arguments:
         identifier (str): a primary key, system_id, email or username.
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
+        fields (list): list of fields to be retrieved.
 
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    return api_request("get", url=f"/{endpoint}/{identifier}").json()
+    params = {"fields": ",".join(map(str, fields))} if fields else {}
+    return api_request("get", url=f"/{endpoint}/{identifier}", params=params).json()
 
 
 def create_instance(endpoint, **data):

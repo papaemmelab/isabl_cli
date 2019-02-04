@@ -12,7 +12,6 @@ def _get_experiments(filter_tuples):
 
 NULLABLE_IDENTIFIERS = click.argument("identifiers", nargs=-1, required=False)
 
-
 IDENTIFIER = click.option(
     "--identifier",
     "-id",
@@ -63,6 +62,12 @@ ENDPOINT = click.argument(
             "samples",
             "individuals",
             "assemblies",
+            "diseases",
+            "centers",
+            "platforms",
+            "submissions",
+            "applications",
+            "groups",
         ]
     ),
 )
