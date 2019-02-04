@@ -3,9 +3,11 @@
 from glob import glob
 from os.path import join
 from collections import OrderedDict
+import os
 import json
 import shutil
 import subprocess
+import tempfile
 
 import click
 
@@ -81,16 +83,24 @@ def get_metadata(
     identifiers, endpoint, field, filters, no_headers, json_, fx
 ):  # pylint: disable=invalid-name
     """Retrieve metadata for multiple instances."""
-    if field:
-        filters["fields"] = ",".join(i[0] for i in field)
-    elif not (json_ or fx):
+    if not field and not (json_ or fx):
         raise click.UsageError("Pass --field or use --json/--fx")
 
     if fx and not shutil.which("fx"):
         raise click.UsageError("fx is not installed")
 
+    if filters and identifiers:
+        raise click.UsageError("can't combine filters and identifiers")
+
+    fields = [i[0] for i in field]  # first level fields
     identifiers = identifiers or None
-    instances = api.get_instances(endpoint, identifiers, verbose=True, **filters)
+
+    if identifiers:
+        instances = [api.get_instance(endpoint, i, fields=fields) for i in identifiers]
+    else:
+        filters.update({"fields": ",".join(fields)} if field else {})
+        instances = api.get_instances(endpoint, identifiers, verbose=True, **filters)
+
     results = instances
 
     if field:  # if fields were passed, update the results list
@@ -102,7 +112,11 @@ def get_metadata(
     if json_:
         click.echo(json.dumps(results, sort_keys=True, indent=4))
     elif fx:
-        subprocess.check_call(["bash", "-c", f"echo '{json.dumps(results)}' | fx"])
+        fp = tempfile.NamedTemporaryFile("w+", delete=False)
+        json.dump(results, fp)
+        fp.close()
+        subprocess.check_call(["fx", fp.name])
+        os.unlink(fp.name)
     else:
         result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
         result += ["\t".join(map(str, i.values())) for i in results]
