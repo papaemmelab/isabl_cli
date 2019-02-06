@@ -179,13 +179,16 @@ def get_instance(endpoint, identifier, fields=None):
     Arguments:
         identifier (str): a primary key, system_id, email or username.
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
-        fields (list): list of fields to be retrieved.
+        fields (str): comma separated list of fields to be retrieved.
 
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    params = {"fields": ",".join(map(str, fields))} if fields else {}
-    return api_request("get", url=f"/{endpoint}/{identifier}", params=params).json()
+    return api_request(
+        "get",
+        url=f"/{endpoint}/{identifier}",
+        params={"fields": fields} if fields else {},
+    ).json()
 
 
 def create_instance(endpoint, **data):

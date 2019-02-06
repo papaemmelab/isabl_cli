@@ -36,7 +36,10 @@ _DEFAULTS = {
         "isabl_cli.data.trigger_analyses_merge",
     ],
     "ON_SIGNAL_FAILURE": None,
-    "ADMIN_COMMANDS": ["isabl_cli.commands.processed_finished"],
+    "ADMIN_COMMANDS": [
+        "isabl_cli.commands.processed_finished",
+        "isabl_cli.commands.patch_results",
+    ],
     "SYSTEM_COMMANDS": [
         "isabl_cli.commands.login",
         "isabl_cli.commands.get_count",
@@ -46,6 +49,7 @@ _DEFAULTS = {
         "isabl_cli.commands.get_data",
         "isabl_cli.commands.get_metadata",
         "isabl_cli.commands.get_reference",
+        "isabl_cli.commands.get_results",
         "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.patch_status",
     ],
