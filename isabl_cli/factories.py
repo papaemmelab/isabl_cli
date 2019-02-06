@@ -91,7 +91,7 @@ class ExperimentFactory(BaseFactory):
     bam_files = factory.SubFactory(factory.DictFactory)
     cell_type = fuzzy.FuzzyChoice(["SINGLE", "BULK"])
     center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    portion_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
+    aliquot_id = None
     read_length = fuzzy.FuzzyChoice(["100", "150"])
     read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
     research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)

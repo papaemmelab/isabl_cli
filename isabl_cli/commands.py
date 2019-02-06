@@ -18,6 +18,21 @@ from isabl_cli.settings import import_from_string
 from isabl_cli.settings import user_settings
 
 
+def _filters_or_identifiers(endpoint, identifiers, filters, fields=None):
+    if filters and identifiers:
+        raise click.UsageError("Can't combine filters and identifiers.")
+
+    if fields:
+        filters["fields"] = fields
+        filters["limit"] = 100_000
+
+    return (
+        [api.get_instance(endpoint, i, fields=fields) for i in identifiers]
+        if identifiers
+        else api.get_instances(endpoint, verbose=True, **filters)
+    )
+
+
 @click.command()
 def login():  # pragma: no cover
     """Login with isabl credentials."""
@@ -44,7 +59,8 @@ def processed_finished(filters):
     filters.update(status="FINISHED")
 
     for i in api.get_instances("analyses", **filters):
-        api.patch_analysis_status(i, "SUCCEEDED")
+        if i["status"] == "FINISHED":
+            api.patch_analysis_status(i, "SUCCEEDED")
 
 
 @click.command()
@@ -78,48 +94,39 @@ def patch_status(key, status):
 @options.NO_HEADERS
 @options.NULLABLE_IDENTIFIERS
 @click.option("--json", "json_", help="Print as JSON", is_flag=True)
-@click.option("--fx", help="Visualize json with fx", is_flag=True)
-def get_metadata(
-    identifiers, endpoint, field, filters, no_headers, json_, fx
-):  # pylint: disable=invalid-name
+@click.option("--fx", "use_fx", help="Visualize json with fx", is_flag=True)
+def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_fx):
     """Retrieve metadata for multiple instances."""
-    if not field and not (json_ or fx):
+    if not field and not (json_ or use_fx):
         raise click.UsageError("Pass --field or use --json/--fx")
 
-    if fx and not shutil.which("fx"):
+    if use_fx and not shutil.which("fx"):
         raise click.UsageError("fx is not installed")
 
-    if filters and identifiers:
-        raise click.UsageError("can't combine filters and identifiers")
+    instances = _filters_or_identifiers(
+        endpoint=endpoint,
+        identifiers=identifiers,
+        filters=filters,
+        fields=",".join([i[0] for i in field]),
+    )
 
-    fields = [i[0] for i in field]  # first level fields
-    identifiers = identifiers or None
-
-    if identifiers:
-        instances = [api.get_instance(endpoint, i, fields=fields) for i in identifiers]
-    else:
-        filters.update({"fields": ",".join(fields)} if field else {})
-        instances = api.get_instances(endpoint, identifiers, verbose=True, **filters)
-
-    results = instances
-
-    if field:  # if fields were passed, update the results list
-        results = [
+    if field:  # if fields were passed, update the instances list
+        instances = [
             OrderedDict([(".".join(j), utils.traverse_dict(i, j)) for j in field])
             for i in instances
         ]
 
     if json_:
-        click.echo(json.dumps(results, sort_keys=True, indent=4))
-    elif fx:
+        click.echo(json.dumps(instances, sort_keys=True, indent=4))
+    elif use_fx:
         fp = tempfile.NamedTemporaryFile("w+", delete=False)
-        json.dump(results, fp)
+        json.dump(instances, fp)
         fp.close()
         subprocess.check_call(["fx", fp.name])
         os.unlink(fp.name)
     else:
         result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
-        result += ["\t".join(map(str, i.values())) for i in results]
+        result += ["\t".join(map(str, i.values())) for i in instances]
         click.echo("\n".join(result).expandtabs(30))
 
 
@@ -134,11 +141,16 @@ def get_count(endpoint, filters):
 @click.command()
 @options.ENDPOINT
 @options.FILE_PATTERN
-@options.FILTERS
-def get_paths(endpoint, pattern, filters):
+@options.NULLABLE_FILTERS
+@options.NULLABLE_IDENTIFIERS
+def get_paths(endpoint, pattern, filters, identifiers):
     """Get storage directories, use `pattern` to match files inside dirs."""
-    filters.update(fields="storage_url", limit=100_000)
-    for i in api.get_instances(endpoint, verbose=True, **filters):
+    for i in _filters_or_identifiers(
+        endpoint=endpoint,
+        identifiers=identifiers,
+        filters=filters,
+        fields="storage_url",
+    ):
         if i["storage_url"]:
             if pattern:
                 click.echo("\n".join(glob(join(i["storage_url"], pattern))))
@@ -147,12 +159,17 @@ def get_paths(endpoint, pattern, filters):
 
 
 @click.command()
-@options.FILTERS
+@options.NULLABLE_FILTERS
+@options.NULLABLE_IDENTIFIERS
 @options.VERBOSE
-def get_data(filters, verbose):
+def get_data(filters, identifiers, verbose):
     """Get file paths for experiments sequencing data."""
-    filters.update(fields="sequencing_data,system_id", limit=100_000)
-    for i in api.get_instances("experiments", verbose=True, **filters):
+    for i in _filters_or_identifiers(
+        endpoint="experiments",
+        identifiers=identifiers,
+        filters=filters,
+        fields="sequencing_data,system_id",
+    ):
         system_id = i["system_id"]
 
         if not i["sequencing_data"] and not verbose:
@@ -193,13 +210,42 @@ def get_reference(assembly, data_id):
 
 
 @click.command()
-@options.FILTERS
+@options.NULLABLE_IDENTIFIERS
+@options.NULLABLE_FILTERS
+@options.VERBOSE
+@click.option("-r", "--result-key", help="result identifier", required=True)
+def get_results(filters, identifiers, result_key, verbose):
+    """Get analyses results."""
+    for i in _filters_or_identifiers(
+        endpoint="analyses",
+        identifiers=identifiers,
+        filters=filters,
+        fields="results,pk",
+    ):
+        if result_key in i["results"]:
+            result = i["results"][result_key]
+            click.echo(result if not verbose else f"{i['pk']} {result}")
+        elif verbose:
+            click.echo(f"{i['pk']} - No result available")
+        else:
+            raise click.UsageError(
+                f"No '{result_key}' for {i['pk']}, ignore with --verbose"
+            )
+
+
+@click.command()
+@options.NULLABLE_IDENTIFIERS
+@options.NULLABLE_FILTERS
 @options.VERBOSE
 @click.option("--assembly", help="required if multiple options for assembly")
-def get_bams(filters, assembly, verbose):
+def get_bams(filters, assembly, verbose, identifiers):
     """Get storage directories, use `pattern` to match files inside dirs."""
-    filters.update(fields="bam_files,system_id", limit=100_000)
-    for i in api.get_instances("experiments", verbose=True, **filters):
+    for i in _filters_or_identifiers(
+        endpoint="experiments",
+        identifiers=identifiers,
+        filters=filters,
+        fields="bam_files,system_id",
+    ):
         bam_path = None
         system_id = i["system_id"]
 
