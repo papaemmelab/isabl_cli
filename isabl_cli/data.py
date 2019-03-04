@@ -458,7 +458,7 @@ class LocalBedImporter:
 
         api.create_instance("assemblies", name=assembly, species=species)
         beds_dir = join(technique["storage_url"], "bed_files", assembly)
-        base_name = f'{technique["slug"]}.{assembly}'
+        base_name = slugify(f'{technique["slug"]}.{assembly}')
         targets_dst = join(beds_dir, f"{base_name}.targets.bed")
         baits_dst = join(beds_dir, f"{base_name}.baits.bed")
         os.makedirs(beds_dir, exist_ok=True)
@@ -471,8 +471,8 @@ class LocalBedImporter:
 
         click.secho(f'\nSuccess! patching {technique["slug"]}...', fg="green")
         technique["bed_files"][assembly] = {}
-        technique["bed_files"][assembly]["targets"] = targets_dst + ".gz"
-        technique["bed_files"][assembly]["baits"] = baits_dst + ".gz"
+        technique["bed_files"][assembly]["targets"] = targets_dst
+        technique["bed_files"][assembly]["baits"] = baits_dst
         technique["bed_files"][assembly]["description"] = description
 
         return api.patch_instance(
