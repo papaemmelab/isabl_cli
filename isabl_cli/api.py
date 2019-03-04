@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import time
 
+from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 import click
 import requests
@@ -21,6 +22,39 @@ from isabl_cli.settings import user_settings
 requests.packages.urllib3.disable_warnings(  # pylint: disable=E1101
     InsecureRequestWarning
 )
+
+
+class IsablDict(Munch):
+    def __init__(self, *args, **kwargs):
+        """If first argument is int or str, use it to retrieve an instance."""
+        if len(args) == 1 and isinstance(args[0], (str, int)):
+            super().__init__(**get_instance(self.API_ENDPOINT, args[0]))
+        else:
+            super().__init__(*args, **kwargs)
+
+    def __dir__(self):
+        """Combine munch and dict dirs."""
+        return (
+            super().__dir__()
+            + super(dict, self).__dir__()  # pylint: disable=bad-super-call
+        )
+
+
+class Experiment(IsablDict):
+
+    API_ENDPOINT = "experiments"
+
+
+class Analysis(IsablDict):
+
+    API_ENDPOINT = "analyses"
+
+
+def to_isabl_dict(endpoint, dictionary):
+    """Munchify a dict given the endpoint."""
+    return {"experiments": Experiment, "analyses": Analysis}.get(endpoint, IsablDict)(
+        dictionary
+    )
 
 
 def chunks(array, size):
@@ -184,11 +218,14 @@ def get_instance(endpoint, identifier, fields=None):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    return api_request(
-        "get",
-        url=f"/{endpoint}/{identifier}",
-        params={"fields": fields} if fields else {},
-    ).json()
+    return to_isabl_dict(
+        endpoint,
+        api_request(
+            "get",
+            url=f"/{endpoint}/{identifier}",
+            params={"fields": fields} if fields else {},
+        ).json(),
+    )
 
 
 def create_instance(endpoint, **data):
@@ -202,7 +239,7 @@ def create_instance(endpoint, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    return api_request("post", url=endpoint, json=data).json()
+    return to_isabl_dict(endpoint, api_request("post", url=endpoint, json=data).json())
 
 
 def patch_instance(endpoint, identifier, **data):
@@ -225,7 +262,7 @@ def patch_instance(endpoint, identifier, **data):
     if endpoint == "experiments" and instance.get("sequencing_data"):
         _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
-    return instance
+    return to_isabl_dict(endpoint, instance)
 
 
 def delete_instance(endpoint, identifier):
@@ -299,7 +336,22 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
             if names:
                 instances += iterate(**{"name__in": ",".join(names), **filters})
 
-    return instances
+    return [to_isabl_dict(endpoint, i) for i in instances]
+
+
+def get_experiments(identifiers=None, **filters):
+    """Get experiments give identifiers or filters."""
+    return get_instances("experiments", identifiers=identifiers, **filters)
+
+
+def get_analyses(identifiers=None, **filters):
+    """Get analyses give identifiers or filters."""
+    return get_instances("analyses", identifiers=identifiers, **filters)
+
+
+def get_projects(identifiers=None, **filters):
+    """Get projects give identifiers or filters."""
+    return get_instances("projects", identifiers=identifiers, **filters)
 
 
 def get_instances_count(endpoint, **filters):
@@ -320,12 +372,15 @@ def get_instances_count(endpoint, **filters):
 
 def get_tree(identifier):
     """Get everything for an individual."""
-    return get_instance("individuals/tree", identifier)
+    return to_isabl_dict("individuals", get_instance("individuals/tree", identifier))
 
 
 def get_trees(identifiers=None, **filters):
     """Get everything for multiple individuals."""
-    return get_instances("individuals/tree", identifiers, **filters)
+    return [
+        to_isabl_dict("individuals", i)
+        for i in get_instances("individuals/tree", identifiers, **filters)
+    ]
 
 
 def patch_analyses_status(analyses, status):
@@ -333,7 +388,7 @@ def patch_analyses_status(analyses, status):
     Patch the `status` of multiple `analyses`.
 
     Arguments:
-        analyses (list): dicts of analyses instances.
+        analyses (list): of analyses instances.
         status (str): status to be updated to.
 
     Raises:
