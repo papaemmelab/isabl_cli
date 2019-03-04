@@ -98,7 +98,7 @@ def test_import_bedfiles(tmpdir):
 
     technique = data.LocalBedImporter.import_bedfiles(
         species=species,
-        technique_key=technique["pk"],
+        technique=technique["pk"],
         targets_path=targets.strpath,
         baits_path=baits.strpath,
         assembly="AnAssembly",
@@ -121,7 +121,7 @@ def test_import_bedfiles(tmpdir):
         targets.strpath,
         "--baits-path",
         baits.strpath,
-        "--key",
+        "--technique",
         technique["pk"],
         "--assembly",
         "AnAssembly",

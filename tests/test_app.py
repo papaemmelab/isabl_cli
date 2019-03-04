@@ -169,15 +169,17 @@ def test_engine(tmpdir):
 
 def test_validate_is_pair():
     application = AbstractApplication()
-    targets = [{}]
-    references = [{}]
-    application.validate_is_pair(targets, references)
+    application.validate_is_pair([{"pk": 1}], [{"pk": 2}])
 
     with pytest.raises(AssertionError) as error:
-        targets.append({})
-        application.validate_is_pair(targets, references)
+        application.validate_is_pair([{"pk": 1}, {"pk": 2}], [{"pk": 3}])
 
     assert "Pairs only." in str(error.value)
+
+    with pytest.raises(AssertionError) as error:
+        application.validate_is_pair([{"pk": 1}], [{"pk": 1}])
+
+    assert "Target can't be same as reference." in str(error.value)
 
 
 def test_validate_reference_genome(tmpdir):
@@ -328,8 +330,8 @@ def test_validate_dna_tuples():
 
 def test_validate_dna_pairs():
     application = AbstractApplication()
-    targets = [{"system_id": 1, "technique": {"analyte": "DNA"}}]
-    references = [{"system_id": 2, "technique": {"analyte": "DNA"}}]
+    targets = [{"pk": 1, "technique": {"analyte": "DNA"}}]
+    references = [{"pk": 2, "technique": {"analyte": "DNA"}}]
     application.validate_dna_pairs(targets, references)
 
 
