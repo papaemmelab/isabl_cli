@@ -57,6 +57,9 @@ class TestApplication(AbstractApplication):
         return [], {"bar": "foo"}
 
     def get_command(self, analysis, inputs, settings):
+        if settings.restart:
+            return "echo successfully restarted"
+
         if analysis["targets"][0]["center_id"] == "1":
             return "exit 1"
 
@@ -133,6 +136,7 @@ def test_engine(tmpdir):
     assert "--commit" in result.output
     assert "--force" in result.output
     assert "--verbose" in result.output
+    assert "--restart" in result.output
     assert "--url" in result.output
 
     runner = CliRunner()
@@ -160,11 +164,22 @@ def test_engine(tmpdir):
 
     args = ["-fi", "pk__in", pks, "--commit", "--force"]
     result = runner.invoke(command, args)
-    assert "--commit is redundant with --force" in result.output
+    assert "--commit not required when using --force" in result.output
+
+    args = ["-fi", "pk__in", pks, "--restart", "--force"]
+    result = runner.invoke(command, args)
+    assert "cant use --force and --restart together" in result.output
 
     args = ["-fi", "pk__in", pks, "--force"]
     result = runner.invoke(command, args)
     assert "trashing:" in result.output
+
+    args = ["-fi", "pk__in", pks, "--restart", "--verbose"]
+    result = runner.invoke(command, args)
+    assert "FAILED" not in result.output
+
+    with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
+        assert "successfully restarted" in f.read()
 
 
 def test_validate_is_pair():

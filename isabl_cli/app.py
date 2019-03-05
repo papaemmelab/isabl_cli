@@ -389,15 +389,29 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         pipe = cls()
 
         commit = click.option(
-            "--commit", show_default=True, is_flag=True, help="Commit results."
+            "--commit",
+            show_default=True,
+            is_flag=True,
+            help="Submit application analyses.",
         )
 
         verbose = click.option(
-            "--verbose", show_default=True, is_flag=True, help="Verbose output."
+            "--verbose",
+            show_default=True,
+            is_flag=True,
+            help="Print verbose output of the operation.",
         )
 
         force = click.option(
-            "--force", help="Wipe all analyses and start from scratch.", is_flag=True
+            "--force",
+            help="Wipe unfinished analyses and start from scratch.",
+            is_flag=True,
+        )
+
+        restart = click.option(
+            "--restart",
+            help="Attempt restarting failed analyses from previous checkpoint.",
+            is_flag=True,
         )
 
         def print_url(ctx, _, value):
@@ -420,22 +434,28 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose])
-        def command(commit, force, verbose, **cli_options):
+        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose, restart])
+        def command(commit, force, verbose, restart, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
-                raise click.UsageError(
-                    "--commit is redundant with --force, simply use --force"
-                )
+                raise click.UsageError("--commit not required when using --force")
+
+            if commit and restart:
+                raise click.UsageError("--restart not required when using --force")
+
+            if force and restart:
+                raise click.UsageError("cant use --force and --restart together")
 
             pipe.run(
                 tuples=pipe.process_cli_options(**cli_options),
                 commit=commit,
                 force=force,
                 verbose=verbose,
+                restart=restart,
+                run_arguments=cli_options,
             )
 
-            if not (commit or force):
+            if not (commit or force or restart):
                 utils.echo_add_commit_message()
 
         return command
@@ -448,21 +468,31 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # ANALYSES EXECUTION LOGIC
     # ------------------------
 
-    def run(self, tuples, commit, force=False, verbose=True):
+    def run(
+        self,
+        tuples,
+        commit,
+        force=False,
+        restart=False,
+        verbose=True,
+        run_arguments=None,
+    ):
         """
         Run a list of targets, references tuples.
 
         Arguments:
+            restart (bool): set settings.restart = True.
             force (bool): if true, analyses are wiped before being submitted.
             commit (bool): if true, analyses are started (`force` overwrites).
             verbose (bool): whether or not verbose output should be printed.
             tuples (list): list of (targets, references) tuples.
+            run_arguments (dict): dictionary of extra arguments required to run the app.
 
         Returns:
             tuple: command_tuples, skipped_tuples, invalid_tuples
         """
         key = f"{self.NAME} {self.VERSION} {self.ASSEMBLY}"
-        commit = True if force else commit
+        commit = True if force or restart else commit
         tuples = [tuple(i) for i in tuples]  # coerce to tuple
         utils.echo_title(f"Running {len(tuples)} tuples for {key}")
 
@@ -473,13 +503,19 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for i in self.application_settings:
             getattr(self.settings, i)
 
+        # set restart attribute
+        self.settings.restart = restart
+
+        # update run arguments attribute
+        self.settings.run_arguments = run_arguments or {}
+
         # run extra settings validation
         self.validate_settings(self.settings)
 
         # create and run analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
         run_tuples, skipped_tuples = self.run_analyses(
-            analyses=analyses, commit=commit, force=force
+            analyses=analyses, commit=commit, force=force, restart=restart
         )
 
         if verbose:
@@ -493,7 +529,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return run_tuples, skipped_tuples, invalid_tuples
 
-    def run_analyses(self, analyses, commit, force):
+    def run_analyses(self, analyses, commit, force, restart):
         """
         Run a list of analyses.
 
@@ -508,7 +544,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 if force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
                     os.makedirs(i["storage_url"], exist_ok=True)
-                elif i["status"] in self.skip_status:
+                elif (
+                    not (restart and i["status"] == "FAILED")
+                    and i["status"] in self.skip_status
+                ):
                     skipped_tuples.append((i, i["status"]))
                     continue
 
