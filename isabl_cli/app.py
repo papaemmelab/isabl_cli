@@ -805,8 +805,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         for i in experiments:
             try:
-                self.get_bedfile(i, bedfile_type=bedfile_type)
-            except KeyError:
+                bed = self.get_bedfile(i, bedfile_type=bedfile_type)
+                assert isfile(bed), f"BED file does not exist: {bed}"
+            except (KeyError, AssertionError):
                 errors.append(f'{i["system_id"]} has no registered bedfile')
 
         if errors:

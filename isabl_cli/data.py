@@ -471,8 +471,8 @@ class LocalBedImporter:
 
         click.secho(f'\nSuccess! patching {technique["slug"]}...', fg="green")
         technique["bed_files"][assembly] = {}
-        technique["bed_files"][assembly]["targets"] = targets_dst
-        technique["bed_files"][assembly]["baits"] = baits_dst
+        technique["bed_files"][assembly]["targets"] = targets_dst + ".gz"
+        technique["bed_files"][assembly]["baits"] = baits_dst + ".gz"
         technique["bed_files"][assembly]["description"] = description
 
         return api.patch_instance(
