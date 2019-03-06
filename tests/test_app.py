@@ -42,7 +42,7 @@ class TestApplication(AbstractApplication):
         }
     }
 
-    def process_cli_options(self, targets):
+    def get_experiments_from_cli_options(self, targets):
         return [([i], []) for i in targets]
 
     def validate_experiments(self, targets, references):

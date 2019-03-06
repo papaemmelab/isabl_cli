@@ -86,9 +86,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # USER REQUIRED IMPLEMENTATIONS
     # -----------------------------
 
-    def process_cli_options(self, **cli_options):  # pylint: disable=W9008
+    def get_experiments_from_cli_options(self, **cli_options):  # pylint: disable=W9008
         """
-        Must return list of tuples given the parsed options.
+        Must return list of target-reference experiment tuples given the parsed options.
 
         Arguments:
             cli_options (dict): parsed command line options.
@@ -262,15 +262,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def submit_project_merge(self, project):
         """
-        Directly call `merge_project_analyses`.
+        Directly call `merge_project_analyses` if SUBMIT_PROJECT_LEVEL_MERGE is not set.
 
-        Overwrite this method if the merge procedure should be submitted using
-        a scheduler, see `commands.merge_project_analyses`.
+        Use setting SUBMIT_PROJECT_LEVEL_MERGE to submit the merge work with custom
+        logic, for instance by using LSF with `bsub isabl merge-project-analyses`.
 
         Arguments:
             project (dict): a project instance.
         """
-        self.run_project_merge(project)
+        if system_settings.SUBMIT_PROJECT_LEVEL_MERGE:
+            system_settings.SUBMIT_PROJECT_LEVEL_MERGE(
+                project=project, application=self
+            )
+        else:
+            self.run_project_merge(project)
 
     def get_project_analysis(self, project, patch=False):
         """
@@ -447,12 +452,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 raise click.UsageError("cant use --force and --restart together")
 
             pipe.run(
-                tuples=pipe.process_cli_options(**cli_options),
+                tuples=pipe.get_experiments_from_cli_options(**cli_options),
                 commit=commit,
                 force=force,
                 verbose=verbose,
                 restart=restart,
-                run_arguments=cli_options,
+                run_args=cli_options,
             )
 
             if not (commit or force or restart):
@@ -469,13 +474,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # ------------------------
 
     def run(
-        self,
-        tuples,
-        commit,
-        force=False,
-        restart=False,
-        verbose=True,
-        run_arguments=None,
+        self, tuples, commit, force=False, restart=False, verbose=True, run_args=None
     ):
         """
         Run a list of targets, references tuples.
@@ -486,7 +485,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             commit (bool): if true, analyses are started (`force` overwrites).
             verbose (bool): whether or not verbose output should be printed.
             tuples (list): list of (targets, references) tuples.
-            run_arguments (dict): dictionary of extra arguments required to run the app.
+            run_args (dict): dictionary of extra arguments required to run the app.
 
         Returns:
             tuple: command_tuples, skipped_tuples, invalid_tuples
@@ -507,7 +506,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         self.settings.restart = restart
 
         # update run arguments attribute
-        self.settings.run_arguments = run_arguments or {}
+        self.settings.run_args = run_args or {}
 
         # run extra settings validation
         self.validate_settings(self.settings)

@@ -35,6 +35,7 @@ _DEFAULTS = {
         "isabl_cli.data.symlink_analysis_to_targets",
         "isabl_cli.data.trigger_analyses_merge",
     ],
+    "SUBMIT_PROJECT_LEVEL_MERGE": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
         "isabl_cli.commands.processed_finished",
@@ -69,6 +70,7 @@ _IMPORT_STRINGS = {
     "BED_IMPORTER",
     "REFERENCE_DATA_IMPORTER",
     "REFERENCE_GENOME_IMPORTER",
+    "SUBMIT_PROJECT_LEVEL_MERGE",
 }
 
 _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
@@ -198,7 +200,7 @@ class ApplicationSettings:
         self._key = f"{application.NAME} {application.VERSION} {application.ASSEMBLY}"
         self.defaults = defaults
         self.restart = False
-        self.run_arguments = {}
+        self.run_args = {}
         self.application = application
         self.reference_data = application.assembly["reference_data"] or {}
         self.import_strings = import_strings or {}
