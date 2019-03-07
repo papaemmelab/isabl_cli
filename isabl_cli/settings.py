@@ -35,6 +35,7 @@ _DEFAULTS = {
         "isabl_cli.data.symlink_analysis_to_targets",
         "isabl_cli.data.trigger_analyses_merge",
     ],
+    "SUBMIT_PROJECT_LEVEL_MERGE": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
         "isabl_cli.commands.processed_finished",
@@ -69,6 +70,7 @@ _IMPORT_STRINGS = {
     "BED_IMPORTER",
     "REFERENCE_DATA_IMPORTER",
     "REFERENCE_GENOME_IMPORTER",
+    "SUBMIT_PROJECT_LEVEL_MERGE",
 }
 
 _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
@@ -197,6 +199,8 @@ class ApplicationSettings:
         """Get application settings from system settings."""
         self._key = f"{application.NAME} {application.VERSION} {application.ASSEMBLY}"
         self.defaults = defaults
+        self.restart = False
+        self.run_args = {}
         self.application = application
         self.reference_data = application.assembly["reference_data"] or {}
         self.import_strings = import_strings or {}
@@ -205,6 +209,17 @@ class ApplicationSettings:
     def system_settings(self):
         """Return dictionary with settings."""
         return system_settings
+
+    @property
+    def _settings(self):
+        """Return dictionary system with settings."""
+        settings = {}
+
+        if "ISABL_DEFAULT_APPS_SETTINGS_PATH" in environ:
+            with open(environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"], "r") as f:
+                settings = yaml.load(f.read())
+
+        return settings.get(self.application.primary_key, {})
 
     def __getattr__(self, attr):
         """Check if present in user settings or fall back to defaults."""

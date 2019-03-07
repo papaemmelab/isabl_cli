@@ -149,8 +149,9 @@ def apply_decorators(decorators):
 def get_rsync_command(src, dst, chmod="a-w"):
     """Get str for commant to move `src` directory to `dst`."""
     return (
-        f"rsync -va --append-verify --chmod={chmod} "
-        f"--remove-source-files {src}/ {dst}/ && "
+        f"(chmod -R u+w {dst} || true) && "
+        f"rsync -va --append-verify --remove-source-files {src}/ {dst}/ && "
+        f"chmod -R {chmod} {dst} && "
         f"find {src}/ -depth -type d -empty "
         r'-exec rmdir "{}" \;'
     )

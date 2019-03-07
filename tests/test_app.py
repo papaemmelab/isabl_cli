@@ -42,7 +42,7 @@ class TestApplication(AbstractApplication):
         }
     }
 
-    def process_cli_options(self, targets):
+    def get_experiments_from_cli_options(self, targets):
         return [([i], []) for i in targets]
 
     def validate_experiments(self, targets, references):
@@ -57,6 +57,9 @@ class TestApplication(AbstractApplication):
         return [], {"bar": "foo"}
 
     def get_command(self, analysis, inputs, settings):
+        if settings.restart:
+            return "echo successfully restarted"
+
         if analysis["targets"][0]["center_id"] == "1":
             return "exit 1"
 
@@ -133,6 +136,7 @@ def test_engine(tmpdir):
     assert "--commit" in result.output
     assert "--force" in result.output
     assert "--verbose" in result.output
+    assert "--restart" in result.output
     assert "--url" in result.output
 
     runner = CliRunner()
@@ -160,24 +164,37 @@ def test_engine(tmpdir):
 
     args = ["-fi", "pk__in", pks, "--commit", "--force"]
     result = runner.invoke(command, args)
-    assert "--commit is redundant with --force" in result.output
+    assert "--commit not required when using --force" in result.output
+
+    args = ["-fi", "pk__in", pks, "--restart", "--force"]
+    result = runner.invoke(command, args)
+    assert "cant use --force and --restart together" in result.output
 
     args = ["-fi", "pk__in", pks, "--force"]
     result = runner.invoke(command, args)
     assert "trashing:" in result.output
 
+    args = ["-fi", "pk__in", pks, "--restart", "--verbose"]
+    result = runner.invoke(command, args)
+    assert "FAILED" not in result.output
+
+    with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
+        assert "successfully restarted" in f.read()
+
 
 def test_validate_is_pair():
     application = AbstractApplication()
-    targets = [{}]
-    references = [{}]
-    application.validate_is_pair(targets, references)
+    application.validate_is_pair([{"pk": 1}], [{"pk": 2}])
 
     with pytest.raises(AssertionError) as error:
-        targets.append({})
-        application.validate_is_pair(targets, references)
+        application.validate_is_pair([{"pk": 1}, {"pk": 2}], [{"pk": 3}])
 
     assert "Pairs only." in str(error.value)
+
+    with pytest.raises(AssertionError) as error:
+        application.validate_is_pair([{"pk": 1}], [{"pk": 1}])
+
+    assert "Target can't be same as reference." in str(error.value)
 
 
 def test_validate_reference_genome(tmpdir):
@@ -328,8 +345,8 @@ def test_validate_dna_tuples():
 
 def test_validate_dna_pairs():
     application = AbstractApplication()
-    targets = [{"system_id": 1, "technique": {"analyte": "DNA"}}]
-    references = [{"system_id": 2, "technique": {"analyte": "DNA"}}]
+    targets = [{"pk": 1, "technique": {"analyte": "DNA"}}]
+    references = [{"pk": 2, "technique": {"analyte": "DNA"}}]
     application.validate_dna_pairs(targets, references)
 
 

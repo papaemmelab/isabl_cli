@@ -98,19 +98,22 @@ def test_import_bedfiles(tmpdir):
 
     technique = data.LocalBedImporter.import_bedfiles(
         species=species,
-        technique_key=technique["pk"],
+        technique=technique["pk"],
         targets_path=targets.strpath,
         baits_path=baits.strpath,
         assembly="AnAssembly",
-        description="This are test bed_files",
+        description="these are test BED files",
     )
 
     for i in "targets", "baits":
-        for j in "", ".gz", ".gz.tbi":
-            assert os.path.isfile(technique["bed_files"]["AnAssembly"][i] + j)
+        assert os.path.isfile(technique["bed_files"]["AnAssembly"][i])
+        assert os.path.isfile(technique["bed_files"]["AnAssembly"][i] + ".tbi")
+        assert os.path.isfile(
+            technique["bed_files"]["AnAssembly"][i].replace(".gz", "")
+        )
 
         with open(
-            technique["bed_files"]["AnAssembly"][i], "r"
+            technique["bed_files"]["AnAssembly"][i].replace(".gz", ""), "r"
         ) as f:  # test bed is sorted
             assert next(f).startswith("1")
 
@@ -121,7 +124,7 @@ def test_import_bedfiles(tmpdir):
         targets.strpath,
         "--baits-path",
         baits.strpath,
-        "--key",
+        "--technique",
         technique["pk"],
         "--assembly",
         "AnAssembly",

@@ -33,6 +33,7 @@ def test_commands(tmpdir):
 
     runner = CliRunner()
     args = [
+        "analyses",
         "-fi",
         "pk",
         analysis["pk"],
@@ -49,16 +50,16 @@ def test_commands(tmpdir):
     result = runner.invoke(commands.get_metadata, args, catch_exceptions=False)
     assert analysis["application"]["name"] in result.output
     assert "application.name" in result.output
-    assert '"name": ' in result.output
+    assert "'name': " in result.output
     assert "INVALID KEY (carlos)" in result.output
     assert "INVALID KEY (nested_attr)" in result.output
 
     runner = CliRunner()
-    args = ["-fi", "pk", analysis["pk"], "--pattern", "*.path"]
+    args = ["analyses", "-fi", "pk", analysis["pk"], "--pattern", "*.path"]
     result = runner.invoke(commands.get_paths, args, catch_exceptions=False)
     assert tmpdir.strpath in result.output
     assert "test.path" in result.output
 
-    args = ["-fi", "pk", analysis["pk"]]
+    args = ["analyses", "-fi", "pk", analysis["pk"]]
     result = runner.invoke(commands.get_paths, args, catch_exceptions=False)
     assert tmpdir.strpath in result.output
