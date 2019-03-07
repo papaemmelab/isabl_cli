@@ -13,8 +13,10 @@ from isabl_cli.settings import system_settings
 
 def get_results(
     experiment,
-    application_key,
-    result_key,
+    application_key=None,
+    application_name=None,
+    application_version=None,
+    result_key=None,
     targets=None,
     references=None,
     analyses=None,
@@ -30,11 +32,12 @@ def get_results(
     Arguments:
         experiment (dict): experiment object for which result will be retrieved.
         application_key (int): key of the application that generated the result.
+        application_name (int): key of the application that generated the result.
+        application_version (int): key of the application that generated the result.
         result_key (dict): name of the result.
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
-
     Returns:
         list: of tuples (result_value, analysis primary key).
     """
@@ -43,8 +46,18 @@ def get_results(
     references = {i["pk"] for i in references or []}
     analyses = {i["pk"] for i in analyses or []}
 
+    if not application_key and (not application_name or not application_version):
+        msg = "To get application result the key must be provided, or name and version."
+        raise click.UsageError(msg)
+
     for i in experiment["results"]:
-        if i["application"]["pk"] == application_key:
+        match_application = (
+            application_key and application_key == i["application"]["pk"]
+        ) or (
+            application_name == i["application"]["name"]
+            and application_version == i["application"]["version"]
+        )
+        if match_application:
             i_targets = {j["pk"] for j in i["targets"]}
             i_references = {j["pk"] for j in i["references"]}
             i_analyses = set(i["analyses"])
@@ -64,7 +77,6 @@ def get_results(
                 result = i["results"][result_key]
 
             results.append((result, i["pk"]))
-
     return results
 
 
@@ -76,8 +88,12 @@ def get_result(*args, **kwargs):
         tuple: result value, analysis pk that produced the result
     """
     results = get_results(*args, **kwargs)
-    result, key = results[0]
+    assert results, (
+        f"No results were found for analysis: "
+        f"{kwargs.get('application_pk') or kwargs.get('application_name')}"
+    )
     assert len(results) == 1, f"Multiple results returned {results}"
+    result, key = results[0]
     return result, key
 
 

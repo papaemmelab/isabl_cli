@@ -104,7 +104,6 @@ def api_request(method, url, authenticate=True, **kwargs):
             msg = click.style(str(response.json()), fg="red", blink=True)
         except Exception:  # pylint: disable=broad-except
             msg = ""
-
         click.echo(f"Request Error: {response.url}\n{msg}")
         response.raise_for_status()
 
