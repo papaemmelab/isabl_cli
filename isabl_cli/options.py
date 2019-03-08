@@ -145,6 +145,18 @@ ANALYSES = click.option(
     required=True,
 )
 
+NORMAL_TARGETS = click.option(
+    "--normal-targets-filters",
+    "-fi",
+    "targets",
+    multiple=True,
+    help="API filters for NORMAL target experiments",
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: _get_experiments(i + ("sample__sample_class", "NORMAL")),
+    required=True,
+)
+
 TARGETS = click.option(
     "--targets-filters",
     "-fi",

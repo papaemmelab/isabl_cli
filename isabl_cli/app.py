@@ -38,8 +38,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     URL = None
 
     # utils
-    get_result = utils.get_result
-    get_results = utils.get_results
+    @staticmethod
+    def get_result(*args, **kwargs):
+        """Get an application result."""
+        return utils.get_result(*args, **kwargs)
+
+    @staticmethod
+    def get_results(*args, **kwargs):
+        """Get application results."""
+        return utils.get_results(*args, **kwargs)
+
+    # get_result = utils.get_result
+    # get_results = utils.get_results
 
     # application configuration
     application_description = ""
@@ -852,7 +862,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             raise exceptions.ValidationError("\n".join(errors))
 
     def validate_bedfiles(self, experiments, bedfile_type="targets"):
-        """Raise error not all experiments have registered bams."""
+        """Raise error not all experiments have registered bedfile."""
         errors = []
 
         for i in experiments:

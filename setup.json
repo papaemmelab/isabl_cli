@@ -24,7 +24,8 @@
         "python-slugify==1.1.2",
         "pytz==2018.4",
         "requests==2.19.1",
-        "six==1.11.0"
+        "six==1.11.0",
+        "munch==2.3.2"
     ],
     "extras_require": {
         "test": [

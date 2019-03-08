@@ -9,11 +9,11 @@ import shutil
 import subprocess
 import time
 
-from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from six import iteritems
 import click
 import requests
+from munch import Munch
 
 from isabl_cli import utils
 from isabl_cli.settings import import_from_string
@@ -153,7 +153,6 @@ def api_request(method, url, authenticate=True, **kwargs):
             msg = click.style(str(response.json()), fg="red", blink=True)
         except Exception:  # pylint: disable=broad-except
             msg = ""
-
         click.echo(f"Request Error: {response.url}\n{msg}")
         response.raise_for_status()
 

@@ -249,6 +249,17 @@ class ApplicationSettings:
 
         return val
 
+    @property
+    def _settings(self):
+        """Return dictionary system with settings."""
+        settings = {}
+
+        if "ISABL_DEFAULT_APPS_SETTINGS_PATH" in environ:
+            with open(environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"], "r") as f:
+                settings = yaml.load(f.read())
+
+        return settings.get(self.application.primary_key, {})
+
 
 # pylint: disable=C0103
 system_settings = SystemSettings(_DEFAULTS, _IMPORT_STRINGS, _PATH_STRINGS)
