@@ -9,11 +9,11 @@ import shutil
 import subprocess
 import time
 
+from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from six import iteritems
 import click
 import requests
-from munch import Munch
 
 from isabl_cli import utils
 from isabl_cli.settings import import_from_string

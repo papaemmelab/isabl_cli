@@ -37,20 +37,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # optional application info
     URL = None
 
-    # utils
-    @staticmethod
-    def get_result(*args, **kwargs):
-        """Get an application result."""
-        return utils.get_result(*args, **kwargs)
-
-    @staticmethod
-    def get_results(*args, **kwargs):
-        """Get application results."""
-        return utils.get_results(*args, **kwargs)
-
-    # get_result = utils.get_result
-    # get_results = utils.get_results
-
     # application configuration
     application_description = ""
     application_inputs = {}
@@ -671,6 +657,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -----------------
     # APPLICATION UTILS
     # -----------------
+
+    @staticmethod
+    def get_result(*args, **kwargs):
+        """Get an application result."""
+        return utils.get_result(*args, **kwargs)
+
+    @staticmethod
+    def get_results(*args, **kwargs):
+        """Get application results."""
+        return utils.get_results(*args, **kwargs)
 
     def patch_application_settings(self, **settings):
         """Patch application settings if necessary."""
