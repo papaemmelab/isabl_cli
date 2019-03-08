@@ -672,6 +672,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # APPLICATION UTILS
     # -----------------
 
+    def patch_application_settings(self, **settings):
+        """Patch application settings if necessary."""
+        click.echo(f"Patching settings for {self.NAME} {self.VERSION} {self.ASSEMBLY}")
+
+        try:
+            assert self.application["settings"] == settings
+            click.secho(f"\n\tno changes detected, skipping patch.\n", fg="yellow")
+        except AssertionError:
+            try:
+                api.patch_instance("applications", self.primary_key, settings=settings)
+                click.secho(f"\n\tSuccessfully patched settings.\n", fg="green")
+            except TypeError as error:
+                click.secho(f"\n\tPatched failed with error: {error}.\n", fg="red")
+
     @staticmethod
     def get_job_name(analysis):
         """Get job name given an analysis instance."""
