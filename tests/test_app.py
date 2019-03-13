@@ -13,6 +13,7 @@ from isabl_cli import factories
 from isabl_cli import options
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import system_settings
+from isabl_cli.settings import get_application_settings
 
 
 class TestApplication(AbstractApplication):
@@ -94,16 +95,16 @@ def test_application_settings(tmpdir):
     application.assembly["reference_data"]["test_id"] = dict(url="FOO")
     assert application.settings.test_reference == "FOO"
 
-    with pytest.raises(exceptions.MissingRequirementError) as error:
+    with pytest.raises(exceptions.ConfigurationError) as error:
         application.settings.needs_to_be_implemented
 
     assert "is required" in str(error.value)
-    assert application.settings.system_settings == system_settings
 
-    settings_yml = tmpdir.join("test.yml")
-    settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
-    os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
-    assert application.settings.foo == "from_the_env"
+    # might enable this functionality again in the future
+    # settings_yml = tmpdir.join("test.yml")
+    # settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
+    # os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
+    # assert application.settings.foo == "from_the_env"
 
 
 def test_engine(tmpdir):
