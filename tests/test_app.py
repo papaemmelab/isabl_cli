@@ -13,6 +13,7 @@ from isabl_cli import factories
 from isabl_cli import options
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import system_settings
+from isabl_cli.settings import get_application_settings
 
 
 class TestApplication(AbstractApplication):
@@ -82,28 +83,118 @@ class TestApplication(AbstractApplication):
         return {"project_result_key": join(analysis["storage_url"], "test.merge")}
 
 
+def test_get_application_settings():
+    # test can use reference data id
+    assert (
+        "genome fasta path"
+        == get_application_settings(
+            defaults=dict(inner_dict=dict(reference="reference_data_id:genome_fasta")),
+            settings=dict(),
+            reference_data=dict(genome_fasta=dict(url="genome fasta path")),
+            import_strings={},
+        ).inner_dict.reference
+    )
+
+    # test can use import strings
+    assert (
+        join
+        == get_application_settings(
+            defaults=dict(inner_dict=dict(os_methods=[])),
+            settings=dict(inner_dict=dict(os_methods=["os.path.join", "os.listdir"])),
+            reference_data=dict(),
+            import_strings={"os_methods"},
+        ).inner_dict.os_methods[0]
+    )
+
+    # test inner keys are validated (unexpected settings)
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        get_application_settings(
+            defaults=dict(inner_dict=dict(correct_name=[])),
+            settings=dict(inner_dict=dict(wrong_name=[])),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+
+    assert "Got unexpected setting 'wrong_name' for 'inner_dict'" in str(error.value)
+
+    # test can skip keys validation
+    assert (
+        get_application_settings(
+            defaults=dict(inner_dict=dict(correct_name=[], skip_check=True)),
+            settings=dict(inner_dict=dict(different_name_but_ok=None)),
+            reference_data=dict(),
+            import_strings=set(),
+        ).inner_dict.different_name_but_ok
+        is None
+    )
+
+    # test keys are not checked for list of dicts
+    assert (
+        get_application_settings(
+            defaults=dict(dicts_list=[dict(any_setting_name_works=True)]),
+            settings=dict(dicts_list=[dict(thats_right=True)]),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+        .dicts_list[0]
+        .thats_right
+        is True
+    )
+
+    # test not implemented settings
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        get_application_settings(
+            defaults=dict(
+                inner=dict(required_setting=NotImplemented),
+                reference="reference_data_id:foo",
+            ),
+            settings=dict(inner=dict(required=None)),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+
+    assert "Missing required setting: 'required_setting'" in str(error.value)
+    assert "Missing required setting: 'reference'" in str(error.value)
+
+    # expected dict, got other
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        get_application_settings(
+            defaults=dict(dict_setting=dict(foo="bar")),
+            settings=dict(dict_setting="not a dict"),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+
+    assert "Invalid setting expected dict, got: " in str(error.value)
+
+
 def test_application_settings(tmpdir):
     application = TestApplication()
     application.application_settings = {
         "test_reference": "reference_data_id:test_id",
-        "needs_to_be_implemented": NotImplemented,
         "from_system_settings": None,
-        "foo": NotImplemented,
     }
 
     application.assembly["reference_data"]["test_id"] = dict(url="FOO")
     assert application.settings.test_reference == "FOO"
+    assert application.settings.from_system_settings is None
 
-    with pytest.raises(exceptions.MissingRequirementError) as error:
-        application.settings.needs_to_be_implemented
+    application = TestApplication()
+    application.application_settings = {
+        "test_reference": "reference_data_id:invalid_key",
+        "needs_to_be_implemented": NotImplemented,
+    }
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        application.settings
 
-    assert "is required" in str(error.value)
-    assert application.settings.system_settings == system_settings
+    assert "Missing required setting: 'test_reference'" in str(error.value)
+    assert "Missing required setting: 'needs_to_be_implemented'" in str(error.value)
 
-    settings_yml = tmpdir.join("test.yml")
-    settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
-    os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
-    assert application.settings.foo == "from_the_env"
+    # might enable this functionality again in the future
+    # settings_yml = tmpdir.join("test.yml")
+    # settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
+    # os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
+    # assert application.settings.foo == "from_the_env"
 
 
 def test_engine(tmpdir):

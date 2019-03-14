@@ -20,7 +20,7 @@ from isabl_cli import api
 from isabl_cli import data
 from isabl_cli import exceptions
 from isabl_cli import utils
-from isabl_cli.settings import ApplicationSettings
+from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
 
@@ -311,7 +311,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if "submit_analyses" not in defaults:
             defaults["submit_analyses"] = "isabl_cli.batch_systems.submit_local"
 
-        return ApplicationSettings(self, defaults, import_strings)
+        return get_application_settings(
+            defaults=defaults,
+            settings=self.application.settings or {},
+            reference_data=self.application.assembly.reference_data or {},
+            import_strings=import_strings,
+        )
 
     @cached_property
     def application(self):
