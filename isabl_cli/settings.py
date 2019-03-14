@@ -2,7 +2,6 @@
 
 from getpass import getuser
 from importlib import import_module
-from os import environ
 from os.path import abspath
 from os.path import expanduser
 from os.path import join
@@ -14,7 +13,6 @@ from cached_property import cached_property
 from munch import Munch
 import pytz
 import six
-import yaml
 
 from isabl_cli import exceptions
 
