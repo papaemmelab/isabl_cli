@@ -219,22 +219,40 @@ def get_application_settings(defaults, settings, reference_data, import_strings)
 
         return setting
 
-    def _settingfy(x, setting=None, attr=None):  # pylint: disable=invalid-name
-        if isinstance(x, dict):
+    def _settingfy(default, setting=None, attr=None, skip_check=False):
+        if isinstance(default, dict):
+            skip_check = skip_check or default.get("skip_check", False)
             setting = setting or {}
+            tuples = {}
 
             if not isinstance(setting, dict):
                 errors.append(f"Invalid setting expected dict, got: {setting}")
                 setting = {}
 
-            for i in setting.keys():
-                if i not in x:
-                    errors.append(f"Got unexpected setting {i} for {attr}...")
+            for i in [] if skip_check else setting.keys():
+                if i not in default:
+                    errors.append(f"Got unexpected setting '{i}' for '{attr}'...")
 
-            return Munch((k, _settingfy(v, setting.get(k), k)) for k, v in x.items())
-        elif isinstance(x, (list, tuple)):
-            return type(x)(_settingfy(x=i, attr=attr) for i in setting or x)
-        return _validate(x, setting, attr)
+            for key, value in (
+                setting.items() if skip_check and setting else default.items()
+            ):
+                tuples[key] = _settingfy(
+                    default=value,
+                    setting=setting.get(key),
+                    attr=key,
+                    skip_check=skip_check,  # propagate skip_check
+                )
+
+            return Munch(**tuples)
+
+        # if the default setting is a list, it's not possible to validate inner keys
+        elif isinstance(default, (list, tuple)):
+            return type(default)(
+                _settingfy(default=i, attr=attr, skip_check=True)
+                for i in setting or default
+            )
+
+        return _validate(default, setting, attr)
 
     settings = _settingfy(defaults, settings, f"App Settings")
 
