@@ -458,7 +458,7 @@ class LocalBedImporter:
 
         api.create_instance("assemblies", name=assembly, species=species)
         beds_dir = join(technique["storage_url"], "bed_files", assembly)
-        base_name = f'{technique["slug"]}.{assembly}'
+        base_name = slugify(f'{technique["slug"]}.{assembly}')
         targets_dst = join(beds_dir, f"{base_name}.targets.bed")
         baits_dst = join(beds_dir, f"{base_name}.baits.bed")
         os.makedirs(beds_dir, exist_ok=True)

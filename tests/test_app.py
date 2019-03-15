@@ -13,6 +13,7 @@ from isabl_cli import factories
 from isabl_cli import options
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import system_settings
+from isabl_cli.settings import get_application_settings
 
 
 class TestApplication(AbstractApplication):
@@ -42,7 +43,7 @@ class TestApplication(AbstractApplication):
         }
     }
 
-    def process_cli_options(self, targets):
+    def get_experiments_from_cli_options(self, targets):
         return [([i], []) for i in targets]
 
     def validate_experiments(self, targets, references):
@@ -57,6 +58,9 @@ class TestApplication(AbstractApplication):
         return [], {"bar": "foo"}
 
     def get_command(self, analysis, inputs, settings):
+        if settings.restart:
+            return "echo successfully restarted"
+
         if analysis["targets"][0]["center_id"] == "1":
             return "exit 1"
 
@@ -79,28 +83,118 @@ class TestApplication(AbstractApplication):
         return {"project_result_key": join(analysis["storage_url"], "test.merge")}
 
 
+def test_get_application_settings():
+    # test can use reference data id
+    assert (
+        "genome fasta path"
+        == get_application_settings(
+            defaults=dict(inner_dict=dict(reference="reference_data_id:genome_fasta")),
+            settings=dict(),
+            reference_data=dict(genome_fasta=dict(url="genome fasta path")),
+            import_strings={},
+        ).inner_dict.reference
+    )
+
+    # test can use import strings
+    assert (
+        join
+        == get_application_settings(
+            defaults=dict(inner_dict=dict(os_methods=[])),
+            settings=dict(inner_dict=dict(os_methods=["os.path.join", "os.listdir"])),
+            reference_data=dict(),
+            import_strings={"os_methods"},
+        ).inner_dict.os_methods[0]
+    )
+
+    # test inner keys are validated (unexpected settings)
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        get_application_settings(
+            defaults=dict(inner_dict=dict(correct_name=[])),
+            settings=dict(inner_dict=dict(wrong_name=[])),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+
+    assert "Got unexpected setting 'wrong_name' for 'inner_dict'" in str(error.value)
+
+    # test can skip keys validation
+    assert (
+        get_application_settings(
+            defaults=dict(inner_dict=dict(correct_name=[], skip_check=True)),
+            settings=dict(inner_dict=dict(different_name_but_ok=None)),
+            reference_data=dict(),
+            import_strings=set(),
+        ).inner_dict.different_name_but_ok
+        is None
+    )
+
+    # test keys are not checked for list of dicts
+    assert (
+        get_application_settings(
+            defaults=dict(dicts_list=[dict(any_setting_name_works=True)]),
+            settings=dict(dicts_list=[dict(thats_right=True)]),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+        .dicts_list[0]
+        .thats_right
+        is True
+    )
+
+    # test not implemented settings
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        get_application_settings(
+            defaults=dict(
+                inner=dict(required_setting=NotImplemented),
+                reference="reference_data_id:foo",
+            ),
+            settings=dict(inner=dict(required=None)),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+
+    assert "Missing required setting: 'required_setting'" in str(error.value)
+    assert "Missing required setting: 'reference'" in str(error.value)
+
+    # expected dict, got other
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        get_application_settings(
+            defaults=dict(dict_setting=dict(foo="bar")),
+            settings=dict(dict_setting="not a dict"),
+            reference_data=dict(),
+            import_strings=set(),
+        )
+
+    assert "Invalid setting expected dict, got: " in str(error.value)
+
+
 def test_application_settings(tmpdir):
     application = TestApplication()
     application.application_settings = {
         "test_reference": "reference_data_id:test_id",
-        "needs_to_be_implemented": NotImplemented,
         "from_system_settings": None,
-        "foo": NotImplemented,
     }
 
     application.assembly["reference_data"]["test_id"] = dict(url="FOO")
     assert application.settings.test_reference == "FOO"
+    assert application.settings.from_system_settings is None
 
-    with pytest.raises(exceptions.MissingRequirementError) as error:
-        application.settings.needs_to_be_implemented
+    application = TestApplication()
+    application.application_settings = {
+        "test_reference": "reference_data_id:invalid_key",
+        "needs_to_be_implemented": NotImplemented,
+    }
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        application.settings
 
-    assert "is required" in str(error.value)
-    assert application.settings.system_settings == system_settings
+    assert "Missing required setting: 'test_reference'" in str(error.value)
+    assert "Missing required setting: 'needs_to_be_implemented'" in str(error.value)
 
-    settings_yml = tmpdir.join("test.yml")
-    settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
-    os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
-    assert application.settings.foo == "from_the_env"
+    # might enable this functionality again in the future
+    # settings_yml = tmpdir.join("test.yml")
+    # settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
+    # os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
+    # assert application.settings.foo == "from_the_env"
 
 
 def test_engine(tmpdir):
@@ -133,6 +227,7 @@ def test_engine(tmpdir):
     assert "--commit" in result.output
     assert "--force" in result.output
     assert "--verbose" in result.output
+    assert "--restart" in result.output
     assert "--url" in result.output
 
     runner = CliRunner()
@@ -160,24 +255,37 @@ def test_engine(tmpdir):
 
     args = ["-fi", "pk__in", pks, "--commit", "--force"]
     result = runner.invoke(command, args)
-    assert "--commit is redundant with --force" in result.output
+    assert "--commit not required when using --force" in result.output
+
+    args = ["-fi", "pk__in", pks, "--restart", "--force"]
+    result = runner.invoke(command, args)
+    assert "cant use --force and --restart together" in result.output
 
     args = ["-fi", "pk__in", pks, "--force"]
     result = runner.invoke(command, args)
     assert "trashing:" in result.output
 
+    args = ["-fi", "pk__in", pks, "--restart", "--verbose"]
+    result = runner.invoke(command, args)
+    assert "FAILED" not in result.output
+
+    with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
+        assert "successfully restarted" in f.read()
+
 
 def test_validate_is_pair():
     application = AbstractApplication()
-    targets = [{}]
-    references = [{}]
-    application.validate_is_pair(targets, references)
+    application.validate_is_pair([{"pk": 1}], [{"pk": 2}])
 
     with pytest.raises(AssertionError) as error:
-        targets.append({})
-        application.validate_is_pair(targets, references)
+        application.validate_is_pair([{"pk": 1}, {"pk": 2}], [{"pk": 3}])
 
     assert "Pairs only." in str(error.value)
+
+    with pytest.raises(AssertionError) as error:
+        application.validate_is_pair([{"pk": 1}], [{"pk": 1}])
+
+    assert "Target can't be same as reference." in str(error.value)
 
 
 def test_validate_reference_genome(tmpdir):
@@ -328,8 +436,8 @@ def test_validate_dna_tuples():
 
 def test_validate_dna_pairs():
     application = AbstractApplication()
-    targets = [{"system_id": 1, "technique": {"analyte": "DNA"}}]
-    references = [{"system_id": 2, "technique": {"analyte": "DNA"}}]
+    targets = [{"pk": 1, "technique": {"analyte": "DNA"}}]
+    references = [{"pk": 2, "technique": {"analyte": "DNA"}}]
     application.validate_dna_pairs(targets, references)
 
 

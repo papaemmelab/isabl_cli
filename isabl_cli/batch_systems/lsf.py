@@ -16,6 +16,12 @@ import click
 from isabl_cli import api
 from isabl_cli import utils
 from isabl_cli.settings import system_settings
+from isabl_cli.settings import perform_import
+
+# settings from environ variables
+LSF_GET_REQUIREMENTS = "ISABL_LSF_GET_REQUIREMENTS"
+LSF_EXTRA_ARGS = "ISABL_LSF_EXTRA_ARGS"
+LSF_THROTTLE_BY = "ISABL_LSF_THROTTLE_BY"
 
 
 def submit_lsf(app, command_tuples):  # pragma: no cover
@@ -32,6 +38,7 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
     for methods, cmd_tuples in groups.items():
         click.echo(f"Submitting {len(cmd_tuples)} {methods} jobs.")
         commands, analyses, projects = [], [], set()
+        requirements = ""
 
         # ignore command in tuple and use script instead
         for i, _ in cmd_tuples:
@@ -41,18 +48,19 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
 
-        try:
-            requirements = app.get_lsf_requirements(methods)  # pylint: disable=E1111
-        except AttributeError:
-            requirements = ""
+        if os.environ.get(LSF_GET_REQUIREMENTS):
+            requirements = perform_import(
+                val=os.environ.get(LSF_GET_REQUIREMENTS),
+                setting_name=LSF_GET_REQUIREMENTS,
+            )(app, methods)
 
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
             submit_lsf_array(
                 commands=commands,
                 requirements=requirements,
-                extra_args=os.environ.get("ISABL_LSF_EXTRA_ARGS", ""),
-                throttle_by=os.environ.get("ISABL_LSF_THROTTLE_BY", 50),
+                extra_args=os.environ.get(LSF_EXTRA_ARGS, ""),
+                throttle_by=os.environ.get(LSF_THROTTLE_BY, 50),
                 jobname=f"Array | application: {app.primary_key} | "
                 f"methods: {methods} | projects: {projects}",
             )

@@ -115,3 +115,6 @@ venv.bak/
 # coverage
 htmlcov/
 settings.yml
+
+# ipython
+Untitled.ipynb

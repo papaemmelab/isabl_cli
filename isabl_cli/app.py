@@ -20,7 +20,7 @@ from isabl_cli import api
 from isabl_cli import data
 from isabl_cli import exceptions
 from isabl_cli import utils
-from isabl_cli.settings import ApplicationSettings
+from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
 
@@ -36,10 +36,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     # optional application info
     URL = None
-
-    # utils
-    get_result = utils.get_result
-    get_results = utils.get_results
 
     # application configuration
     application_description = ""
@@ -86,9 +82,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # USER REQUIRED IMPLEMENTATIONS
     # -----------------------------
 
-    def process_cli_options(self, **cli_options):  # pylint: disable=W9008
+    def get_experiments_from_cli_options(self, **cli_options):  # pylint: disable=W9008
         """
-        Must return list of tuples given the parsed options.
+        Must return list of target-reference experiment tuples given the parsed options.
 
         Arguments:
             cli_options (dict): parsed command line options.
@@ -262,15 +258,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def submit_project_merge(self, project):
         """
-        Directly call `merge_project_analyses`.
+        Directly call `merge_project_analyses` if SUBMIT_PROJECT_LEVEL_MERGE is not set.
 
-        Overwrite this method if the merge procedure should be submitted using
-        a scheduler, see `commands.merge_project_analyses`.
+        Use setting SUBMIT_PROJECT_LEVEL_MERGE to submit the merge work with custom
+        logic, for instance by using LSF with `bsub isabl merge-project-analyses`.
 
         Arguments:
             project (dict): a project instance.
         """
-        self.run_project_merge(project)
+        if system_settings.SUBMIT_PROJECT_LEVEL_MERGE:
+            system_settings.SUBMIT_PROJECT_LEVEL_MERGE(
+                project=project, application=self
+            )
+        else:
+            self.run_project_merge(project)
 
     def get_project_analysis(self, project, patch=False):
         """
@@ -310,7 +311,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if "submit_analyses" not in defaults:
             defaults["submit_analyses"] = "isabl_cli.batch_systems.submit_local"
 
-        return ApplicationSettings(self, defaults, import_strings)
+        return get_application_settings(
+            defaults=defaults,
+            settings=self.application.settings or {},
+            reference_data=self.application.assembly.reference_data or {},
+            import_strings=import_strings,
+        )
 
     @cached_property
     def application(self):
@@ -389,15 +395,29 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         pipe = cls()
 
         commit = click.option(
-            "--commit", show_default=True, is_flag=True, help="Commit results."
+            "--commit",
+            show_default=True,
+            is_flag=True,
+            help="Submit application analyses.",
         )
 
         verbose = click.option(
-            "--verbose", show_default=True, is_flag=True, help="Verbose output."
+            "--verbose",
+            show_default=True,
+            is_flag=True,
+            help="Print verbose output of the operation.",
         )
 
         force = click.option(
-            "--force", help="Wipe all analyses and start from scratch.", is_flag=True
+            "--force",
+            help="Wipe unfinished analyses and start from scratch.",
+            is_flag=True,
+        )
+
+        restart = click.option(
+            "--restart",
+            help="Attempt restarting failed analyses from previous checkpoint.",
+            is_flag=True,
         )
 
         def print_url(ctx, _, value):
@@ -420,22 +440,28 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose])
-        def command(commit, force, verbose, **cli_options):
+        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose, restart])
+        def command(commit, force, verbose, restart, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
-                raise click.UsageError(
-                    "--commit is redundant with --force, simply use --force"
-                )
+                raise click.UsageError("--commit not required when using --force")
+
+            if commit and restart:
+                raise click.UsageError("--restart not required when using --force")
+
+            if force and restart:
+                raise click.UsageError("cant use --force and --restart together")
 
             pipe.run(
-                tuples=pipe.process_cli_options(**cli_options),
+                tuples=pipe.get_experiments_from_cli_options(**cli_options),
                 commit=commit,
                 force=force,
                 verbose=verbose,
+                restart=restart,
+                run_args=cli_options,
             )
 
-            if not (commit or force):
+            if not (commit or force or restart):
                 utils.echo_add_commit_message()
 
         return command
@@ -448,21 +474,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # ANALYSES EXECUTION LOGIC
     # ------------------------
 
-    def run(self, tuples, commit, force=False, verbose=True):
+    def run(
+        self, tuples, commit, force=False, restart=False, verbose=True, run_args=None
+    ):
         """
         Run a list of targets, references tuples.
 
         Arguments:
+            restart (bool): set settings.restart = True.
             force (bool): if true, analyses are wiped before being submitted.
             commit (bool): if true, analyses are started (`force` overwrites).
             verbose (bool): whether or not verbose output should be printed.
             tuples (list): list of (targets, references) tuples.
+            run_args (dict): dictionary of extra arguments required to run the app.
 
         Returns:
             tuple: command_tuples, skipped_tuples, invalid_tuples
         """
         key = f"{self.NAME} {self.VERSION} {self.ASSEMBLY}"
-        commit = True if force else commit
+        commit = True if force or restart else commit
         tuples = [tuple(i) for i in tuples]  # coerce to tuple
         utils.echo_title(f"Running {len(tuples)} tuples for {key}")
 
@@ -473,13 +503,19 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for i in self.application_settings:
             getattr(self.settings, i)
 
+        # set restart attribute
+        self.settings.restart = restart
+
+        # update run arguments attribute
+        self.settings.run_args = run_args or {}
+
         # run extra settings validation
         self.validate_settings(self.settings)
 
         # create and run analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
         run_tuples, skipped_tuples = self.run_analyses(
-            analyses=analyses, commit=commit, force=force
+            analyses=analyses, commit=commit, force=force, restart=restart
         )
 
         if verbose:
@@ -493,7 +529,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return run_tuples, skipped_tuples, invalid_tuples
 
-    def run_analyses(self, analyses, commit, force):
+    def run_analyses(self, analyses, commit, force, restart):
         """
         Run a list of analyses.
 
@@ -508,7 +544,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 if force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
                     os.makedirs(i["storage_url"], exist_ok=True)
-                elif i["status"] in self.skip_status:
+                elif (
+                    not (restart and i["status"] == "FAILED")
+                    and i["status"] in self.skip_status
+                ):
                     skipped_tuples.append((i, i["status"]))
                     continue
 
@@ -623,6 +662,30 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -----------------
     # APPLICATION UTILS
     # -----------------
+
+    @staticmethod
+    def get_result(*args, **kwargs):
+        """Get an application result."""
+        return utils.get_result(*args, **kwargs)
+
+    @staticmethod
+    def get_results(*args, **kwargs):
+        """Get application results."""
+        return utils.get_results(*args, **kwargs)
+
+    def patch_application_settings(self, **settings):
+        """Patch application settings if necessary."""
+        click.echo(f"Patching settings for {self.NAME} {self.VERSION} {self.ASSEMBLY}")
+
+        try:
+            assert self.application["settings"] == settings
+            click.secho(f"\n\tno changes detected, skipping patch.\n", fg="yellow")
+        except AssertionError:
+            try:
+                api.patch_instance("applications", self.primary_key, settings=settings)
+                click.secho(f"\n\tSuccessfully patched settings.\n", fg="green")
+            except TypeError as error:
+                click.secho(f"\n\tPatched failed with error: {error}.\n", fg="red")
 
     @staticmethod
     def get_job_name(analysis):
@@ -800,13 +863,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             raise exceptions.ValidationError("\n".join(errors))
 
     def validate_bedfiles(self, experiments, bedfile_type="targets"):
-        """Raise error not all experiments have registered bams."""
+        """Raise error not all experiments have registered bedfile."""
         errors = []
 
         for i in experiments:
             try:
-                self.get_bedfile(i, bedfile_type=bedfile_type)
-            except KeyError:
+                bed = self.get_bedfile(i, bedfile_type=bedfile_type)
+                assert isfile(bed), f"BED file does not exist: {bed}"
+            except (KeyError, AssertionError):
                 errors.append(f'{i["system_id"]} has no registered bedfile')
 
         if errors:

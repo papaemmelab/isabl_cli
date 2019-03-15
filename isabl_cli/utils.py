@@ -76,8 +76,12 @@ def get_result(*args, **kwargs):
         tuple: result value, analysis pk that produced the result
     """
     results = get_results(*args, **kwargs)
-    result, key = results[0]
+    assert results, (
+        f"No results were found for analysis: "
+        f"{kwargs.get('application_pk') or kwargs.get('application_name')}"
+    )
     assert len(results) == 1, f"Multiple results returned {results}"
+    result, key = results[0]
     return result, key
 
 
@@ -133,8 +137,9 @@ def apply_decorators(decorators):
 def get_rsync_command(src, dst, chmod="a-w"):
     """Get str for commant to move `src` directory to `dst`."""
     return (
-        f"rsync -va --append-verify --chmod={chmod} "
-        f"--remove-source-files {src}/ {dst}/ && "
+        f"(chmod -R u+w {dst} || true) && "
+        f"rsync -va --append-verify --remove-source-files {src}/ {dst}/ && "
+        f"chmod -R {chmod} {dst} && "
         f"find {src}/ -depth -type d -empty "
         r'-exec rmdir "{}" \;'
     )

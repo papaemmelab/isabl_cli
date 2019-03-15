@@ -2,7 +2,6 @@
 
 from getpass import getuser
 from importlib import import_module
-from os import environ
 from os.path import abspath
 from os.path import expanduser
 from os.path import join
@@ -11,9 +10,9 @@ import json
 import os
 
 from cached_property import cached_property
+from munch import Munch
 import pytz
 import six
-import yaml
 
 from isabl_cli import exceptions
 
@@ -35,6 +34,7 @@ _DEFAULTS = {
         "isabl_cli.data.symlink_analysis_to_targets",
         "isabl_cli.data.trigger_analyses_merge",
     ],
+    "SUBMIT_PROJECT_LEVEL_MERGE": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
         "isabl_cli.commands.processed_finished",
@@ -69,6 +69,7 @@ _IMPORT_STRINGS = {
     "BED_IMPORTER",
     "REFERENCE_DATA_IMPORTER",
     "REFERENCE_GENOME_IMPORTER",
+    "SUBMIT_PROJECT_LEVEL_MERGE",
 }
 
 _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
@@ -192,58 +193,73 @@ class SystemSettings(BaseSettings):
         return api_request("get", "/client/settings/", authenticate=False).json()
 
 
-class ApplicationSettings:
-    def __init__(self, application, defaults, import_strings=None):
-        """Get application settings from system settings."""
-        self._key = f"{application.NAME} {application.VERSION} {application.ASSEMBLY}"
-        self.defaults = defaults
-        self.application = application
-        self.reference_data = application.assembly["reference_data"] or {}
-        self.import_strings = import_strings or {}
+def get_application_settings(defaults, settings, reference_data, import_strings):
+    """Build settings dot dict given defaults."""
+    reference_data = reference_data or {}
+    import_strings = import_strings or set()
+    errors = []
 
-    @property
-    def system_settings(self):
-        """Return dictionary with settings."""
-        return system_settings
+    def _validate(default, setting, attr):
+        setting = (
+            NotImplemented
+            if (setting is None and default == NotImplemented)
+            else setting or default
+        )
 
-    def __getattr__(self, attr):
-        """Check if present in user settings or fall back to defaults."""
-        if attr not in self.defaults:  # pragma: no cover
-            raise AttributeError("Invalid setting: '%s'" % attr)
+        if isinstance(setting, str) and "reference_data_id:" in setting:
+            setting = reference_data.get(setting.split(":", 1)[1])
+            setting = setting["url"] if setting else NotImplemented
+        elif attr in import_strings:  # coerce import strings into object
+            setting = perform_import(setting, attr)
 
-        required = self.defaults[attr] is NotImplemented
+        if setting == NotImplemented:
+            errors.append(f"Missing required setting: '{attr}'")
 
-        try:
-            val = self.application.application["settings"][attr]
-        except KeyError:
-            try:
-                val = self._settings[attr]
-            except KeyError:
-                val = self.defaults[attr]
+        return setting
 
-        if isinstance(val, str) and "reference_data_id:" in val:
-            val = self.reference_data.get(val.split(":", 1)[1])
-            val = val["url"] if val else NotImplemented
-        elif attr in self.import_strings:  # coerce import strings into object
-            val = perform_import(val, attr)
+    def _settingfy(default, setting=None, attr=None, skip_check=False):
+        if isinstance(default, dict):
+            skip_check = skip_check or default.get("skip_check", False)
+            setting = setting or {}
+            tuples = {}
 
-        # raise error if not implemented
-        if val is NotImplemented or (val is None and required):
-            msg = f"Setting '{attr}' is required, contact an engineer"
-            raise exceptions.MissingRequirementError(msg)
+            if not isinstance(setting, dict):
+                errors.append(f"Invalid setting expected dict, got: {setting}")
+                setting = {}
 
-        return val
+            for i in [] if skip_check else setting.keys():
+                if i not in default:
+                    errors.append(f"Got unexpected setting '{i}' for '{attr}'...")
 
-    @property
-    def _settings(self):
-        """Return dictionary system with settings."""
-        settings = {}
+            for key, value in (
+                setting.items() if skip_check and setting else default.items()
+            ):
+                tuples[key] = _settingfy(
+                    default=value,
+                    setting=setting.get(key),
+                    attr=key,
+                    skip_check=skip_check,  # propagate skip_check
+                )
 
-        if "ISABL_DEFAULT_APPS_SETTINGS_PATH" in environ:
-            with open(environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"], "r") as f:
-                settings = yaml.load(f.read())
+            return Munch(**tuples)
 
-        return settings.get(self.application.primary_key, {})
+        # if the default setting is a list, it's not possible to validate inner keys
+        elif isinstance(default, (list, tuple)):
+            return type(default)(
+                _settingfy(default=i, attr=attr, skip_check=True)
+                for i in setting or default
+            )
+
+        return _validate(default, setting, attr)
+
+    settings = _settingfy(defaults, settings, f"App Settings")
+
+    if errors:
+        raise exceptions.ConfigurationError(
+            "Invalid app configuration:\n\t- " + "\n\t- ".join(errors)
+        )
+
+    return settings
 
 
 # pylint: disable=C0103

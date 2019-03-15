@@ -9,7 +9,9 @@ import shutil
 import subprocess
 import time
 
+from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+from six import iteritems
 import click
 import requests
 
@@ -21,6 +23,53 @@ from isabl_cli.settings import user_settings
 requests.packages.urllib3.disable_warnings(  # pylint: disable=E1101
     InsecureRequestWarning
 )
+
+
+def isablfy(obj):
+    """Convert objects to IsablDicts recursively."""
+    if isinstance(obj, dict):
+        if obj.get("model_name") == "Experiment":
+            factory = Experiment
+        elif obj.get("model_name") == "Analysis":
+            factory = Analysis
+        else:
+            factory = IsablDict
+        return factory((k, isablfy(v)) for k, v in iteritems(obj))
+    elif isinstance(obj, (list, tuple)):
+        return type(obj)(isablfy(v) for v in obj)
+    else:
+        return obj
+
+
+class IsablDict(Munch):
+    def __init__(self, *args, **kwargs):
+        """If first argument is int or str, use it to retrieve an instance."""
+        if len(args) == 1 and isinstance(args[0], (str, int)):
+            super().__init__(isablfy(get_instance(self.api_endpoint, args[0])))
+        else:
+            super().__init__(*args, **kwargs)
+
+    @classmethod
+    def fromDict(cls, d):
+        """Transform a dictionary into IsablDicts recursively."""
+        return isablfy(d)
+
+    def __dir__(self):
+        """Combine munch and dict dirs."""
+        return (
+            super().__dir__()
+            + super(dict, self).__dir__()  # pylint: disable=bad-super-call
+        )
+
+
+class Experiment(IsablDict):
+
+    api_endpoint = "experiments"
+
+
+class Analysis(IsablDict):
+
+    api_endpoint = "analyses"
 
 
 def chunks(array, size):
@@ -104,7 +153,6 @@ def api_request(method, url, authenticate=True, **kwargs):
             msg = click.style(str(response.json()), fg="red", blink=True)
         except Exception:  # pylint: disable=broad-except
             msg = ""
-
         click.echo(f"Request Error: {response.url}\n{msg}")
         response.raise_for_status()
 
@@ -184,11 +232,13 @@ def get_instance(endpoint, identifier, fields=None):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    return api_request(
-        "get",
-        url=f"/{endpoint}/{identifier}",
-        params={"fields": fields} if fields else {},
-    ).json()
+    return isablfy(
+        api_request(
+            "get",
+            url=f"/{endpoint}/{identifier}",
+            params={"fields": fields} if fields else {},
+        ).json()
+    )
 
 
 def create_instance(endpoint, **data):
@@ -202,7 +252,7 @@ def create_instance(endpoint, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    return api_request("post", url=endpoint, json=data).json()
+    return isablfy(api_request("post", url=endpoint, json=data).json())
 
 
 def patch_instance(endpoint, identifier, **data):
@@ -225,7 +275,7 @@ def patch_instance(endpoint, identifier, **data):
     if endpoint == "experiments" and instance.get("sequencing_data"):
         _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
-    return instance
+    return isablfy(instance)
 
 
 def delete_instance(endpoint, identifier):
@@ -299,7 +349,22 @@ def get_instances(endpoint, identifiers=None, verbose=False, **filters):
             if names:
                 instances += iterate(**{"name__in": ",".join(names), **filters})
 
-    return instances
+    return isablfy(instances)
+
+
+def get_experiments(identifiers=None, **filters):
+    """Get experiments give identifiers or filters."""
+    return get_instances("experiments", identifiers=identifiers, **filters)
+
+
+def get_analyses(identifiers=None, **filters):
+    """Get analyses give identifiers or filters."""
+    return get_instances("analyses", identifiers=identifiers, **filters)
+
+
+def get_projects(identifiers=None, **filters):
+    """Get projects give identifiers or filters."""
+    return get_instances("projects", identifiers=identifiers, **filters)
 
 
 def get_instances_count(endpoint, **filters):
@@ -320,12 +385,12 @@ def get_instances_count(endpoint, **filters):
 
 def get_tree(identifier):
     """Get everything for an individual."""
-    return get_instance("individuals/tree", identifier)
+    return isablfy(get_instance("individuals/tree", identifier))
 
 
 def get_trees(identifiers=None, **filters):
     """Get everything for multiple individuals."""
-    return get_instances("individuals/tree", identifiers, **filters)
+    return isablfy(get_instances("individuals/tree", identifiers, **filters))
 
 
 def patch_analyses_status(analyses, status):
@@ -333,7 +398,7 @@ def patch_analyses_status(analyses, status):
     Patch the `status` of multiple `analyses`.
 
     Arguments:
-        analyses (list): dicts of analyses instances.
+        analyses (list): of analyses instances.
         status (str): status to be updated to.
 
     Raises:
