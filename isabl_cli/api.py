@@ -30,8 +30,10 @@ def isablfy(obj):
     if isinstance(obj, dict):
         if obj.get("model_name") == "Experiment":
             factory = Experiment
-        elif obj.get("model_name") == "Analysis":
+        elif obj.get("model_name") == "Analysis" or "wait_time" in obj:
             factory = Analysis
+        elif obj.get("model_name") == "Assembly":
+            factory = Assembly
         else:
             factory = IsablDict
         return factory((k, isablfy(v)) for k, v in iteritems(obj))
@@ -68,14 +70,33 @@ class IsablDict(Munch):
         return f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
 
 
+class Analysis(IsablDict):
+
+    api_endpoint = "analyses"
+
+    def __repr__(self):
+        """Get better representation for analyses."""
+        identifier = getattr(self, "pk", None)
+        application = getattr(self, "application", {})
+
+        if not identifier:
+            return super().__repr__()
+
+        return (
+            f"{application.get('name', 'Analysis')} "
+            f"{application.get('version', 'No Version Available')}"
+            f"({identifier})"
+        )
+
+
 class Experiment(IsablDict):
 
     api_endpoint = "experiments"
 
 
-class Analysis(IsablDict):
+class Assembly(IsablDict):
 
-    api_endpoint = "analyses"
+    api_endpoint = "assemblies"
 
 
 def chunks(array, size):
@@ -228,7 +249,7 @@ def iterate(url, **filters):
 
 def get_instance(endpoint, identifier, fields=None):
     """
-    Get database instance.
+    Get database instance given any identifier.
 
     Arguments:
         identifier (str): a primary key, system_id, email or username.
