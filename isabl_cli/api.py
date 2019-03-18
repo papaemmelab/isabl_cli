@@ -60,10 +60,12 @@ class IsablDict(Munch):
 
     def __repr__(self):
         """Get a simple representation, Munch's is too long."""
-        return (
-            f"{getattr(self, 'model_name', self.__class__.__name__)}"
-            f"({getattr(self, 'system_id', getattr(self, 'pk', 'Unknown ID'))})"
-        )
+        identifier = getattr(self, "system_id", getattr(self, "pk", None))
+
+        if not identifier:
+            return super().__repr__()
+
+        return f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
 
 
 class Experiment(IsablDict):
