@@ -294,12 +294,29 @@ def patch_instance(endpoint, identifier, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
+    run_status_change_signals = False
+    run_data_import_signals = False
+
+    if (
+        endpoint == "analyses"
+        and data.get("status")
+        and Analysis(identifier).status != data.get("status")
+    ):
+        run_status_change_signals = True
+
+    if (
+        endpoint == "experiments"
+        and data.get("sequencing_data")
+        and Experiment(identifier).sequencing_data != data.get("sequencing_data")
+    ):
+        run_data_import_signals = True
+
     instance = api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
 
-    if endpoint == "analyses" and instance.get("status"):
+    if run_status_change_signals:
         _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
 
-    if endpoint == "experiments" and instance.get("sequencing_data"):
+    if run_data_import_signals:
         _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
     return isablfy(instance)
