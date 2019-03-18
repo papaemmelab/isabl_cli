@@ -63,11 +63,11 @@ class IsablDict(Munch):
     def __repr__(self):
         """Get a simple representation, Munch's is too long."""
         identifier = getattr(self, "system_id", getattr(self, "pk", None))
-
-        if not identifier:
-            return super().__repr__()
-
-        return f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
+        return (
+            f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
+            if identifier
+            else super().__repr__()
+        )
 
 
 class Analysis(IsablDict):
@@ -78,25 +78,30 @@ class Analysis(IsablDict):
         """Get better representation for analyses."""
         identifier = getattr(self, "pk", None)
         application = getattr(self, "application", {})
-
-        if not identifier:
-            return super().__repr__()
-
         return (
-            f"{application.get('name', 'Analysis')} "
-            f"{application.get('version', 'No Version Available')}"
-            f"({identifier})"
+            super().__repr__()
+            if not identifier
+            else (
+                f"{application.get('name', 'Analysis')} "
+                f"{application.get('version', 'No Version Available')}"
+                f"({identifier})"
+            )
         )
-
-
-class Experiment(IsablDict):
-
-    api_endpoint = "experiments"
 
 
 class Assembly(IsablDict):
 
     api_endpoint = "assemblies"
+
+    def __repr__(self):
+        """Get better representation for assemblies."""
+        identifier = getattr(self, "name", getattr(self, "pk", None))
+        return super().__repr__() if not identifier else f"Assembly({identifier})"
+
+
+class Experiment(IsablDict):
+
+    api_endpoint = "experiments"
 
 
 def chunks(array, size):
