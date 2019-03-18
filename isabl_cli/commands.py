@@ -74,26 +74,25 @@ def patch_results(filters):
     ) as bar:
 
         for i in bar:
-            try:
-                application = import_from_string(
-                    i.application.application_class,
-                    f"{i.application.name}({i.application.version}) Application Class",
-                )()
-            except ImportError as error:
-                click.secho(f"Failed to patch analysis {i.pk}: {error}", fg="red")
-                continue
+            app_name = f"{i.application.name}({i.application.version})"
+            error_msg = f"\tFailed to patch {app_name}({i.pk}):"
 
-            # just used to make sure the app results are patched
-            assert i.application.pk == application.primary_key
+            try:
+                application = import_from_string(i.application.application_class)()
+            except ImportError as error:
+                click.secho(f"{error_msg} cant import application class", fg="red")
+                continue
 
             if not i.storage_url:
                 application._patch_analysis(i)
 
             try:
+                # just used to make sure the app results are patched
+                assert i.application.pk == application.primary_key
                 results = application._get_analysis_results(i)
                 api.patch_instance("analyses", i.pk, results=results)
             except Exception as error:
-                click.secho(f"Failed to patch analysis {i.pk}: {error}")
+                click.secho(f"{error_msg} {error}", fg="red")
 
 
 @click.command(hidden=True)
