@@ -55,11 +55,17 @@ class IsablDict(Munch):
         return isablfy(d)
 
     def __dir__(self):
-        """Combine munch and dict dirs."""
-        return (
-            super().__dir__()
-            + super(dict, self).__dir__()  # pylint: disable=bad-super-call
-        )
+        """Bypass Munch's __dir__."""
+        return super(dict, self).__dir__()  # pylint: disable=bad-super-call
+
+    def __repr__(self):
+        """Get a simple representation, Munch's is too long."""
+        identifier = getattr(self, "system_id", getattr(self, "pk", None))
+
+        if not identifier:
+            return super().__repr__()
+
+        return f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
 
 
 class Experiment(IsablDict):
@@ -150,7 +156,7 @@ def api_request(method, url, authenticate=True, **kwargs):
 
     if not response.ok:
         try:
-            msg = click.style(str(response.json()), fg="red", blink=True)
+            msg = click.style(str(response.json()), fg="red")
         except Exception:  # pylint: disable=broad-except
             msg = ""
         click.echo(f"Request Error: {response.url}\n{msg}")
@@ -485,6 +491,7 @@ def _run_signals(endpoint, instance, signals):
             except Exception as on_failure_error:  # pylint: disable=W0703
                 errors.append(on_failure_error)
 
+    # TODO: figure out how to deal with failed signals
     # if errors:
     # errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
     # raise RuntimeError('Errors occurred during signals run:\n' + errors)
