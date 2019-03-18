@@ -76,7 +76,7 @@ class IndividualFactory(BaseFactory):
     center = factory.SubFactory(CenterFactory)
     gender = fuzzy.FuzzyChoice(["MALE", "FEMALE", "UNKNOWN"])
     species = fuzzy.FuzzyChoice(["HUMAN", "MOUSE"])
-    research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
+    identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
 
 
 class SampleFactory(BaseFactory):
@@ -84,7 +84,7 @@ class SampleFactory(BaseFactory):
     individual = factory.SubFactory(IndividualFactory)
     pdx_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     sample_class = fuzzy.FuzzyChoice(["TUMOR", "NORMAL"])
-    research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
+    identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
 
 
 class ExperimentFactory(BaseFactory):
@@ -95,7 +95,7 @@ class ExperimentFactory(BaseFactory):
     analyte_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     read_length = fuzzy.FuzzyChoice(["100", "150"])
     read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
-    research_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
+    identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     sequencing_center = factory.SubFactory(CenterFactory)
     sequencing_data = None
     sequencing_platform = factory.SubFactory(PlatformFactory)
