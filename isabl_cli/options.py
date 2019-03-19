@@ -320,7 +320,7 @@ def get_analyses_filters_option(application_classes=None, **defaults):
         msg += ", ".join(f"{i}={j}" for i, j in defaults.items())
 
     if application_classes:
-        msg += " limited to the following applications: "
+        msg += " - analyses will be limited to the following applications: "
         msg += ", ".join(map(str, application_classes))
 
     def callback(tuples):
