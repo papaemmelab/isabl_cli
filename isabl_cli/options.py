@@ -303,7 +303,6 @@ FORCE = click.option(
     "--force", help="Wipe unfinished analyses and start from scratch.", is_flag=True
 )
 
-<<<<<<< HEAD
 RESTART = click.option(
     "--restart",
     help="Attempt restarting failed analyses from previous checkpoint.",
@@ -311,8 +310,6 @@ RESTART = click.option(
 )
 
 
-=======
->>>>>>> 🔧 only make api calls if required
 def get_analyses_filters_option(application_classes=None, **defaults):
     """Get analyses filters with `defaults`."""
     msg = ""
@@ -323,16 +320,11 @@ def get_analyses_filters_option(application_classes=None, **defaults):
         msg += ", ".join(f"{i}={j}" for i, j in defaults.items())
 
     if application_classes:
-<<<<<<< HEAD
-        msg += " - analyses will be limited to the following applications: "
-=======
         msg += " limited to the following applications: "
->>>>>>> 🔧 only make api calls if required
         msg += ", ".join(map(str, application_classes))
 
     def callback(tuples):
         if application_classes:
-<<<<<<< HEAD
             analyses = []
             for i in application_classes:
                 defaults["application__pk"] = str(i.primary_key)
@@ -343,12 +335,6 @@ def get_analyses_filters_option(application_classes=None, **defaults):
                     "analyses", **{**dict(tuples), **defaults}
                 )
             return analyses
-=======
-            defaults["application__pk__in"] = ",".join(
-                str(i.primary_key) for i in application_classes
-            )
-
->>>>>>> 🔧 only make api calls if required
         return api.get_instances("analyses", **{**dict(tuples), **defaults})
 
     return click.option(
