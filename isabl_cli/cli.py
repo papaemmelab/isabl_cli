@@ -16,6 +16,8 @@ Also see (1) from http://click.pocoo.org/5/setuptools/#setuptools-integration
 """
 
 from collections import defaultdict
+import time
+
 from slugify import slugify
 import click
 
@@ -36,11 +38,16 @@ def add_apps_groups(apps):
     apps_dict = defaultdict(dict)
 
     for i in apps:  # pylint: disable=W0621
+        start_time = time.time()
+
         try:
             command = i.as_cli_command()
             apps_dict[i.ASSEMBLY][command.name] = command
         except exceptions.ConfigurationError as error:
             click.secho(f"Invalid configuration, failed to register {i}: {error}")
+
+        if (time.time() - start_time) > 0.1:
+            click.secho(f"{i.__name__} is loading slowly...", err=True, fg="yellow")
 
     for i, j in apps_dict.items():
         name, _help = f"apps-{slugify(i)}", f"{i} applications."
