@@ -20,6 +20,7 @@ from slugify import slugify
 import click
 
 from isabl_cli import __version__
+from isabl_cli import exceptions
 from isabl_cli.settings import system_settings
 
 
@@ -35,8 +36,11 @@ def add_apps_groups(apps):
     apps_dict = defaultdict(dict)
 
     for i in apps:  # pylint: disable=W0621
-        command = i.as_cli_command()
-        apps_dict[i.ASSEMBLY][command.name] = command
+        try:
+            command = i.as_cli_command()
+            apps_dict[i.ASSEMBLY][command.name] = command
+        except exceptions.ConfigurationError as error:
+            click.secho(f"Invalid configuration, failed to register {i}: {error}")
 
     for i, j in apps_dict.items():
         name, _help = f"apps-{slugify(i)}", f"{i} applications."
