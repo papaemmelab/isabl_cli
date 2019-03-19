@@ -296,15 +296,25 @@ VERBOSE = click.option(
 )
 
 
-def get_analyses_filters_option(**defaults):
+def get_analyses_filters_option(application_classes=None, **defaults):
     """Get analyses filters with `defaults`."""
     msg = ""
+    application_classes = application_classes or []
 
     if defaults:
         msg += " with default filters: "
         msg += ", ".join(f"{i}={j}" for i, j in defaults.items())
 
+    if application_classes:
+        msg += " limited to the following applications: "
+        msg += ", ".join(map(str, application_classes))
+
     def callback(tuples):
+        if application_classes:
+            defaults["application__pk__in"] = ",".join(
+                str(i.primary_key) for i in application_classes
+            )
+
         return api.get_instances("analyses", **{**dict(tuples), **defaults})
 
     return click.option(

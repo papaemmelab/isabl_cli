@@ -976,6 +976,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             storage_url=analysis["storage_url"],
         )
 
+    # ---------------
+    # SPECIAL METHODS
+    # ---------------
+
+    def __repr__(self):
+        """Print name, version and assembly."""
+        return f"{self.NAME} {self.VERSION} ({self.ASSEMBLY})"
+
     # -------------------------
     # ANALYSES VALIDATION UTILS
     # -------------------------
