@@ -8,6 +8,7 @@ from os.path import join
 import getpass
 import json
 import os
+import time
 
 from cached_property import cached_property
 from munch import Munch
@@ -190,7 +191,18 @@ class SystemSettings(BaseSettings):
         """Return dictionary system with settings."""
         from isabl_cli.api import api_request
 
-        return api_request("get", "/client/settings/", authenticate=False).json()
+        # an API request to get the settings every time seems quite expensive
+        # caching every 10 minutes whilst we think of a better solution
+        if not user_settings._cached_time or (
+            user_settings._cached_time
+            and (time.time() - user_settings._cached_time) > 600
+        ):  # pylint: disable=attribute-defined-outside-init
+            user_settings._cached_time = time.time()
+            user_settings._cached_settings = api_request(
+                "get", "/client/settings/", authenticate=False
+            ).json()
+
+        return user_settings._cached_settings
 
 
 def get_application_settings(defaults, settings, reference_data, import_strings):
