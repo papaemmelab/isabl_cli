@@ -50,7 +50,6 @@ def test_commands(tmpdir):
     result = runner.invoke(commands.get_metadata, args, catch_exceptions=False)
     assert analysis["application"]["name"] in result.output
     assert "application.name" in result.output
-    assert "'name': " in result.output
     assert "INVALID KEY (carlos)" in result.output
     assert "INVALID KEY (nested_attr)" in result.output
 

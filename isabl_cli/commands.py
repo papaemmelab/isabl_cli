@@ -69,10 +69,30 @@ def patch_results(filters):
     """Update the results field of many analyses."""
     utils.check_admin()
 
-    for i in api.get_instances("analyses", **filters):
-        application = import_from_string(i["application"]["application_class"])()
-        results = application._get_analysis_results(i)
-        api.patch_instance("analyses", i["pk"], results=results)
+    with click.progressbar(
+        api.get_instances("analyses", **filters), label="Patching analyses..."
+    ) as bar:
+
+        for i in bar:
+            app_name = f"{i.application.name}({i.application.version})"
+            error_msg = f"\tFailed to patch {app_name}({i.pk}):"
+
+            try:
+                application = import_from_string(i.application.application_class)()
+            except ImportError as error:
+                click.secho(f"{error_msg} cant import application class", fg="red")
+                continue
+
+            if not i.storage_url:
+                application._patch_analysis(i)
+
+            try:
+                # just used to make sure the app results are patched
+                assert i.application.pk == application.primary_key
+                results = application._get_analysis_results(i)
+                api.patch_instance("analyses", i.pk, results=results)
+            except Exception as error:
+                click.secho(f"{error_msg} {error}", fg="red")
 
 
 @click.command(hidden=True)

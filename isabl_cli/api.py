@@ -30,8 +30,10 @@ def isablfy(obj):
     if isinstance(obj, dict):
         if obj.get("model_name") == "Experiment":
             factory = Experiment
-        elif obj.get("model_name") == "Analysis":
+        elif obj.get("model_name") == "Analysis" or "wait_time" in obj:
             factory = Analysis
+        elif obj.get("model_name") == "Assembly":
+            factory = Assembly
         else:
             factory = IsablDict
         return factory((k, isablfy(v)) for k, v in iteritems(obj))
@@ -61,21 +63,45 @@ class IsablDict(Munch):
     def __repr__(self):
         """Get a simple representation, Munch's is too long."""
         identifier = getattr(self, "system_id", getattr(self, "pk", None))
-
-        if not identifier:
-            return super().__repr__()
-
-        return f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
-
-
-class Experiment(IsablDict):
-
-    api_endpoint = "experiments"
+        return (
+            f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
+            if identifier
+            else super().__repr__()
+        )
 
 
 class Analysis(IsablDict):
 
     api_endpoint = "analyses"
+
+    def __repr__(self):
+        """Get better representation for analyses."""
+        identifier = getattr(self, "pk", None)
+        application = getattr(self, "application", {})
+        return (
+            super().__repr__()
+            if not identifier
+            else (
+                f"{application.get('name', 'Analysis')} "
+                f"{application.get('version', 'No Version Available')}"
+                f"({identifier})"
+            )
+        )
+
+
+class Assembly(IsablDict):
+
+    api_endpoint = "assemblies"
+
+    def __repr__(self):
+        """Get better representation for assemblies."""
+        identifier = getattr(self, "name", getattr(self, "pk", None))
+        return super().__repr__() if not identifier else f"Assembly({identifier})"
+
+
+class Experiment(IsablDict):
+
+    api_endpoint = "experiments"
 
 
 def chunks(array, size):
@@ -228,7 +254,7 @@ def iterate(url, **filters):
 
 def get_instance(endpoint, identifier, fields=None):
     """
-    Get database instance.
+    Get database instance given any identifier.
 
     Arguments:
         identifier (str): a primary key, system_id, email or username.
@@ -273,12 +299,29 @@ def patch_instance(endpoint, identifier, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
+    run_status_change_signals = False
+    run_data_import_signals = False
+
+    if (
+        endpoint == "analyses"
+        and data.get("status")
+        and Analysis(identifier).status != data.get("status")
+    ):
+        run_status_change_signals = True
+
+    if (
+        endpoint == "experiments"
+        and data.get("sequencing_data")
+        and Experiment(identifier).sequencing_data != data.get("sequencing_data")
+    ):
+        run_data_import_signals = True
+
     instance = api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
 
-    if endpoint == "analyses" and instance.get("status"):
+    if run_status_change_signals:
         _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
 
-    if endpoint == "experiments" and instance.get("sequencing_data"):
+    if run_data_import_signals:
         _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
     return isablfy(instance)
