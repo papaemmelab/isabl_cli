@@ -616,7 +616,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @staticmethod
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
-        return f"isabl_cli patch_status --key {key} --status {status}"
+        return f"isabl patch-status --key {key} --status {status}"
 
     def _get_dependencies(self, targets, references):
         missing = []
