@@ -195,7 +195,7 @@ class SystemSettings(BaseSettings):
         # caching every 10 minutes whilst we think of a better solution
         if not user_settings._cached_time or (
             user_settings._cached_time
-            and (time.time() - user_settings._cached_time) > 600
+            and (time.time() - user_settings._cached_time) > 60
         ):  # pylint: disable=attribute-defined-outside-init
             user_settings._cached_time = time.time()
             user_settings._cached_settings = api_request(
