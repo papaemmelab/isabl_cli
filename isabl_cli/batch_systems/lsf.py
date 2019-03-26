@@ -61,8 +61,11 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
                 requirements=requirements,
                 extra_args=os.environ.get(LSF_EXTRA_ARGS, ""),
                 throttle_by=os.environ.get(LSF_THROTTLE_BY, 50),
-                jobname=f"Array | application: {app.primary_key} | "
-                f"methods: {methods} | projects: {projects}",
+                jobname=(
+                    f"application: {app} | "
+                    f"methods: {', '.join(methods)} | "
+                    f"projects: {', '.join(map(str, projects))}"
+                ),
             )
 
         except Exception:  # pylint: disable=broad-except
@@ -73,7 +76,7 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
 
 def submit_lsf_array(
-    commands, requirements, jobname, extra_args="", throttle_by=50
+    commands, requirements, jobname, extra_args=None, throttle_by=50
 ):  # pragma: no cover
     """
     Submit an array of bash scripts.
@@ -93,6 +96,7 @@ def submit_lsf_array(
     Returns:
         str: jobid of clean up job.
     """
+    extra_args = extra_args or ""
     assert system_settings.BASE_STORAGE_DIRECTORY
 
     root = join(
@@ -127,7 +131,7 @@ def submit_lsf_array(
     # submit array of commands
     cmd = (
         f"bsub {requirements} {extra_args} "
-        f'-J "{jobname}[1-{total}]%{throttle_by}" '
+        f'-J "ISABL: {jobname}[1-{total}]%{throttle_by}" '
         f'-oo "{root}/log.%I" -eo "{root}/err.%I" -i "{root}/in.%I" bash'
     )
 

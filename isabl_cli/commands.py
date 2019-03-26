@@ -78,7 +78,7 @@ def patch_results(filters, force):
     ) as bar:
 
         for i in bar:
-            if i.results:
+            if i.results and not force:
                 skipped.append(i)
                 continue
 
@@ -286,7 +286,7 @@ def get_bams(filters, assembly, verbose, identifiers):
         elif len(i["bam_files"]) == 1:
             bam_path = list(i["bam_files"].values())[0]["url"]
 
-        if bam_path:
+        if bam_path or verbose:
             click.echo(bam_path if not verbose else f"{system_id} {bam_path}")
         elif not i["bam_files"]:
             raise click.UsageError(f"No bams for {system_id}, ignore with --verbose")

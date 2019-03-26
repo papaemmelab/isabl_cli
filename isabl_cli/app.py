@@ -309,7 +309,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         import_strings.add("submit_analyses")
 
         if "submit_analyses" not in defaults:
-            defaults["submit_analyses"] = "isabl_cli.batch_systems.submit_local"
+            defaults["submit_analyses"] = os.getenv(
+                "ISABL_DEFAULT_SUBMIT_ANALYSES", "isabl_cli.batch_systems.submit_local"
+            )
 
         return get_application_settings(
             defaults=defaults,

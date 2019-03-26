@@ -338,7 +338,7 @@ def delete_instance(endpoint, identifier):
     api_request("delete", url=f"/{endpoint}/{identifier}")
 
 
-def get_instances(endpoint, identifiers=None, verbose=False, **filters):
+def get_instances(endpoint, identifiers=None, verbose=True, **filters):
     """
     Return instances from a list API endpoint.
 
