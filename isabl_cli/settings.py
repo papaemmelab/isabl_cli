@@ -3,6 +3,7 @@
 from getpass import getuser
 from importlib import import_module
 from os.path import abspath
+from os.path import dirname
 from os.path import expanduser
 from os.path import join
 import getpass
@@ -98,12 +99,11 @@ def import_from_string(val, setting_name=None):
         )
 
 
-class UserSettings(object):
+class UserSettings:
 
     """A class used to manage user specific configurations."""
 
-    settings_dir = join(expanduser("~"), ".isabl")
-    settings_path = join(settings_dir, "settings.json")
+    settings_path = join(expanduser("~"), ".isabl", "settings.json")
 
     def __repr__(self):  # pragma: no cover
         """Show all configurations in `settings_path`."""
@@ -127,7 +127,7 @@ class UserSettings(object):
 
     def _write(self, name, value):
         """Write key, value to settings.json."""
-        os.makedirs(self.settings_dir, exist_ok=True)
+        os.makedirs(dirname(self.settings_path), exist_ok=True)
         data = self._read()
 
         with open(self.settings_path, "w") as f:
@@ -191,18 +191,22 @@ class SystemSettings(BaseSettings):
         """Return dictionary system with settings."""
         from isabl_cli.api import api_request
 
+        class _Settings(UserSettings):
+            settings_path = join(expanduser("~"), ".isabl", ".cached.json")
+
         # an API request to get the settings every time seems quite expensive
         # caching every 10 minutes whilst we think of a better solution
-        if not user_settings._cached_time or (
-            user_settings._cached_time
-            and (time.time() - user_settings._cached_time) > 60
+        _settings = _Settings()
+
+        if not _settings._cached_time or (
+            _settings._cached_time and (time.time() - _settings._cached_time) > 60
         ):  # pylint: disable=attribute-defined-outside-init
-            user_settings._cached_time = time.time()
-            user_settings._cached_settings = api_request(
+            _settings._cached_time = time.time()
+            _settings._cached_settings = api_request(
                 "get", "/client/settings/", authenticate=False
             ).json()
 
-        return user_settings._cached_settings
+        return _settings._cached_settings
 
 
 def get_application_settings(defaults, settings, reference_data, import_strings):
