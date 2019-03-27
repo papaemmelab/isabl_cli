@@ -354,7 +354,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def project_level_application(self):
         """Get or create a project level application database object."""
-        assert hasattr(
+        assert not hasattr(
             self.merge_project_analyses, "__isabstractmethod__"
         ), "No logic implemented to merge project analyses..."
 
@@ -691,21 +691,24 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def patch_application_settings(self, **settings):
         """Patch application settings if necessary."""
         assert system_settings.is_admin_user, "Apps can be patched only by admin user."
-        click.echo(f"Patching settings for {self.NAME} {self.VERSION} {self.ASSEMBLY}")
+        click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
 
         try:
             assert self.application["settings"] == settings
-            click.secho(f"\n\tno changes detected, skipping patch.\n", fg="yellow")
+            click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
                 api.patch_instance("applications", self.primary_key, settings=settings)
-                click.secho(f"\n\tSuccessfully patched settings.\n", fg="green")
+                click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:
-                click.secho(f"\n\tPatched failed with error: {error}.\n", fg="red")
+                click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
 
         # create or update project level application
         if not hasattr(self.merge_project_analyses, "__isabstractmethod__"):
             assert self.project_level_application
+            click.secho(
+                "\tSuccessfully updated project level application.\n", fg="magenta"
+            )
 
     @staticmethod
     def get_job_name(analysis):
