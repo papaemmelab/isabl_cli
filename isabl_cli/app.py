@@ -514,8 +514,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # run extra settings validation
         self.validate_settings(self.settings)
 
-        # create and run analyses
+        # create analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
+
+        # make sure outdir is set
+        for i in analyses:
+            if not i.storage_url:
+                self._patch_analysis(i)
+
+        # run analyses
         run_tuples, skipped_tuples = self.run_analyses(
             analyses=analyses, commit=commit, force=force, restart=restart
         )
@@ -602,18 +609,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
-
         command = (
             f"umask g+wrx && date && cd {outdir} && "
             f"{started} && {command} && {finished}"
         )
 
-        if system_settings.is_admin_user:
+        if system_settings.is_admin_user and status == "SUCCEEDED":
             command += f" && chmod -R a-w {analysis['storage_url']}"
 
         with open(self.get_command_script_path(analysis), "w") as f:
-            template = "{{\n\n    {}\n\n}} || {{\n\n    {}\n\n}}"
-            f.write(template.format(command, failed))
+            f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")
 
     @staticmethod
     def get_patch_status_command(key, status):
@@ -892,12 +897,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             tuple: list of analyses, invalid tuples [(tuple, error), ...].
         """
-        label = f"Getting analyses for {len(tuples)} tuples...\t\t"
-
         # add dependencies and inputs
         tuples = [i + self._get_dependencies(*i) for i in tuples]
         existing_analyses, tuples = self.get_existing_analyses(tuples)
         invalid_tuples, created_analyses = [], []
+        label = f"Creating analyses for {len(tuples)} tuples...\t\t"
+
+        if len(tuples) > 1000:
+            click.secho(
+                f"Attempting to create {len(tuples)} analyses, "
+                f"this process might take some time...",
+                fg="yellow",
+            )
 
         with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
             for i in bar:
@@ -939,7 +950,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         projects = {j["pk"] for i in tuples for j in i[0][0]["projects"]}
         cache = defaultdict(list)
         existing, missing = [], []
-        filters = dict(application=self.application["pk"], projects__pk__in=projects)
+        filters = dict(
+            application=self.application["pk"], projects__pk__in=projects, limit=2000
+        )
 
         def get_cache_key(targets, references):
             return (
