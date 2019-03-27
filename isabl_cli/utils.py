@@ -47,7 +47,7 @@ def get_results(
         if i["application"]["pk"] == application_key:
             i_targets = {j["pk"] for j in i["targets"]}
             i_references = {j["pk"] for j in i["references"]}
-            i_analyses = set(i["analyses"])
+            i_analyses = {j["pk"] for j in i["analyses"]}
 
             if targets and i_targets.difference(targets):
                 continue
