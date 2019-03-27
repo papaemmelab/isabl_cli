@@ -403,11 +403,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             help="Submit application analyses.",
         )
 
-        verbose = click.option(
-            "--verbose",
+        quiet = click.option(
+            "--quiet",
             show_default=True,
             is_flag=True,
-            help="Print verbose output of the operation.",
+            help="Don't print verbose output of the operation.",
         )
 
         force = click.option(
@@ -442,8 +442,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose, restart])
-        def command(commit, force, verbose, restart, **cli_options):
+        @utils.apply_decorators(pipe.cli_options + [commit, force, quiet, restart])
+        def command(commit, force, quiet, restart, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
                 raise click.UsageError("--commit not required when using --force")
@@ -458,7 +458,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 tuples=pipe.get_experiments_from_cli_options(**cli_options),
                 commit=commit,
                 force=force,
-                verbose=verbose,
+                verbose=not quiet,
                 restart=restart,
                 run_args=cli_options,
             )
@@ -882,6 +882,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         if errors:
             raise exceptions.ValidationError("\n".join(errors))
+
+    def validate_are_normals(self, experiments):
+        """Raise error not all experiments come from NORMAL sample."""
+        for i in experiments:
+            msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
+            assert i.sample.sample_class == "NORMAL", msg
 
     # -----------------------
     # ANALYSES CREATION LOGIC

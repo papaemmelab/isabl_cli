@@ -193,8 +193,8 @@ def get_paths(endpoint, pattern, filters, identifiers):
 @click.command()
 @options.NULLABLE_FILTERS
 @options.NULLABLE_IDENTIFIERS
-@options.VERBOSE
-def get_data(filters, identifiers, verbose):
+@options.QUIET
+def get_data(filters, identifiers, quiet):
     """Get file paths for experiments sequencing data."""
     for i in _filters_or_identifiers(
         endpoint="experiments",
@@ -204,11 +204,11 @@ def get_data(filters, identifiers, verbose):
     ):
         system_id = i["system_id"]
 
-        if not i["sequencing_data"] and not verbose:
-            raise click.UsageError(f"No data for {system_id}, ignore with --verbose")
+        if not i["sequencing_data"] and quiet:
+            raise click.UsageError(f"No data for {system_id}")
 
         for j in i["sequencing_data"] or ["None"]:
-            click.echo(j["file_url"] if not verbose else f"{system_id} {j}")
+            click.echo(j["file_url"] if quiet else f"{system_id} {j}")
 
 
 @click.command()
@@ -244,9 +244,9 @@ def get_reference(assembly, data_id):
 @click.command()
 @options.NULLABLE_IDENTIFIERS
 @options.NULLABLE_FILTERS
-@options.VERBOSE
+@options.QUIET
 @click.option("-r", "--result-key", help="result identifier", required=True)
-def get_results(filters, identifiers, result_key, verbose):
+def get_results(filters, identifiers, result_key, quiet):
     """Get analyses results."""
     for i in _filters_or_identifiers(
         endpoint="analyses",
@@ -256,21 +256,19 @@ def get_results(filters, identifiers, result_key, verbose):
     ):
         if result_key in i["results"]:
             result = i["results"][result_key]
-            click.echo(result if not verbose else f"{i['pk']} {result}")
-        elif verbose:
+            click.echo(result if quiet else f"{i['pk']} {result}")
+        elif not quiet:
             click.echo(f"{i['pk']} - No result available")
         else:
-            raise click.UsageError(
-                f"No '{result_key}' for {i['pk']}, ignore with --verbose"
-            )
+            raise click.UsageError(f"No '{result_key}' for {i['pk']}.")
 
 
 @click.command()
 @options.NULLABLE_IDENTIFIERS
 @options.NULLABLE_FILTERS
-@options.VERBOSE
+@options.QUIET
 @click.option("--assembly", help="required if multiple options for assembly")
-def get_bams(filters, assembly, verbose, identifiers):
+def get_bams(filters, assembly, quiet, identifiers):
     """Get storage directories, use `pattern` to match files inside dirs."""
     for i in _filters_or_identifiers(
         endpoint="experiments",
@@ -286,9 +284,9 @@ def get_bams(filters, assembly, verbose, identifiers):
         elif len(i["bam_files"]) == 1:
             bam_path = list(i["bam_files"].values())[0]["url"]
 
-        if bam_path or verbose:
-            click.echo(bam_path if not verbose else f"{system_id} {bam_path}")
+        if bam_path or not quiet:
+            click.echo(bam_path if quiet else f"{system_id} {bam_path}")
         elif not i["bam_files"]:
-            raise click.UsageError(f"No bams for {system_id}, ignore with --verbose")
+            raise click.UsageError(f"No bams for {system_id}")
         else:
             raise click.UsageError(f"Multiple bams for {system_id}, pass --assembly")
