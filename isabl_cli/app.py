@@ -612,7 +612,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             command += f" && chmod -R a-w {analysis['storage_url']}"
 
         with open(self.get_command_script_path(analysis), "w") as f:
-            template = "{{\n\n    {}\n\n}} | {{\n\n    {}\n\n}}"
+            template = "{{\n\n    {}\n\n}} || {{\n\n    {}\n\n}}"
             f.write(template.format(command, failed))
 
     @staticmethod
