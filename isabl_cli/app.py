@@ -338,20 +338,26 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
         )
 
-        api.patch_instance(  # pragma: no cover
-            description=self.application_description,
-            endpoint="applications",
-            identifier=application["pk"],
-            application_class=f"{self.__module__}.{self.__class__.__name__}",
-            results=self._application_results,
-            url=self.URL,
+        return (
+            application
+            if not system_settings.is_admin_user
+            else api.patch_instance(
+                description=self.application_description,
+                endpoint="applications",
+                identifier=application["pk"],
+                application_class=f"{self.__module__}.{self.__class__.__name__}",
+                results=self._application_results,
+                url=self.URL,
+            )
         )
-
-        return application
 
     @cached_property
     def project_level_application(self):
         """Get or create a project level application database object."""
+        assert hasattr(
+            self.merge_project_analyses, "__isabstractmethod__"
+        ), "No logic implemented to merge project analyses..."
+
         application = api.create_instance(
             endpoint="applications",
             name=f"{self.NAME} Project Application",
@@ -359,16 +365,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly=self.application["assembly"],
         )
 
-        api.patch_instance(  # pragma: no cover
-            description=f"{self.NAME} {self.VERSION} Project Level Application.",
-            endpoint="applications",
-            identifier=application["pk"],
-            results=self._application_project_level_results,
-            application_class=self.application["application_class"],
-            url=self.URL,
+        return (
+            application
+            if not system_settings.is_admin_user
+            else api.patch_instance(
+                description=f"{self.NAME} {self.VERSION} Project Level Application.",
+                endpoint="applications",
+                identifier=application["pk"],
+                results=self._application_project_level_results,
+                application_class=self.application["application_class"],
+                url=self.URL,
+            )
         )
-
-        return application
 
     @cached_property
     def assembly(self):
@@ -682,6 +690,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def patch_application_settings(self, **settings):
         """Patch application settings if necessary."""
+        assert system_settings.is_admin_user, "Apps can be patched only by admin user."
         click.echo(f"Patching settings for {self.NAME} {self.VERSION} {self.ASSEMBLY}")
 
         try:
@@ -693,6 +702,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 click.secho(f"\n\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:
                 click.secho(f"\n\tPatched failed with error: {error}.\n", fg="red")
+
+        # create or update project level application
+        if not hasattr(self.merge_project_analyses, "__isabstractmethod__"):
+            assert self.project_level_application
 
     @staticmethod
     def get_job_name(analysis):

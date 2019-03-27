@@ -131,7 +131,7 @@ def submit_lsf_array(
     # submit array of commands
     cmd = (
         f"bsub {requirements} {extra_args} "
-        f'-J "ISABL: {jobname}[1-{total}]%{throttle_by}" '
+        f'-J "ISABL | {jobname}[1-{total}]%{throttle_by}" '
         f'-oo "{root}/log.%I" -eo "{root}/err.%I" -i "{root}/in.%I" bash'
     )
 
@@ -140,7 +140,7 @@ def submit_lsf_array(
 
     # submit array of exit commands
     cmd = (
-        f'bsub -J "EXIT: {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
+        f'bsub -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
         f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash '
     )
 
@@ -148,7 +148,7 @@ def submit_lsf_array(
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # clean the execution directory
-    cmd = f'bsub -J "CLEAN: {jobname}" -w "ended({jobid})" -ti rm -r {root}'
+    cmd = f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti rm -r {root}'
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
     jobid = re.findall("<(.*?)>", jobid)[0]
 
