@@ -226,7 +226,7 @@ def test_engine(tmpdir):
     assert "This is a test application" in result.output
     assert "--commit" in result.output
     assert "--force" in result.output
-    assert "--verbose" in result.output
+    assert "--quiet" in result.output
     assert "--restart" in result.output
     assert "--url" in result.output
 
@@ -237,7 +237,7 @@ def test_engine(tmpdir):
 
     # check project level results
     pks = ",".join(str(i["pk"]) for i in experiments)
-    args = ["-fi", "pk__in", pks, "--verbose"]
+    args = ["-fi", "pk__in", pks]
     result = runner.invoke(command, args, catch_exceptions=False)
     analysis = application.get_project_analysis(project)
     merged = join(analysis["storage_url"], "test.merge")
@@ -265,7 +265,7 @@ def test_engine(tmpdir):
     result = runner.invoke(command, args)
     assert "trashing:" in result.output
 
-    args = ["-fi", "pk__in", pks, "--restart", "--verbose"]
+    args = ["-fi", "pk__in", pks, "--restart", "--quiet"]
     result = runner.invoke(command, args)
     assert "FAILED" not in result.output
 
