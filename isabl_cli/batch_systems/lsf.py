@@ -36,7 +36,7 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
     # execute analyses on a methods basis
     for methods, cmd_tuples in groups.items():
-        click.echo(f"Submitting {len(cmd_tuples)} {methods} jobs.")
+        click.echo(f"Submitting {len(cmd_tuples)} ({', '.join(methods)}) jobs.")
         commands, analyses, projects = [], [], set()
         requirements = ""
 
