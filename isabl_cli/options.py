@@ -295,6 +295,10 @@ QUIET = click.option(
     "--quiet", help="Don't display verbose output", show_default=False, is_flag=True
 )
 
+VERBOSE = click.option(
+    "--verbose", help="Display verbose output", show_default=True, is_flag=True
+)
+
 
 def get_analyses_filters_option(application_classes=None, **defaults):
     """Get analyses filters with `defaults`."""
