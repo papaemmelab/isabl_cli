@@ -122,17 +122,40 @@ def get_api_url(url):
     return url
 
 
+def retry_request(method, **kwargs):
+    """Retry request operation multiple times."""
+    for i in [0.2, 1, 5, 60, 300]:  # attempt some retries
+        response = getattr(requests, method)(verify=False, **kwargs)
+
+        if not str(response.status_code).startswith("50"):
+            break
+        else:  # pragma: no cover
+            click.secho(f"Request failed, retrying in {i}s...", fg="yellow", err=True)
+            time.sleep(i)
+
+    if not response.ok:
+        try:
+            msg = click.style(str(response.json()), fg="red")
+        except Exception:  # pylint: disable=broad-except
+            msg = ""
+
+        click.echo(f"Request Error: {response.url}\n{msg}")
+        response.raise_for_status()
+
+    return response
+
+
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
     headers = {"Authorization": f"Token {user_settings.api_token}"}
     auth_url = get_api_url("/rest-auth/user/")
-    response = requests.get(url=auth_url, headers=headers, verify=False)
+    response = retry_request("get", url=auth_url, headers=headers)
 
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
-        response = requests.post(
-            verify=False,
+        response = retry_request(
+            "post",
             url=get_api_url("/rest-auth/login/"),
             data={
                 "username": click.prompt(
@@ -172,23 +195,7 @@ def api_request(method, url, authenticate=True, **kwargs):
     if authenticate:
         kwargs["headers"] = get_token_headers()
 
-    for i in [0.2, 0.4, 0.6, 0.8, 5, 10]:  # attempt some retries
-        response = getattr(requests, method)(verify=False, **kwargs)
-
-        if not str(response.status_code).startswith("50"):
-            break
-        else:  # pragma: no cover
-            time.sleep(i)
-
-    if not response.ok:
-        try:
-            msg = click.style(str(response.json()), fg="red")
-        except Exception:  # pylint: disable=broad-except
-            msg = ""
-        click.echo(f"Request Error: {response.url}\n{msg}")
-        response.raise_for_status()
-
-    return response
+    return retry_request(method, **kwargs)
 
 
 def process_api_filters(**filters):
