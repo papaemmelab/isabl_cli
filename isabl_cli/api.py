@@ -133,15 +133,6 @@ def retry_request(method, **kwargs):
             click.secho(f"Request failed, retrying in {i}s...", fg="yellow", err=True)
             time.sleep(i)
 
-    if not response.ok:
-        try:
-            msg = click.style(str(response.json()), fg="red")
-        except Exception:  # pylint: disable=broad-except
-            msg = ""
-
-        click.echo(f"Request Error: {response.url}\n{msg}")
-        response.raise_for_status()
-
     return response
 
 
@@ -178,6 +169,9 @@ def get_token_headers():
         if not response.ok and "non_field_errors" in response.text:
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
             return get_token_headers()
+        else:
+            click.echo(f"Request Error: {response.url}")
+            response.raise_for_status()
 
         user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
         headers = {"Authorization": f"Token {user_settings.api_token}"}
@@ -195,7 +189,18 @@ def api_request(method, url, authenticate=True, **kwargs):
     if authenticate:
         kwargs["headers"] = get_token_headers()
 
-    return retry_request(method, **kwargs)
+    response = retry_request(method, **kwargs)
+
+    if not response.ok:
+        try:
+            msg = click.style(str(response.json()), fg="red")
+        except Exception:  # pylint: disable=broad-except
+            msg = ""
+
+        click.echo(f"Request Error: {response.url}\n{msg}")
+        response.raise_for_status()
+
+    return response
 
 
 def process_api_filters(**filters):
