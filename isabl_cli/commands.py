@@ -99,7 +99,7 @@ def patch_results(filters, force):
                 assert i.application.pk == application.primary_key
                 results = application._get_analysis_results(i)
                 api.patch_instance("analyses", i.pk, results=results)
-            except Exception as error:
+            except Exception as error:  # pylint: disable=broad-except
                 click.secho(f"{error_msg} {error}", fg="red")
                 print(traceback.format_exc())
 

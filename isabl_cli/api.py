@@ -1,13 +1,18 @@
 """Logic to interact with API."""
 
+from datetime import datetime
 from itertools import islice
 from os import environ
+from os import makedirs
+from os.path import join
 from urllib.parse import urljoin
 import collections
 import json
 import shutil
 import subprocess
 import time
+import traceback
+import uuid
 
 from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -539,14 +544,22 @@ def _run_signals(endpoint, instance, signals):
         try:
             signal(instance)
         except Exception as error:  # pragma: no cover pylint: disable=W0703
-            errors.append(error)
+            errors.append((error, traceback.format_exc()))
 
             try:
                 on_failure(endpoint, instance, signal, error)
             except Exception as on_failure_error:  # pylint: disable=W0703
-                errors.append(on_failure_error)
+                errors.append((on_failure_error, traceback.format_exc()))
 
-    # TODO: figure out how to deal with failed signals
-    # if errors:
-    # errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
-    # raise RuntimeError('Errors occurred during signals run:\n' + errors)
+    if errors:
+        errors_dir = join(
+            system_settings.BASE_STORAGE_DIRECTORY,
+            ".failed_signals",
+            datetime.now().year,
+            datetime.now().month,
+            datetime.now().day,
+        )
+
+        makedirs(errors_dir, exist_ok=True)
+        with open(join(errors_dir, uuid.uuid4()), "w") as f:
+            f.write("\n".join([f"{i}:\n\t{j}" for i, j in errors]))

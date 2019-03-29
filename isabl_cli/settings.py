@@ -9,7 +9,6 @@ from os.path import join
 import getpass
 import json
 import os
-import time
 
 from cached_property import cached_property
 from munch import Munch
