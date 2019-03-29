@@ -3,11 +3,11 @@
 from datetime import datetime
 from itertools import islice
 from os import environ
-from os import makedirs
 from os.path import join
 from urllib.parse import urljoin
 import collections
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -560,6 +560,8 @@ def _run_signals(endpoint, instance, signals):
             datetime.now().day,
         )
 
-        makedirs(errors_dir, exist_ok=True)
+        oldmask = os.umask(0o22)
+        os.makedirs(errors_dir, exist_ok=True)
+        os.umask(oldmask)
         with open(join(errors_dir, uuid.uuid4()), "w") as f:
             f.write("\n".join([f"{i}:\n\t{j}" for i, j in errors]))
