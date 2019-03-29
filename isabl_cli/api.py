@@ -12,7 +12,6 @@ import shutil
 import subprocess
 import time
 import traceback
-import uuid
 
 from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -333,7 +332,9 @@ def patch_instance(endpoint, identifier, **data):
     ):
         run_data_import_signals = True
 
-    instance = api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
+    instance = isablfy(
+        api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
+    )
 
     if run_status_change_signals:
         _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
@@ -341,7 +342,7 @@ def patch_instance(endpoint, identifier, **data):
     if run_data_import_signals:
         _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
-    return isablfy(instance)
+    return instance
 
 
 def delete_instance(endpoint, identifier):
@@ -473,6 +474,7 @@ def patch_analyses_status(analyses, status):
     Returns:
         list: of updated analyses.
     """
+    analyses = isablfy(analyses)
     data = {"ids": [], "status": status, "ran_by": system_settings.api_username}
     assert status in {"SUBMITTED", "STAGED"}, f"status not supported: {status}"
 
@@ -555,18 +557,17 @@ def _run_signals(endpoint, instance, signals):
         errors_dir = join(
             system_settings.BASE_STORAGE_DIRECTORY,
             ".failed_signals",
-            str(datetime.now().year),
-            str(datetime.now().month),
-            str(datetime.now().day),
+            endpoint,
+            f"{instance.pk:04d}"[-4:-2],
+            f"{instance.pk:04d}"[-2:],
+            str(instance.pk),
         )
 
         try:
-            oldmask = os.umask(0o22)
-            os.makedirs(errors_dir, exist_ok=True)
-            os.umask(oldmask)
+            os.makedirs(errors_dir, exist_ok=True, mode=0o770)
             msg = "\n".join([f"{i}:\n\t{j}" for i, j in errors])
 
-            with open(join(errors_dir, uuid.uuid4()), "+w") as f:
+            with open(join(errors_dir, datetime.now().isoformat()), "+w") as f:
                 f.write(msg)
 
         except Exception as error:  # pylint: disable=broad-except
