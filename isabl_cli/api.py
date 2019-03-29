@@ -566,7 +566,7 @@ def _run_signals(endpoint, instance, signals):
             os.umask(oldmask)
             msg = "\n".join([f"{i}:\n\t{j}" for i, j in errors])
 
-            with open(join(errors_dir, uuid.uuid4()), "w") as f:
+            with open(join(errors_dir, uuid.uuid4()), "+w") as f:
                 f.write(msg)
 
         except Exception as error:  # pylint: disable=broad-except
