@@ -555,9 +555,9 @@ def _run_signals(endpoint, instance, signals):
         errors_dir = join(
             system_settings.BASE_STORAGE_DIRECTORY,
             ".failed_signals",
-            datetime.now().year,
-            datetime.now().month,
-            datetime.now().day,
+            str(datetime.now().year),
+            str(datetime.now().month),
+            str(datetime.now().day),
         )
 
         try:

@@ -972,9 +972,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         projects = {j["pk"] for i in tuples for j in i[0][0]["projects"]}
         cache = defaultdict(list)
         existing, missing = [], []
-        filters = dict(
-            application=self.application["pk"], projects__pk__in=projects, limit=2000
-        )
+        targets_pks = ",".join(str(j.pk) for i in tuples for j in i[0])
+        filters = dict(application=self.application["pk"], projects__pk__in=projects)
+
+        if targets_pks:
+            filters["targets__pk__in"] = targets_pks
 
         def get_cache_key(targets, references):
             return (
@@ -982,7 +984,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 tuple(sorted(set(i["pk"] for i in references))),
             )
 
-        for i in api.get_instances("analyses", **filters):
+        for i in api.get_instances("analyses", limit=2000, **filters):
             cache[get_cache_key(i["targets"], i["references"])].append(i)
 
         for targets, references, analyses, inputs in tuples:
