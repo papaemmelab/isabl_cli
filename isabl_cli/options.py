@@ -299,6 +299,16 @@ VERBOSE = click.option(
     "--verbose", help="Display verbose output", show_default=True, is_flag=True
 )
 
+FORCE = click.option(
+    "--force", help="Wipe unfinished analyses and start from scratch.", is_flag=True
+)
+
+RESTART = click.option(
+    "--restart",
+    help="Attempt restarting failed analyses from previous checkpoint.",
+    is_flag=True,
+)
+
 
 def get_analyses_filters_option(application_classes=None, **defaults):
     """Get analyses filters with `defaults`."""
