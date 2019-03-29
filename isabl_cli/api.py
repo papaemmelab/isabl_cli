@@ -560,8 +560,14 @@ def _run_signals(endpoint, instance, signals):
             datetime.now().day,
         )
 
-        oldmask = os.umask(0o22)
-        os.makedirs(errors_dir, exist_ok=True)
-        os.umask(oldmask)
-        with open(join(errors_dir, uuid.uuid4()), "w") as f:
-            f.write("\n".join([f"{i}:\n\t{j}" for i, j in errors]))
+        try:
+            oldmask = os.umask(0o22)
+            os.makedirs(errors_dir, exist_ok=True)
+            os.umask(oldmask)
+            msg = "\n".join([f"{i}:\n\t{j}" for i, j in errors])
+
+            with open(join(errors_dir, uuid.uuid4()), "w") as f:
+                f.write(msg)
+
+        except Exception as error:  # pylint: disable=broad-except
+            click.secho(f"Failed to log signal errors ({error}):\n\n{msg}", fg="red")
