@@ -1,4 +1,4 @@
-"""isabl_cli utils."""
+"""Isabl CLI utils."""
 
 import getpass
 import json
@@ -39,31 +39,29 @@ def get_results(
         list: of tuples (result_value, analysis primary key).
     """
     results = []
-    targets = {i["pk"] for i in targets or []}
-    references = {i["pk"] for i in references or []}
-    analyses = {i["pk"] for i in analyses or []}
+    targets = {i.pk for i in targets or []}
+    references = {i.pk for i in references or []}
+    analyses = {i.pk for i in analyses or []}
 
-    for i in experiment["results"]:
-        if i["application"]["pk"] == application_key:
-            i_targets = {j["pk"] for j in i["targets"]}
-            i_references = {j["pk"] for j in i["references"]}
-            i_analyses = set(i["analyses"])
-
-            if targets and i_targets.difference(targets):
+    for i in experiment.results:
+        if i.application.pk == application_key:
+            if targets and {j.pk for j in i.targets}.difference(targets):
                 continue
 
-            if references and i_references.difference(references):
+            if references and {j.pk for j in i.references}.difference(references):
                 continue
 
-            if analyses and not analyses.issubset(i_analyses):
+            if analyses and not analyses.issubset({j.pk for j in i.analyses}):
                 continue
 
-            if result_key == "storage_url":
-                result = i["storage_url"]
-            else:
-                result = i["results"][result_key]
-
-            results.append((result, i["pk"]))
+            results_dict = i if result_key == "storage_url" else i.results
+            result = results_dict.get(result_key)
+            results.append((result, i.pk))
+            assert result_key in results_dict, (
+                f"Result '{result_key}' not found for analysis {i.pk}"
+                f"({i.application.name} {i.application.version}) "
+                f"with status: {i.status}"
+            )
 
     return results
 
@@ -76,10 +74,7 @@ def get_result(*args, **kwargs):
         tuple: result value, analysis pk that produced the result
     """
     results = get_results(*args, **kwargs)
-    assert results, (
-        f"No results were found for analysis: "
-        f"{kwargs.get('application_pk') or kwargs.get('application_name')}"
-    )
+    assert results, f"No results found for application: {kwargs.get('application_key')}"
     assert len(results) == 1, f"Multiple results returned {results}"
     result, key = results[0]
     return result, key

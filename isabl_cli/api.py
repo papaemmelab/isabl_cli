@@ -1,13 +1,17 @@
 """Logic to interact with API."""
 
+from datetime import datetime
 from itertools import islice
 from os import environ
+from os.path import join
 from urllib.parse import urljoin
 import collections
 import json
+import os
 import shutil
 import subprocess
 import time
+import traceback
 
 from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -122,17 +126,31 @@ def get_api_url(url):
     return url
 
 
+def retry_request(method, **kwargs):
+    """Retry request operation multiple times."""
+    for i in [0.2, 1, 5, 60, 300]:  # attempt some retries
+        response = getattr(requests, method)(verify=False, **kwargs)
+
+        if not str(response.status_code).startswith("50"):
+            break
+        else:  # pragma: no cover
+            click.secho(f"Request failed, retrying in {i}s...", fg="yellow", err=True)
+            time.sleep(i)
+
+    return response
+
+
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
     headers = {"Authorization": f"Token {user_settings.api_token}"}
     auth_url = get_api_url("/rest-auth/user/")
-    response = requests.get(url=auth_url, headers=headers, verify=False)
+    response = retry_request("get", url=auth_url, headers=headers)
 
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
-        response = requests.post(
-            verify=False,
+        response = retry_request(
+            "post",
             url=get_api_url("/rest-auth/login/"),
             data={
                 "username": click.prompt(
@@ -155,6 +173,9 @@ def get_token_headers():
         if not response.ok and "non_field_errors" in response.text:
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
             return get_token_headers()
+        else:
+            click.echo(f"Request Error: {response.url}")
+            response.raise_for_status()
 
         user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
         headers = {"Authorization": f"Token {user_settings.api_token}"}
@@ -172,19 +193,14 @@ def api_request(method, url, authenticate=True, **kwargs):
     if authenticate:
         kwargs["headers"] = get_token_headers()
 
-    for i in [0.2, 0.4, 0.6, 0.8, 5, 10]:  # attempt some retries
-        response = getattr(requests, method)(verify=False, **kwargs)
-
-        if not str(response.status_code).startswith("50"):
-            break
-        else:  # pragma: no cover
-            time.sleep(i)
+    response = retry_request(method, **kwargs)
 
     if not response.ok:
         try:
             msg = click.style(str(response.json()), fg="red")
         except Exception:  # pylint: disable=broad-except
             msg = ""
+
         click.echo(f"Request Error: {response.url}\n{msg}")
         response.raise_for_status()
 
@@ -316,7 +332,9 @@ def patch_instance(endpoint, identifier, **data):
     ):
         run_data_import_signals = True
 
-    instance = api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
+    instance = isablfy(
+        api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
+    )
 
     if run_status_change_signals:
         _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
@@ -324,7 +342,7 @@ def patch_instance(endpoint, identifier, **data):
     if run_data_import_signals:
         _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
-    return isablfy(instance)
+    return instance
 
 
 def delete_instance(endpoint, identifier):
@@ -338,7 +356,7 @@ def delete_instance(endpoint, identifier):
     api_request("delete", url=f"/{endpoint}/{identifier}")
 
 
-def get_instances(endpoint, identifiers=None, verbose=False, **filters):
+def get_instances(endpoint, identifiers=None, verbose=True, **filters):
     """
     Return instances from a list API endpoint.
 
@@ -456,6 +474,7 @@ def patch_analyses_status(analyses, status):
     Returns:
         list: of updated analyses.
     """
+    analyses = isablfy(analyses)
     data = {"ids": [], "status": status, "ran_by": system_settings.api_username}
     assert status in {"SUBMITTED", "STAGED"}, f"status not supported: {status}"
 
@@ -527,14 +546,29 @@ def _run_signals(endpoint, instance, signals):
         try:
             signal(instance)
         except Exception as error:  # pragma: no cover pylint: disable=W0703
-            errors.append(error)
+            errors.append((error, traceback.format_exc()))
 
             try:
                 on_failure(endpoint, instance, signal, error)
             except Exception as on_failure_error:  # pylint: disable=W0703
-                errors.append(on_failure_error)
+                errors.append((on_failure_error, traceback.format_exc()))
 
-    # TODO: figure out how to deal with failed signals
-    # if errors:
-    # errors = '\n'.join(click.style(str(i), fg='red') for i in errors)
-    # raise RuntimeError('Errors occurred during signals run:\n' + errors)
+    if errors:
+        errors_dir = join(
+            system_settings.BASE_STORAGE_DIRECTORY,
+            ".failed_signals",
+            endpoint,
+            f"{instance.pk:04d}"[-4:-2],
+            f"{instance.pk:04d}"[-2:],
+            str(instance.pk),
+        )
+
+        try:
+            os.makedirs(errors_dir, exist_ok=True, mode=0o770)
+            msg = "\n".join([f"{i}:\n\t{j}" for i, j in errors])
+
+            with open(join(errors_dir, datetime.now().isoformat()), "+w") as f:
+                f.write(msg)
+
+        except Exception as error:  # pylint: disable=broad-except
+            click.secho(f"Failed to log signal errors ({error}):\n\n{msg}", fg="red")

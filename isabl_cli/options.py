@@ -291,8 +291,22 @@ FILES_DATA = click.option(
     ),
 )
 
+QUIET = click.option(
+    "--quiet", help="Don't display verbose output", show_default=False, is_flag=True
+)
+
 VERBOSE = click.option(
-    "--verbose", help="display verbose output", show_default=True, is_flag=True
+    "--verbose", help="Display verbose output", show_default=True, is_flag=True
+)
+
+FORCE = click.option(
+    "--force", help="Wipe unfinished analyses and start from scratch.", is_flag=True
+)
+
+RESTART = click.option(
+    "--restart",
+    help="Attempt restarting failed analyses from previous checkpoint.",
+    is_flag=True,
 )
 
 
@@ -311,10 +325,16 @@ def get_analyses_filters_option(application_classes=None, **defaults):
 
     def callback(tuples):
         if application_classes:
-            defaults["application__pk__in"] = ",".join(
-                str(i.primary_key) for i in application_classes
-            )
-
+            analyses = []
+            for i in application_classes:
+                defaults["application__pk"] = str(i.primary_key)
+                click.secho(
+                    f"Getting completed analyses for {i.NAME} {i.VERSION}:", fg="cyan"
+                )
+                analyses += api.get_instances(
+                    "analyses", **{**dict(tuples), **defaults}
+                )
+            return analyses
         return api.get_instances("analyses", **{**dict(tuples), **defaults})
 
     return click.option(

@@ -309,7 +309,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         import_strings.add("submit_analyses")
 
         if "submit_analyses" not in defaults:
-            defaults["submit_analyses"] = "isabl_cli.batch_systems.submit_local"
+            defaults["submit_analyses"] = os.getenv(
+                "ISABL_DEFAULT_SUBMIT_ANALYSES", "isabl_cli.batch_systems.submit_local"
+            )
 
         return get_application_settings(
             defaults=defaults,
@@ -336,20 +338,26 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
         )
 
-        api.patch_instance(  # pragma: no cover
-            description=self.application_description,
-            endpoint="applications",
-            identifier=application["pk"],
-            application_class=f"{self.__module__}.{self.__class__.__name__}",
-            results=self._application_results,
-            url=self.URL,
+        return (
+            application
+            if not system_settings.is_admin_user
+            else api.patch_instance(
+                description=self.application_description,
+                endpoint="applications",
+                identifier=application["pk"],
+                application_class=f"{self.__module__}.{self.__class__.__name__}",
+                results=self._application_results,
+                url=self.URL,
+            )
         )
-
-        return application
 
     @cached_property
     def project_level_application(self):
         """Get or create a project level application database object."""
+        assert not hasattr(
+            self.merge_project_analyses, "__isabstractmethod__"
+        ), "No logic implemented to merge project analyses..."
+
         application = api.create_instance(
             endpoint="applications",
             name=f"{self.NAME} Project Application",
@@ -357,16 +365,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly=self.application["assembly"],
         )
 
-        api.patch_instance(  # pragma: no cover
-            description=f"{self.NAME} {self.VERSION} Project Level Application.",
-            endpoint="applications",
-            identifier=application["pk"],
-            results=self._application_project_level_results,
-            application_class=self.application["application_class"],
-            url=self.URL,
+        return (
+            application
+            if not system_settings.is_admin_user
+            else api.patch_instance(
+                description=f"{self.NAME} {self.VERSION} Project Level Application.",
+                endpoint="applications",
+                identifier=application["pk"],
+                results=self._application_project_level_results,
+                application_class=self.application["application_class"],
+                url=self.URL,
+            )
         )
-
-        return application
 
     @cached_property
     def assembly(self):
@@ -401,11 +411,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             help="Submit application analyses.",
         )
 
-        verbose = click.option(
-            "--verbose",
+        quiet = click.option(
+            "--quiet",
             show_default=True,
             is_flag=True,
-            help="Print verbose output of the operation.",
+            help="Don't print verbose output of the operation.",
         )
 
         force = click.option(
@@ -440,8 +450,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(pipe.cli_options + [commit, force, verbose, restart])
-        def command(commit, force, verbose, restart, **cli_options):
+        @utils.apply_decorators(pipe.cli_options + [commit, force, quiet, restart])
+        def command(commit, force, quiet, restart, **cli_options):
             """Click command to be used in the CLI."""
             if commit and force:
                 raise click.UsageError("--commit not required when using --force")
@@ -456,7 +466,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 tuples=pipe.get_experiments_from_cli_options(**cli_options),
                 commit=commit,
                 force=force,
-                verbose=verbose,
+                verbose=not quiet,
                 restart=restart,
                 run_args=cli_options,
             )
@@ -512,8 +522,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # run extra settings validation
         self.validate_settings(self.settings)
 
-        # create and run analyses
+        # create analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
+
+        # make sure outdir is set
+        for i in analyses:
+            if not i.storage_url:
+                self._patch_analysis(i)
+
+        # run analyses
         run_tuples, skipped_tuples = self.run_analyses(
             analyses=analyses, commit=commit, force=force, restart=restart
         )
@@ -600,18 +617,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
-
         command = (
             f"umask g+wrx && date && cd {outdir} && "
             f"{started} && {command} && {finished}"
         )
 
-        if system_settings.is_admin_user:
+        if system_settings.is_admin_user and status == "SUCCEEDED":
             command += f" && chmod -R a-w {analysis['storage_url']}"
 
         with open(self.get_command_script_path(analysis), "w") as f:
-            template = "{{\n\n    {}\n\n}} | {{\n\n    {}\n\n}}"
-            f.write(template.format(command, failed))
+            f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")
 
     @staticmethod
     def get_patch_status_command(key, status):
@@ -675,17 +690,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def patch_application_settings(self, **settings):
         """Patch application settings if necessary."""
-        click.echo(f"Patching settings for {self.NAME} {self.VERSION} {self.ASSEMBLY}")
+        assert system_settings.is_admin_user, "Apps can be patched only by admin user."
+        click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
 
         try:
             assert self.application["settings"] == settings
-            click.secho(f"\n\tno changes detected, skipping patch.\n", fg="yellow")
+            click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
                 api.patch_instance("applications", self.primary_key, settings=settings)
-                click.secho(f"\n\tSuccessfully patched settings.\n", fg="green")
+                click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:
-                click.secho(f"\n\tPatched failed with error: {error}.\n", fg="red")
+                click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
+
+        # create or update project level application
+        if not hasattr(self.merge_project_analyses, "__isabstractmethod__"):
+            assert self.project_level_application
+            click.secho(
+                "\tSuccessfully updated project level application.\n", fg="magenta"
+            )
 
     @staticmethod
     def get_job_name(analysis):
@@ -876,6 +899,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if errors:
             raise exceptions.ValidationError("\n".join(errors))
 
+    def validate_are_normals(self, experiments):
+        """Raise error not all experiments come from NORMAL sample."""
+        for i in experiments:
+            msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
+            assert i.sample.sample_class == "NORMAL", msg
+
     # -----------------------
     # ANALYSES CREATION LOGIC
     # -----------------------
@@ -890,14 +919,34 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             tuple: list of analyses, invalid tuples [(tuple, error), ...].
         """
-        label = f"Getting analyses for {len(tuples)} tuples...\t\t"
-
         # add dependencies and inputs
-        tuples = [i + self._get_dependencies(*i) for i in tuples]
-        existing_analyses, tuples = self.get_existing_analyses(tuples)
-        invalid_tuples, created_analyses = [], []
+        invalid_tuples, valid_tuples, created_analyses = [], [], []
 
-        with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
+        for i in tuples:
+            try:
+                valid_tuples.append(i + self._get_dependencies(*i))
+            except (
+                exceptions.ValidationError,
+                exceptions.ConfigurationError,
+                AssertionError,
+            ) as error:
+                invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
+
+        # get existing analyses from valid tuples
+        existing_analyses, valid_tuples = self.get_existing_analyses(valid_tuples)
+
+        if len(valid_tuples) > 1000:
+            click.secho(
+                f"Attempting to create {len(valid_tuples)} analyses, "
+                f"this process might take some time...",
+                fg="yellow",
+            )
+
+        with click.progressbar(
+            valid_tuples,
+            file=sys.stderr,
+            label=f"Creating analyses for {len(valid_tuples)} tuples...\t\t",
+        ) as bar:
             for i in bar:
                 try:
                     targets, references, analyses, inputs = i
@@ -933,11 +982,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             tuple: list of existing analyses, list of tuples without analysis
         """
+        if not tuples:
+            return [], []
+
         click.echo("Checking for existing analyses...", file=sys.stderr)
         projects = {j["pk"] for i in tuples for j in i[0][0]["projects"]}
         cache = defaultdict(list)
         existing, missing = [], []
+        targets_pks = ",".join(str(j.pk) for i in tuples for j in i[0])
         filters = dict(application=self.application["pk"], projects__pk__in=projects)
+
+        if targets_pks:
+            filters["targets__pk__in"] = targets_pks
 
         def get_cache_key(targets, references):
             return (
@@ -945,7 +1001,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 tuple(sorted(set(i["pk"] for i in references))),
             )
 
-        for i in api.get_instances("analyses", **filters):
+        for i in api.get_instances("analyses", limit=2000, **filters):
             cache[get_cache_key(i["targets"], i["references"])].append(i)
 
         for targets, references, analyses, inputs in tuples:

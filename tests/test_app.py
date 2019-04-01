@@ -11,9 +11,10 @@ from isabl_cli import api
 from isabl_cli import exceptions
 from isabl_cli import factories
 from isabl_cli import options
+from isabl_cli import utils
 from isabl_cli.settings import _DEFAULTS
-from isabl_cli.settings import system_settings
 from isabl_cli.settings import get_application_settings
+from isabl_cli.settings import system_settings
 
 
 class TestApplication(AbstractApplication):
@@ -216,17 +217,36 @@ def test_engine(tmpdir):
     command = TestApplication.as_cli_command()
     application = TestApplication()
     ran_analyses, _, __ = application.run(tuples, commit=True)
+    target = api.Experiment(ran_analyses[1][0].targets[0].pk)
 
     assert "analysis_result_key" in ran_analyses[1][0]["results"]
     assert "analysis_result_key" in ran_analyses[2][0]["results"]
 
+    # test that get results work as expected
+    assert application.get_results(
+        result_key="analysis_result_key",
+        experiment=target,
+        application_key=application.primary_key,
+    ) == [(1, ran_analyses[1][0].pk)]
+
+    # check assertion error is raised when an invalid result is searched for
+    with pytest.raises(AssertionError) as error:
+        application.get_results(
+            result_key="invalid_result_key",
+            experiment=target,
+            application_key=application.primary_key,
+        )
+
+    assert "Result 'invalid_result_key' not found for analysis" in str(error.value)
+
+    # test options
     runner = CliRunner()
     result = runner.invoke(command, ["--help"])
 
     assert "This is a test application" in result.output
     assert "--commit" in result.output
     assert "--force" in result.output
-    assert "--verbose" in result.output
+    assert "--quiet" in result.output
     assert "--restart" in result.output
     assert "--url" in result.output
 
@@ -237,7 +257,7 @@ def test_engine(tmpdir):
 
     # check project level results
     pks = ",".join(str(i["pk"]) for i in experiments)
-    args = ["-fi", "pk__in", pks, "--verbose"]
+    args = ["-fi", "pk__in", pks]
     result = runner.invoke(command, args, catch_exceptions=False)
     analysis = application.get_project_analysis(project)
     merged = join(analysis["storage_url"], "test.merge")
@@ -265,7 +285,7 @@ def test_engine(tmpdir):
     result = runner.invoke(command, args)
     assert "trashing:" in result.output
 
-    args = ["-fi", "pk__in", pks, "--restart", "--verbose"]
+    args = ["-fi", "pk__in", pks, "--restart", "--quiet"]
     result = runner.invoke(command, args)
     assert "FAILED" not in result.output
 

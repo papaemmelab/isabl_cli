@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import traceback
 
 import click
 
@@ -53,29 +54,36 @@ def merge_project_analyses(project, application):  # pragma: no cover
 
 @click.command()
 @options.FILTERS
-def processed_finished(filters):
+def process_finished(filters):
     """Process and update finished analyses."""
     utils.check_admin()
     filters.update(status="FINISHED")
 
-    for i in api.get_instances("analyses", **filters):
+    for i in api.get_instances("analyses", verbose=True, **filters):
         if i["status"] == "FINISHED":
             api.patch_analysis_status(i, "SUCCEEDED")
 
 
 @click.command()
 @options.FILTERS
-def patch_results(filters):
+@click.option("--force", help="Update previously patched results.", is_flag=True)
+def patch_results(filters, force):
     """Update the results field of many analyses."""
     utils.check_admin()
+    skipped = []
 
     with click.progressbar(
-        api.get_instances("analyses", **filters), label="Patching analyses..."
+        api.get_instances("analyses", verbose=True, **filters),
+        label="Patching analyses...",
     ) as bar:
 
         for i in bar:
-            app_name = f"{i.application.name}({i.application.version})"
-            error_msg = f"\tFailed to patch {app_name}({i.pk}):"
+            if i.results and not force:
+                skipped.append(i)
+                continue
+
+            app_name = f"{i.application.name} {i.application.version}"
+            error_msg = f"\tFailed to patch {app_name}({i.pk}, {i.storage_url}):"
 
             try:
                 application = import_from_string(i.application.application_class)()
@@ -91,8 +99,12 @@ def patch_results(filters):
                 assert i.application.pk == application.primary_key
                 results = application._get_analysis_results(i)
                 api.patch_instance("analyses", i.pk, results=results)
-            except Exception as error:
+            except Exception as error:  # pylint: disable=broad-except
                 click.secho(f"{error_msg} {error}", fg="red")
+                print(traceback.format_exc())
+
+    if skipped:
+        click.echo(f"{len(skipped)} analyses had results, use --force to update...")
 
 
 @click.command(hidden=True)
@@ -164,9 +176,28 @@ def get_count(endpoint, filters):
 @options.NULLABLE_FILTERS
 @options.NULLABLE_IDENTIFIERS
 def get_paths(endpoint, pattern, filters, identifiers):
-    """Get storage directories, use `pattern` to match files inside dirs."""
+    """Get storage directories, use `pattern` to match files inside the directories."""
     for i in _filters_or_identifiers(
         endpoint=endpoint,
+        identifiers=identifiers,
+        filters=filters,
+        fields="storage_url",
+    ):
+        if i["storage_url"]:
+            if pattern:
+                click.echo("\n".join(glob(join(i["storage_url"], pattern))))
+            else:
+                click.echo(i["storage_url"])
+
+
+@click.command()
+@options.FILE_PATTERN
+@options.NULLABLE_FILTERS
+@options.NULLABLE_IDENTIFIERS
+def get_outdirs(pattern, filters, identifiers):
+    """Get analyses outdirs, use `pattern` to match files inside the directories."""
+    for i in _filters_or_identifiers(
+        endpoint="analyses",
         identifiers=identifiers,
         filters=filters,
         fields="storage_url",
@@ -274,7 +305,7 @@ def get_bams(filters, assembly, verbose, identifiers):
         elif len(i["bam_files"]) == 1:
             bam_path = list(i["bam_files"].values())[0]["url"]
 
-        if bam_path:
+        if bam_path or verbose:
             click.echo(bam_path if not verbose else f"{system_id} {bam_path}")
         elif not i["bam_files"]:
             raise click.UsageError(f"No bams for {system_id}, ignore with --verbose")
