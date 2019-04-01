@@ -176,9 +176,28 @@ def get_count(endpoint, filters):
 @options.NULLABLE_FILTERS
 @options.NULLABLE_IDENTIFIERS
 def get_paths(endpoint, pattern, filters, identifiers):
-    """Get storage directories, use `pattern` to match files inside dirs."""
+    """Get storage directories, use `pattern` to match files inside the directories."""
     for i in _filters_or_identifiers(
         endpoint=endpoint,
+        identifiers=identifiers,
+        filters=filters,
+        fields="storage_url",
+    ):
+        if i["storage_url"]:
+            if pattern:
+                click.echo("\n".join(glob(join(i["storage_url"], pattern))))
+            else:
+                click.echo(i["storage_url"])
+
+
+@click.command()
+@options.FILE_PATTERN
+@options.NULLABLE_FILTERS
+@options.NULLABLE_IDENTIFIERS
+def get_outdirs(pattern, filters, identifiers):
+    """Get analyses outdirs, use `pattern` to match files inside the directories."""
+    for i in _filters_or_identifiers(
+        endpoint="analyses",
         identifiers=identifiers,
         filters=filters,
         fields="storage_url",
