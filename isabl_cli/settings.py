@@ -38,7 +38,7 @@ _DEFAULTS = {
     "SUBMIT_PROJECT_LEVEL_MERGE": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
-        "isabl_cli.commands.processed_finished",
+        "isabl_cli.commands.process_finished",
         "isabl_cli.commands.patch_results",
     ],
     "SYSTEM_COMMANDS": [

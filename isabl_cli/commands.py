@@ -54,7 +54,7 @@ def merge_project_analyses(project, application):  # pragma: no cover
 
 @click.command()
 @options.FILTERS
-def processed_finished(filters):
+def process_finished(filters):
     """Process and update finished analyses."""
     utils.check_admin()
     filters.update(status="FINISHED")

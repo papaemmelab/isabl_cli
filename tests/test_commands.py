@@ -19,7 +19,7 @@ def test_commands(tmpdir):
 
     runner = CliRunner()
     args = ["-fi", "pk", analysis["pk"]]
-    runner.invoke(commands.processed_finished, args, catch_exceptions=False)
+    runner.invoke(commands.process_finished, args, catch_exceptions=False)
     analysis = api.get_instance("analyses", analysis["pk"])
 
     assert analysis["status"] == "SUCCEEDED"
