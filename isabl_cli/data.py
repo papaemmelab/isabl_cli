@@ -169,7 +169,7 @@ def _make_storage_directory(root, base, identifier, use_hash=False):
         path = join(base)
 
     storage_directory = join(root, path, str(identifier))
-    os.makedirs(storage_directory, exist_ok=True)
+    os.makedirs(storage_directory, exist_ok=True, mode=0o770)
     return storage_directory
 
 
