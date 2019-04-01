@@ -982,6 +982,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             tuple: list of existing analyses, list of tuples without analysis
         """
+        if not tuples:
+            return [], []
+
         click.echo("Checking for existing analyses...", file=sys.stderr)
         projects = {j["pk"] for i in tuples for j in i[0][0]["projects"]}
         cache = defaultdict(list)
