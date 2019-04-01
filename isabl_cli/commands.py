@@ -53,7 +53,7 @@ def merge_project_analyses(project, application):  # pragma: no cover
 
 
 @click.command()
-@options.FILTERS
+@options.NULLABLE_FILTERS
 def process_finished(filters):
     """Process and update finished analyses."""
     utils.check_admin()
