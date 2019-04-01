@@ -920,19 +920,33 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             tuple: list of analyses, invalid tuples [(tuple, error), ...].
         """
         # add dependencies and inputs
-        tuples = [i + self._get_dependencies(*i) for i in tuples]
-        existing_analyses, tuples = self.get_existing_analyses(tuples)
-        invalid_tuples, created_analyses = [], []
-        label = f"Creating analyses for {len(tuples)} tuples...\t\t"
+        invalid_tuples, valid_tuples, created_analyses = [], [], []
 
-        if len(tuples) > 1000:
+        for i in tuples:
+            try:
+                valid_tuples.append(i + self._get_dependencies(*i))
+            except (
+                exceptions.ValidationError,
+                exceptions.ConfigurationError,
+                AssertionError,
+            ) as error:
+                invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
+
+        # get existing analyses from valid tuples
+        existing_analyses, valid_tuples = self.get_existing_analyses(valid_tuples)
+
+        if len(valid_tuples) > 1000:
             click.secho(
-                f"Attempting to create {len(tuples)} analyses, "
+                f"Attempting to create {len(valid_tuples)} analyses, "
                 f"this process might take some time...",
                 fg="yellow",
             )
 
-        with click.progressbar(tuples, file=sys.stderr, label=label) as bar:
+        with click.progressbar(
+            valid_tuples,
+            file=sys.stderr,
+            label=f"Creating analyses for {len(valid_tuples)} tuples...\t\t",
+        ) as bar:
             for i in bar:
                 try:
                     targets, references, analyses, inputs = i
