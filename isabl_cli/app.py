@@ -657,7 +657,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             self._command_script_key: self.get_command_script_path(analysis),
         }
 
-        if created:
+        if created or analysis.status == "STARTED":
             return results
 
         if analysis["project_level_analysis"]:
@@ -768,6 +768,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 color = "green"
             elif msg == "FAILED":
                 color = "red"
+            elif msg == "INVALID":
+                color = "yellow"
+            elif msg == "SUBMITTED":
+                color = "cyan"
             elif msg == "STAGED":
                 color = "magenta"
                 blink = True
@@ -798,7 +802,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 references = i["references"]
                 extra_msg = " " + i["storage_url"]
             else:  # if invalid tuples
-                identifier = "INVALID"
+                extra_msg = " " + str(msg)
+                msg = identifier = "INVALID"
                 targets = i[0]
                 references = i[1]
 
