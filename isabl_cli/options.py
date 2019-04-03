@@ -198,7 +198,7 @@ PAIR = click.option(
     "-p",
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: validators.validate_pairs([i])[0],
+    callback=lambda _, __, i: validators.validate_pairs([i]),
     help="Pass one tumor normal pair identifiers (e.g. -tn 1 2).",
 )
 
