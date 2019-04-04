@@ -657,7 +657,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             self._command_script_key: self.get_command_script_path(analysis),
         }
 
-        if created or analysis.status == "STARTED":
+        if created:
             return results
 
         if analysis["project_level_analysis"]:
