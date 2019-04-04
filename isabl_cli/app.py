@@ -10,6 +10,7 @@ from os.path import join
 import abc
 import os
 import sys
+import traceback
 
 from cached_property import cached_property
 from click import progressbar
@@ -248,6 +249,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                         self.merge_project_analyses(analysis, analyses)
                         api.patch_analysis_status(analysis, "SUCCEEDED")
                     except Exception as e:  # pragma: no cover pylint: disable=W0703
+                        print(traceback.format_exc())
                         click.echo(e, file=sys.stderr)
                         api.patch_analysis_status(analysis, "FAILED")
                         error = e
