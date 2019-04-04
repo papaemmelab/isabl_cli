@@ -505,11 +505,13 @@ def patch_analysis_status(analysis, status):
         dict: patched analysis instance.
     """
     data = {"status": status}
-    application = analysis["application"]
     storage_url = analysis["storage_url"]
 
     if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS"}:
         data["storage_usage"] = utils.get_tree_size(storage_url)
+
+    if status == "STARTED":
+        data["ran_by"] = system_settings.api_username
 
     # admin must own directory of regular analyses
     if status == "SUCCEEDED" and not analysis["project_level_analysis"]:
@@ -523,19 +525,46 @@ def patch_analysis_status(analysis, status):
 
     if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
-            application = import_from_string(application["application_class"])()
-            data["results"] = application._get_analysis_results(analysis)
-        except ImportError:
-            pass
+            data["results"] = _get_analysis_results(analysis, raise_error=True)
         except Exception as error:  # pragma: no cover
             data["status"] = "FAILED"
             patch_instance("analyses", analysis["pk"], **data)
             raise error
 
-    if status == "STARTED":
-        data["ran_by"] = system_settings.api_username
-
     return patch_instance("analyses", analysis["pk"], **data)
+
+
+def _get_analysis_results(analysis, raise_error=True):
+    """Patch analysis results."""
+    app_name = f"{analysis.application.name} {analysis.application.version}"
+    error_msg = f"\tFailed to patch {app_name}({analysis.pk}, {analysis.storage_url}):"
+    results = analysis.results
+
+    try:
+        application = import_from_string(analysis.application.application_class)()
+    except ImportError as error:
+        click.secho(f"{error_msg} cant import application class", fg="red")
+        return results
+
+    if not analysis.storage_url:
+        analysis = application._patch_analysis(analysis)
+
+    try:
+        # just used to make sure the app results are patched
+        assert analysis.application.pk == (
+            application.project_level_application.pk
+            if analysis.project_level_analysis
+            else application.primary_key
+        ), f"{app_name} does not match: {analysis.application.application_class}"
+
+        results = application._get_analysis_results(analysis)
+    except Exception as error:  # pylint: disable=broad-except
+        click.secho(f"{error_msg} {error}", fg="red")
+        if raise_error:
+            raise error
+        print(traceback.format_exc())
+
+    return results
 
 
 def _run_signals(endpoint, instance, signals):

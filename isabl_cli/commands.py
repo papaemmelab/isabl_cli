@@ -76,32 +76,13 @@ def patch_results(filters, force):
         api.get_instances("analyses", verbose=True, **filters),
         label="Patching analyses...",
     ) as bar:
-
         for i in bar:
-            if i.results and not force:
+            if force:
+                results = api._get_analysis_results(i, raise_error=False)
+                api.patch_instance("analyses", i.pk, results=results)
+            elif i.results and not force:
                 skipped.append(i)
                 continue
-
-            app_name = f"{i.application.name} {i.application.version}"
-            error_msg = f"\tFailed to patch {app_name}({i.pk}, {i.storage_url}):"
-
-            try:
-                application = import_from_string(i.application.application_class)()
-            except ImportError as error:
-                click.secho(f"{error_msg} cant import application class", fg="red")
-                continue
-
-            if not i.storage_url:
-                application._patch_analysis(i)
-
-            try:
-                # just used to make sure the app results are patched
-                assert i.application.pk == application.primary_key
-                results = application._get_analysis_results(i)
-                api.patch_instance("analyses", i.pk, results=results)
-            except Exception as error:  # pylint: disable=broad-except
-                click.secho(f"{error_msg} {error}", fg="red")
-                print(traceback.format_exc())
 
     if skipped:
         click.echo(f"{len(skipped)} analyses had results, use --force to update...")
