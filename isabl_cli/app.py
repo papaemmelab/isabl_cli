@@ -571,7 +571,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     continue
 
                 try:
-                    inputs = i.pop("application_inputs")
+                    inputs = i.pop(
+                        "application_inputs",
+                        self._get_dependencies(i.targets, i.references),
+                    )
+
                     command = self.get_command(i, inputs, self.settings)
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
