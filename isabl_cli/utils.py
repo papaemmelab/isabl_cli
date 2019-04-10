@@ -18,6 +18,7 @@ def get_results(
     targets=None,
     references=None,
     analyses=None,
+    status="SUCCEEDED",
 ):
     """
     Match results from a experiment object.
@@ -34,6 +35,7 @@ def get_results(
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
+        status (str): expected analysis status.
 
     Returns:
         list: of tuples (result_value, analysis primary key).
@@ -57,10 +59,16 @@ def get_results(
             results_dict = i if result_key == "storage_url" else i.results
             result = results_dict.get(result_key)
             results.append((result, i.pk))
+
             assert result_key in results_dict, (
                 f"Result '{result_key}' not found for analysis {i.pk}"
                 f"({i.application.name} {i.application.version}) "
                 f"with status: {i.status}"
+            )
+
+            assert i.status == status if status else True, (
+                f"Expected status '{status}' for result '{result_key}' did not match: "
+                f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
             )
 
     return results
@@ -68,7 +76,7 @@ def get_results(
 
 def get_result(*args, **kwargs):
     """
-    See get_experiments_results for full signature.
+    See get_results for full signature.
 
     Returns:
         tuple: result value, analysis pk that produced the result
