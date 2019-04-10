@@ -153,7 +153,9 @@ NORMAL_TARGETS = click.option(
     help="API filters for NORMAL target experiments",
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: _get_experiments(i + ("sample__sample_class", "NORMAL")),
+    callback=lambda _, __, i: _get_experiments(
+        list(i) + [("sample__sample_class", "NORMAL")]
+    ),
     required=True,
 )
 
