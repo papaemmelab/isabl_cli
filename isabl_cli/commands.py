@@ -77,12 +77,11 @@ def patch_results(filters, force):
         label="Patching analyses...",
     ) as bar:
         for i in bar:
-            if force:
+            if force or not i.results:
                 results = api._get_analysis_results(i, raise_error=False)
                 api.patch_instance("analyses", i.pk, results=results)
-            elif i.results and not force:
+            else:
                 skipped.append(i)
-                continue
 
     if skipped:
         click.echo(f"{len(skipped)} analyses had results, use --force to update...")
