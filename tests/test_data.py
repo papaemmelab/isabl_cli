@@ -31,7 +31,7 @@ def test__make_storage_directory(tmpdir):
 def test_import_reference_data(tmpdir):
     data_storage_directory = tmpdir.mkdir("data_storage_directory")
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = str(data_storage_directory)
-    assembly_name = uuid.uuid4().hex
+    assembly_name = str(uuid.uuid4())
     species = "HUMAN"
     reference_test = tmpdir.join("test.fasta")
     reference_test.write("foo")

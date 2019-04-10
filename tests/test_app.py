@@ -292,6 +292,12 @@ def test_engine(tmpdir):
     with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
         assert "successfully restarted" in f.read()
 
+    TestApplication.cli_allow_force = False
+    TestApplication.cli_allow_restart = False
+    result = runner.invoke(TestApplication.as_cli_command(), ["--help"])
+    assert "--force" not in result.output
+    assert "--restart" not in result.output
+
 
 def test_validate_is_pair():
     application = AbstractApplication()
