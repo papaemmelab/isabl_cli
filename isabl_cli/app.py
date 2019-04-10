@@ -47,6 +47,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     application_import_strings = {}
     cli_help = ""
     cli_options = []
+    cli_allow_force = True
+    cli_allow_restart = True
     skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED"}
     skip_exceptions = (
         click.UsageError,
@@ -432,6 +434,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             is_flag=True,
         )
 
+        cli_options = [  # pylint: disable=unused-variable
+            (quiet, True),
+            (commit, True),
+            (force, cls.cli_allow_force),
+            (restart, cls.cli_allow_restart),
+        ]
+
         def print_url(ctx, _, value):
             """Print the application url url."""
             if value:
@@ -452,9 +461,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             expose_value=False,
             callback=print_url,
         )
-        @utils.apply_decorators(pipe.cli_options + [commit, force, quiet, restart])
-        def command(commit, force, quiet, restart, **cli_options):
+        @utils.apply_decorators(pipe.cli_options + [i for i, j in cli_options if j])
+        def command(commit, quiet, **cli_options):
             """Click command to be used in the CLI."""
+            force = cli_options.pop("force", False)
+            restart = cli_options.pop("restart", False)
+
             if commit and force:
                 raise click.UsageError("--commit not required when using --force")
 
