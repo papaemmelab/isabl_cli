@@ -525,6 +525,7 @@ def patch_analysis_status(analysis, status):
 
     if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
+            analysis["status"] = status  # make sure that the analysis status is updated
             data["results"] = _get_analysis_results(analysis, raise_error=True)
         except Exception as error:  # pragma: no cover
             data["status"] = "FAILED"

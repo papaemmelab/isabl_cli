@@ -842,7 +842,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_bam(self, experiment):
         """Get experiment bam for application assembly."""
-        return experiment["bam_files"][self.ASSEMBLY]["url"]
+        try:
+            return experiment["bam_files"][self.ASSEMBLY]["url"]
+        except KeyError as error:
+            raise exceptions.ValidationError(
+                f"{experiment.system_id} has no registered bam for {self.ASSEMBLY}"
+            )
 
     def get_bams(self, experiments):
         """Get bams for multiple experiments."""
@@ -901,9 +906,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for i in experiments:
             try:
                 self.get_bam(i)
-            except KeyError:
-                sample = i["system_id"]
-                errors.append(f"{sample} has no registered bam for {assembly}")
+            except exceptions.ValidationError as error:
+                errors.append(error)
 
         if errors:
             raise exceptions.ValidationError("\n".join(errors))

@@ -617,8 +617,15 @@ class LocalDataImporter(BaseImporter):
                     for root, _, files in bar:
                         if not root.startswith(data_storage_dir):
                             for i in files:
+                                if len(patterns) > 500:
+                                    click.echo(
+                                        f"Matching {i} against "
+                                        f"{len(patterns)} experiments..."
+                                    )
+
                                 path = join(root, i)
                                 index = self.match_path(path, pattern)
+
                                 if index:
                                     cache[index]["files"].append(path)
 
