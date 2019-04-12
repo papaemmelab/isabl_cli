@@ -901,7 +901,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def validate_bams(self, experiments):
         """Raise error not all experiments have registered bams."""
         errors = []
-        assembly = self.ASSEMBLY
 
         for i in experiments:
             try:
@@ -910,7 +909,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 errors.append(error)
 
         if errors:
-            raise exceptions.ValidationError("\n".join(errors))
+            raise exceptions.ValidationError("\n".join(map(str, errors)))
 
     def validate_bedfiles(self, experiments, bedfile_type="targets"):
         """Raise error not all experiments have registered bedfile."""
