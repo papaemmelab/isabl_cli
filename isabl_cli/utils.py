@@ -81,7 +81,7 @@ def get_result(*args, **kwargs):
     Returns:
         tuple: result value, analysis pk that produced the result
     """
-    app_name = kwargs.pop("application_name") or kwargs.get("application_key")
+    app_name = kwargs.get("application_key")
     results = get_results(*args, **kwargs)
     assert results, f"No results found for application: {app_name}"
     assert len(results) == 1, f"Multiple results returned {results}"

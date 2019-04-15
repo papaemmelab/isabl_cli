@@ -140,7 +140,7 @@ def submit_lsf_array(
 
     # submit array of exit commands
     cmd = (
-        f'bsub -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
+        f'bsub -W 15 -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
         f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash '
     )
 
