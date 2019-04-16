@@ -74,14 +74,17 @@ def get_results(
     return results
 
 
-def get_result(*args, **kwargs):
+def get_result(application_name=None, *args, **kwargs):
     """
     See get_results for full signature.
+
+    Arguments:
+        application_name (str): app name to display a more explicit error.
 
     Returns:
         tuple: result value, analysis pk that produced the result
     """
-    app_name = kwargs.get("application_key")
+    app_name = application_name or kwargs.get("application_key")
     results = get_results(*args, **kwargs)
     assert results, f"No results found for application: {app_name}"
     assert len(results) == 1, f"Multiple results returned {results}"

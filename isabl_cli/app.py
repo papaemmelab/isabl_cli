@@ -769,7 +769,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             skipped_tuples (list): of (analysis, skip reason) tuples.
         """
         cols = ["IDENTIFIER", "PROJECTS", "TARGETS", "REFERENCES", "MESSAGE"]
-
         summary = ["\n", "\t".join(cols)]
         run_tuples.sort(key=lambda i: str(i[1]))
         invalid_tuples.sort(key=lambda i: str(i[1]))
@@ -888,7 +887,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         try:
             self.get_bam(experiment)
             return experiment
-        except KeyError:
+        except exceptions.ValidationError:
             pass
 
         return data.update_experiment_bam_file(
