@@ -74,7 +74,7 @@ def get_results(
     return results
 
 
-def get_result(application_name=None, *args, **kwargs):
+def get_result(*args, application_name=None, **kwargs):
     """
     See get_results for full signature.
 
