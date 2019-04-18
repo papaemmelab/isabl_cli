@@ -240,7 +240,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
             stdout_path = self.get_command_log_path(analysis)
             stderr_path = self.get_command_err_path(analysis)
-            oldmask = os.umask(0o22)
+
+            # make sure project level results are group writable
+            oldmask = os.umask(0o07)
 
             with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
                 with redirect_stdout(out), redirect_stderr(err):
