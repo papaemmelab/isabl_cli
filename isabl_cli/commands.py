@@ -207,7 +207,7 @@ def get_data(filters, identifiers, verbose):
             raise click.UsageError(f"No data for {system_id}, ignore with --verbose")
 
         for j in i["sequencing_data"] or ["None"]:
-            click.echo(j["file_url"] if not verbose else f"{system_id} {j}")
+            click.echo(j["file_url"] if not verbose else f"{system_id}\t{j}")
 
 
 @click.command()
@@ -255,9 +255,9 @@ def get_results(filters, identifiers, result_key, verbose):
     ):
         if result_key in i["results"]:
             result = i["results"][result_key]
-            click.echo(result if not verbose else f"{i['pk']} {result}")
+            click.echo(result if not verbose else f"{i['pk']}\t{result}")
         elif verbose:
-            click.echo(f"{i['pk']} - No result available")
+            click.echo(f"{i['pk']}\t- No result available")
         else:
             raise click.UsageError(
                 f"No '{result_key}' for {i['pk']}, ignore with --verbose"
@@ -286,7 +286,7 @@ def get_bams(filters, assembly, verbose, identifiers):
             bam_path = list(i["bam_files"].values())[0]["url"]
 
         if bam_path or verbose:
-            click.echo(bam_path if not verbose else f"{system_id} {bam_path}")
+            click.echo(bam_path if not verbose else f"{system_id}\t{bam_path}")
         elif not i["bam_files"]:
             raise click.UsageError(f"No bams for {system_id}, ignore with --verbose")
         else:
