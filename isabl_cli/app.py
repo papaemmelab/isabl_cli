@@ -532,6 +532,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # set restart attribute
         self.settings.restart = restart
 
+        # set force attribute
+        self.settings.force = force
+
         # update run arguments attribute
         self.settings.run_args = run_args or {}
 
