@@ -130,7 +130,7 @@ def trash_analysis_storage(analysis):
         slug += datetime.now(system_settings.TIME_ZONE).isoformat()
         dst = join(trash_dir, slug)
         click.echo(f"\ntrashing: {analysis['storage_url']} -> {dst}\n")
-        shutil.move(analysis["storage_url"], dst)
+        subprocess.check_call(["mv", analysis["storage_url"], dst])
 
 
 def _make_storage_directory(root, base, identifier, use_hash=False):
