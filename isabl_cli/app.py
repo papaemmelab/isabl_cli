@@ -1212,7 +1212,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         rtec = {i["technique"]["slug"] for i in references}
         assert len(rtec) == 1, f"Expected one technique, got: {rtec}"
         assert len(ttec) == 1, f"Expected one technique, got: {ttec}"
-        assert rtec == ttec, f"Same techniques required: {ttec}, {rtec}"
+        assert (
+            rtec == ttec
+        ), f"Same techniques required: {ttec}, {rtec}. Use --skip to run."
 
     def validate_species(self, experiments):
         """Validate experiments's species is same as application's setting."""

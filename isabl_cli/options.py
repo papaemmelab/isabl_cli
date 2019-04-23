@@ -311,6 +311,12 @@ RESTART = click.option(
     is_flag=True,
 )
 
+SKIP = click.option(
+    "--skip",
+    help="Run to skip validation of same panel technique for the pairs.",
+    is_flag=True,
+)
+
 
 def get_analyses_filters_option(application_classes=None, **defaults):
     """Get analyses filters with `defaults`."""
