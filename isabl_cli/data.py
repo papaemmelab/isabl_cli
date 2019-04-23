@@ -596,7 +596,9 @@ class LocalDataImporter(BaseImporter):
                     f"and {identifiers[identifier]}: {identifier}"
                 )
 
-            if identifier and not i["sequencing_data"]:
+            if i["sequencing_data"]:
+                using_id = f"{i['system_id']} (Skipped, experiment has data)"
+            elif identifier:
                 identifiers[identifier] = i["system_id"]
                 patterns.append(self.get_regex_pattern(index, identifier))
                 using_id = f"{i['system_id']} (using {identifier})"
