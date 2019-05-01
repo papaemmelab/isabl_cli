@@ -51,6 +51,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     cli_allow_restart = True
     skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED"}
     skip_exceptions = (
+        AssertionError,
         click.UsageError,
         exceptions.MissingRequirementError,
         exceptions.ConfigurationError,
