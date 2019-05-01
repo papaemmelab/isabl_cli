@@ -121,12 +121,12 @@ def trash_analysis_storage(analysis):
     if isdir(analysis["storage_url"]):
         trash_dir = system_settings.MAKE_STORAGE_DIRECTORY(
             root=system_settings.BASE_STORAGE_DIRECTORY,
-            base=".analyses_trash",
+            base=join(".analyses_trash", getuser()),
             identifier=analysis["pk"],
             use_hash=True,
         )
 
-        slug = f'primary_key_{analysis["pk"]}__user_{getuser()}__date_'
+        slug = f'primary_key_{analysis["pk"]}__date_'
         slug += datetime.now(system_settings.TIME_ZONE).isoformat()
         dst = join(trash_dir, slug)
         click.echo(f"\ntrashing: {analysis['storage_url']} -> {dst}\n")
