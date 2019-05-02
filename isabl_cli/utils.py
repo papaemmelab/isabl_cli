@@ -79,6 +79,8 @@ def get_result(*args, application_name=None, **kwargs):
     See get_results for full signature.
 
     Arguments:
+        args (list): see get_results.
+        kwargs (dict): see get_results.
         application_name (str): app name to display a more explicit error.
 
     Returns:

@@ -755,7 +755,7 @@ class LocalDataImporter(BaseImporter):
             identifier=instance["pk"],
             storage_url=instance["storage_url"],
             storage_usage=utils.get_tree_size(instance["storage_url"]),
-            sequencing_data=sequencing_data,
+            sequencing_data=sorted(sequencing_data, key=lambda i: i["file_url"]),
         )
 
     def format_fastq_name(self, file_name):

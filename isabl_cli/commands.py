@@ -8,7 +8,6 @@ import json
 import shutil
 import subprocess
 import tempfile
-import traceback
 
 import click
 
