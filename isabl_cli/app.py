@@ -849,7 +849,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Get experiment bam for application assembly."""
         try:
             return experiment["bam_files"][self.ASSEMBLY]["url"]
-        except KeyError as error:
+        except KeyError:
             raise exceptions.ValidationError(
                 f"{experiment.system_id} has no registered bam for {self.ASSEMBLY}"
             )
@@ -857,36 +857,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def get_bams(self, experiments):
         """Get bams for multiple experiments."""
         return [self.get_bam(i) for i in experiments]
-
-    def get_fastq(self, experiment):
-        """
-        Get experiment fastq R1 and R2 files.
-
-        Arguments:
-            experiment (dict): a experiment instance.
-
-        Raises:
-            MissingDataError: if number of R1 and R2 files is not the same.
-
-        Returns:
-            tuple: list of R1 fastq, list of R2.
-        """
-        read_1, read_2 = [], []
-
-        for i in experiment["sequencing_data"]:
-            if i["file_type"] == "FASTQ_R1":
-                read_1.append(i["file_url"])
-            elif i["file_type"] == "FASTQ_R2":
-                read_2.append(i["file_url"])
-
-        if read_2 and len(read_1) != len(read_2):
-            raise exceptions.MissingDataError(
-                f"The # of read 1 files ({len(read_1)}) "
-                f"and read 2 ({len(read_2)}) should be the same "
-                f"for RNA paired-end sequencing, found: {read_1 + read_2}"
-            )
-
-        return read_1, read_2
 
     def update_experiment_bam_file(self, experiment, bam_url, analysis_pk):
         """Update experiment default bam for assembly, ADMIN ONLY."""

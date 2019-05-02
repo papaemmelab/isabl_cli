@@ -20,6 +20,7 @@ import click
 import requests
 
 from isabl_cli import utils
+from isabl_cli import exceptions
 from isabl_cli.settings import import_from_string
 from isabl_cli.settings import system_settings
 from isabl_cli.settings import user_settings
@@ -66,7 +67,10 @@ class IsablDict(Munch):
 
     def __repr__(self):
         """Get a simple representation, Munch's is too long."""
-        identifier = getattr(self, "system_id", getattr(self, "pk", None))
+        identifier = getattr(
+            self, "system_id", getattr(self, "slug", getattr(self, "pk", None))
+        )
+
         return (
             f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
             if identifier
@@ -106,6 +110,33 @@ class Assembly(IsablDict):
 class Experiment(IsablDict):
 
     api_endpoint = "experiments"
+
+    def get_fastq(self):
+        """
+        Get experiment fastq R1 and R2 files.
+
+        Raises:
+            MissingDataError: if number of R1 and R2 files is not the same.
+
+        Returns:
+            tuple: list of R1 fastq, list of R2.
+        """
+        read_1, read_2 = [], []
+
+        for i in self.sequencing_data:
+            if i["file_type"] == "FASTQ_R1":
+                read_1.append(i["file_url"])
+            elif i["file_type"] == "FASTQ_R2":
+                read_2.append(i["file_url"])
+
+        if read_2 and len(read_1) != len(read_2):
+            raise exceptions.MissingDataError(
+                f"The # of read 1 files ({len(read_1)}) "
+                f"and read 2 ({len(read_2)}) should be the same "
+                f"for RNA paired-end sequencing, found: {read_1 + read_2}"
+            )
+
+        return sorted(read_1), sorted(read_2)
 
 
 def chunks(array, size):
