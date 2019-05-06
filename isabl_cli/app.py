@@ -649,6 +649,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if system_settings.is_admin_user and status == "SUCCEEDED":
             command += f" && chmod -R a-w {analysis['storage_url']}"
 
+        os.makedirs(outdir, exist_ok=True)
+
         with open(self.get_command_script_path(analysis), "w") as f:
             f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")
 
