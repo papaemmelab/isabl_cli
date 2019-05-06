@@ -55,9 +55,10 @@ def symlink_experiment_to_projects(experiment):
         if not i["storage_url"]:  # pragma: no cover
             i = update_storage_url("projects", i["pk"])
 
-        utils.force_symlink(
-            experiment["storage_url"], join(i["storage_url"], experiment["system_id"])
-        )
+        experiments_dir = join(i["storage_url"], "experiments")
+        experiment_dir = join(experiments_dir, experiment["system_id"])
+        os.makedirs(experiments_dir, exist_ok=True)
+        utils.force_symlink(experiment["storage_url"], experiment_dir)
 
 
 def symlink_analysis_to_targets(analysis):
@@ -77,13 +78,19 @@ def symlink_analysis_to_targets(analysis):
     for i in analysis["targets"]:
         if not i["storage_url"]:  # pragma: no cover
             i = update_storage_url("experiments", i["pk"])
-        utils.force_symlink(src, join(i["storage_url"], dst))
+
+        analyses_dir = join(i["storage_url"], "analyses")
+        os.makedirs(analyses_dir, exist_ok=True)
+        utils.force_symlink(src, join(analyses_dir, dst))
 
     if analysis["project_level_analysis"]:
         i = analysis["project_level_analysis"]
         if not i["storage_url"]:
             i = update_storage_url("projects", i["pk"])
-        utils.force_symlink(src, join(i["storage_url"], dst))
+
+        analyses_dir = join(i["storage_url"], "analyses")
+        os.makedirs(analyses_dir, exist_ok=True)
+        utils.force_symlink(src, join(analyses_dir, dst))
 
 
 def trigger_analyses_merge(analysis):
