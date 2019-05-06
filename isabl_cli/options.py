@@ -201,7 +201,7 @@ PAIR = click.option(
     show_default=True,
     type=(str, str),
     callback=lambda _, __, i: validators.validate_pairs([i]),
-    help="Pass one tumor normal pair identifiers (e.g. -tn 1 2).",
+    help="Pass one tumor normal pair identifiers (e.g. -p 1 2).",
 )
 
 PAIRS = click.option(
@@ -211,7 +211,7 @@ PAIRS = click.option(
     type=(str, str),
     multiple=True,
     callback=lambda _, __, i: validators.validate_pairs(i),
-    help="Pass one or more tumor normal pairs (e.g. -tn 1 2 -tn 3 4).",
+    help="Pass one or more tumor normal pairs (e.g. -p 1 2 -p 3 4).",
 )
 
 PAIRS_FROM_FILE = click.option(
