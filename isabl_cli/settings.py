@@ -191,6 +191,10 @@ class SystemSettings(BaseSettings):
         """Return dictionary system with settings."""
         from isabl_cli.api import api_request
 
+        if os.environ.get("ISABL_CLIENT_ID"):
+            url = f"/clients/{os.environ.get('ISABL_CLIENT_ID')}"
+            return api_request("get", url).json()["settings"]
+
         return api_request("get", "/client/settings/", authenticate=False).json()
 
 
