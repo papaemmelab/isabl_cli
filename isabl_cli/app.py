@@ -37,6 +37,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     # optional application info
     URL = None
+    STAGED_MSG = "READY FOR SUBMISSION"
 
     # application configuration
     application_description = ""
@@ -604,8 +605,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             click.echo("Running analyses...")
             run_tuples = self.settings.submit_analyses(self, command_tuples)
         else:
-            run_tuples = [(i, "STAGED") for i, _ in command_tuples]
-            api.patch_analyses_status([i for i, _ in command_tuples], "STAGED")
+            run_tuples = [(i, self.STAGED_MSG) for i, _ in command_tuples]
 
         return run_tuples, skipped_tuples
 
@@ -766,8 +766,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             ]
         )
 
-    @staticmethod
-    def echo_run_summary(run_tuples, skipped_tuples, invalid_tuples):
+    def echo_run_summary(self, run_tuples, skipped_tuples, invalid_tuples):
         """
         Echo errors for error tuples such as `invalid`, `cant_run`.
 
@@ -797,7 +796,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 color = "yellow"
             elif msg == "SUBMITTED":
                 color = "cyan"
-            elif msg == "STAGED":
+            elif msg == self.STAGED_MSG:
                 color = "magenta"
                 blink = True
 
