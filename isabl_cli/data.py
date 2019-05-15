@@ -668,7 +668,7 @@ class LocalDataImporter(BaseImporter):
             valid = True if re.search(self.BAM_REGEX, path) else False
             valid |= True if re.search(self.CRAM_REGEX, path) else False
 
-            for i in [1, 2]:
+            for i in [1, 2, "I"]:
                 if re.search(self.FASTQ_REGEX.format(i), path):
                     valid = True
 
@@ -722,7 +722,7 @@ class LocalDataImporter(BaseImporter):
                 file_type = "CRAM"
                 dtypes.add(file_type)
             else:
-                file_name, file_type = self.format_fastq_name(file_name)
+                file_type = self.get_fastq_type(file_name)
                 dtypes.add("FASTQ")
 
             # make sure there are no duplicate file names
@@ -765,26 +765,13 @@ class LocalDataImporter(BaseImporter):
             sequencing_data=sorted(sequencing_data, key=lambda i: i["file_url"]),
         )
 
-    def format_fastq_name(self, file_name):
+    def get_fastq_type(self, file_name):
         """Return destination file name."""
-        suffix = None
-        index = 1
-
-        for index in [1, 2]:
-            file_type = f"FASTQ_R{index}"
-
+        for index in [1, 2, "I"]:
             if re.search(self.FASTQ_REGEX.format(index), file_name):
-                suffix = f"_{system_settings.FASTQ_READ_SUFFIX}{index}.fastq"
-                break
+                return f"FASTQ_R{index}"
 
-        assert suffix, f"Couldn't determine read 1 or read 2 from {file_name}"
-        letter_index_fastq = r"[_.]R{}([_.])?\.f(ast)?q".format(index)
-        number_index_fastq = r"[_.]{}([_.])?\.f(ast)?q".format(index)
-        letter_index_any_location = r"[_.]R{}[_.]".format(index)
-        file_name = re.sub(letter_index_fastq, ".fastq", file_name)
-        file_name = re.sub(number_index_fastq, ".fastq", file_name)
-        file_name = re.sub(letter_index_any_location, "_", file_name)
-        return re.sub(r"[_.]f(ast)?q", suffix, file_name), file_type
+        raise AssertionError(f"Couldn't determine R1, R2 or RI from {file_name}")
 
     @staticmethod
     def get_regex_pattern(group_name, identifier):

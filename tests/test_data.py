@@ -257,13 +257,13 @@ def test_get_dst():
     bam_test = ["sample.bam"]
     cram_test = ["sample.cram"]
     fastq_test = [
-        ("sample_R{}_moretext", "sample_moretext_{}"),
-        ("sample_R{}_", "sample_{}"),
-        ("sample_R{}", "sample_{}"),
-        ("sample.R{}.more_text", "sample_more_text_{}"),
-        ("sample.R{}.", "sample_{}"),
-        ("sample.R{}", "sample_{}"),
-        ("sample_{}", "sample_{}"),
+        "sample_R{}_moretext",
+        "sample_R{}_",
+        "sample_R{}",
+        "sample.R{}.more_text",
+        "sample.R{}.",
+        "sample.R{}",
+        "sample_{}",
     ]
 
     for i in bam_test:
@@ -274,11 +274,12 @@ def test_get_dst():
         assert re.search(importer.CRAM_REGEX, i)
         assert not re.search(importer.CRAM_REGEX, i + "not a cram")
 
-    for test, expected in fastq_test:
-        for index in [1, 2]:
+    for test in fastq_test:
+        for index in [1, 2, "I"]:
             for fastq in [".fastq", ".fq"]:
                 for gzipped in ["", ".gz"]:
-                    path = test.format(index) + fastq + gzipped
-                    obtained, file_type = importer.format_fastq_name(path)
+                    file_type = importer.get_fastq_type(
+                        test.format(index) + fastq + gzipped
+                    )
                     assert file_type == f"FASTQ_R{index}"
-                    assert obtained == expected.format(index) + ".fastq" + gzipped
+
