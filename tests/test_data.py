@@ -264,7 +264,7 @@ def test_get_dst():
         ("sample.R{}.", "R"),
         ("sample.R{}", "R"),
         ("sample_{}", "R"),
-        ("sample_I{}_", "I"),
+        ("sample_S1_L001_I{}_001", "I"),
     ]
 
     for i in bam_test:
