@@ -157,7 +157,7 @@ def test_local_data_import(tmpdir):
         importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
 
     path_1.remove()
-    assert "cant determine if read 1 or read 2" in str(error.value)
+    assert "cant determine fastq type from" in str(error.value)
 
     path_1 = tmpdir.join(f'{experiments[0]["system_id"]}_R1_foo.fastq')
     path_2 = tmpdir.join(f'{experiments[0]["system_id"]}_R2_foo.fastq')
@@ -257,13 +257,14 @@ def test_get_dst():
     bam_test = ["sample.bam"]
     cram_test = ["sample.cram"]
     fastq_test = [
-        "sample_R{}_moretext",
-        "sample_R{}_",
-        "sample_R{}",
-        "sample.R{}.more_text",
-        "sample.R{}.",
-        "sample.R{}",
-        "sample_{}",
+        ("sample_R{}_moretext", "R"),
+        ("sample_R{}_", "R"),
+        ("sample_R{}", "R"),
+        ("sample.R{}.more_text", "R"),
+        ("sample.R{}.", "R"),
+        ("sample.R{}", "R"),
+        ("sample_{}", "R"),
+        ("sample_I{}_", "I"),
     ]
 
     for i in bam_test:
@@ -274,12 +275,12 @@ def test_get_dst():
         assert re.search(importer.CRAM_REGEX, i)
         assert not re.search(importer.CRAM_REGEX, i + "not a cram")
 
-    for test in fastq_test:
-        for index in [1, 2, "I"]:
+    for test, fq_type in fastq_test:
+        for index in [1, 2]:
             for fastq in [".fastq", ".fq"]:
                 for gzipped in ["", ".gz"]:
                     file_type = importer.get_fastq_type(
                         test.format(index) + fastq + gzipped
                     )
-                    assert file_type == f"FASTQ_R{index}"
+                    assert file_type == f"FASTQ_{fq_type}{index}"
 

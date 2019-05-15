@@ -544,7 +544,10 @@ class LocalDataImporter(BaseImporter):
 
     BAM_REGEX = r"\.bam$"
     CRAM_REGEX = r"\.cram$"
-    FASTQ_REGEX = r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$"
+    FASTQ_REGEX = (
+        (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
+        (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
+    )
 
     def import_data(
         self,
@@ -668,12 +671,13 @@ class LocalDataImporter(BaseImporter):
             valid = True if re.search(self.BAM_REGEX, path) else False
             valid |= True if re.search(self.CRAM_REGEX, path) else False
 
-            for i in [1, 2, "I"]:
-                if re.search(self.FASTQ_REGEX.format(i), path):
-                    valid = True
+            for i in [1, 2]:
+                for j, _ in self.FASTQ_REGEX:
+                    if re.search(j.format(i), path):
+                        valid = True
 
             if re.search(r"\.f(ast)?q(\.gz)?$", path) and not valid:
-                msg = f"cant determine if read 1 or read 2 from: {path}"
+                msg = f"cant determine fastq type from: {path}"
                 raise click.UsageError(msg)
 
             assert valid
@@ -767,11 +771,12 @@ class LocalDataImporter(BaseImporter):
 
     def get_fastq_type(self, file_name):
         """Return destination file name."""
-        for index in [1, 2, "I"]:
-            if re.search(self.FASTQ_REGEX.format(index), file_name):
-                return f"FASTQ_R{index}"
+        for index in [1, 2]:
+            for pattern, fq_type in self.FASTQ_REGEX:
+                if re.search(pattern.format(index), file_name):
+                    return f"FASTQ_{fq_type}{index}"
 
-        raise AssertionError(f"Couldn't determine R1, R2 or RI from {file_name}")
+        raise AssertionError(f"Couldn't determine R1, R2 or I1 from {file_name}")
 
     @staticmethod
     def get_regex_pattern(group_name, identifier):
