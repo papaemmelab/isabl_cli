@@ -41,6 +41,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     STAGED_MSG = "READY FOR SUBMISSION"
 
     # application configuration
+    application_protect_results = True
     application_description = ""
     application_inputs = {}
     application_results = {}
@@ -788,6 +789,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         # check status, if not run by admin will be marked as succeeded later
         outdir = analysis["storage_url"]
+        os.makedirs(outdir, exist_ok=True)
         status = self.get_after_completion_status(analysis)
         assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
 
@@ -808,11 +810,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f" && (chgrp -R {system_settings.DEFAULT_LINUX_GROUP}"
                 f" {outdir} &> /dev/null || echo chgrp failed)"
             )
-
-        if system_settings.is_admin_user and status == "SUCCEEDED":
-            command += f" && chmod -R a-w {analysis['storage_url']}"
-
-        os.makedirs(outdir, exist_ok=True)
 
         with open(self.get_command_script_path(analysis), "w") as f:
             f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")

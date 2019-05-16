@@ -551,13 +551,7 @@ def patch_analysis_status(analysis, status):
     if status == "SUCCEEDED" and not (
         analysis["project_level_analysis"] or analysis["individual_level_analysis"]
     ):
-        utils.check_admin()
-
-        if analysis["ran_by"] != system_settings.api_username:
-            src = storage_url + "__tmp"
-            shutil.move(storage_url, src)
-            cmd = utils.get_rsync_command(src, storage_url, chmod="a-w")
-            subprocess.check_call(cmd, shell=True)
+        _protect_analysis_results(analysis)
 
     if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
@@ -569,6 +563,24 @@ def patch_analysis_status(analysis, status):
             raise error
 
     return patch_instance("analyses", analysis["pk"], **data)
+
+
+def _protect_analysis_results(analysis):
+    try:
+        utils.check_admin()
+        application = import_from_string(analysis.application.application_class)()
+        protect_results = application.application_protect_results
+    except ImportError:
+        protect_results = True
+
+    if analysis.ran_by != system_settings.api_username and protect_results:
+        src = analysis.storage_url + "__tmp"
+        shutil.move(analysis.storage_url, src)
+        cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
+        subprocess.check_call(cmd, shell=True)
+    elif protect_results:
+        cmd = ["chmod", "-R", "a-w", analysis.storage_url]
+        subprocess.check_call(cmd, shell=True)
 
 
 def _get_analysis_results(analysis, raise_error=True):
