@@ -548,7 +548,9 @@ def patch_analysis_status(analysis, status):
         data["ran_by"] = system_settings.api_username
 
     # admin must own directory of regular analyses
-    if status == "SUCCEEDED" and not analysis["project_level_analysis"]:
+    if status == "SUCCEEDED" and not (
+        analysis["project_level_analysis"] or analysis["individual_level_analysis"]
+    ):
         utils.check_admin()
 
         if analysis["ran_by"] != system_settings.api_username:
@@ -586,10 +588,15 @@ def _get_analysis_results(analysis, raise_error=True):
 
     try:
         # just used to make sure the app results are patched
-        assert analysis.application.pk == (
-            application.project_level_application.pk
-            if analysis.project_level_analysis
-            else application.primary_key
+        if analysis.project_level_analysis:
+            expected_app = application.project_level_application.pk
+        elif analysis.individual_level_analysis:
+            expected_app = application.individual_level_application.pk
+        else:
+            expected_app = application.primary_key
+
+        assert (
+            analysis.application.pk == expected_app
         ), f"{app_name} does not match: {analysis.application.application_class}"
 
         results = application._get_analysis_results(analysis)

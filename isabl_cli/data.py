@@ -103,21 +103,35 @@ def trigger_analyses_merge(analysis):
     except ImportError:
         return
 
-    if hasattr(application.merge_project_analyses, "__isabstractmethod__"):
-        return  # pragma: no cover
+    if not hasattr(application.merge_project_analyses, "__isabstractmethod__"):
+        projects = {j["pk"]: j for i in analysis["targets"] for j in i["projects"]}
 
-    projects = {j["pk"]: j for i in analysis["targets"] for j in i["projects"]}
+        for i in projects.values():
+            pending = api.get_instances_count(
+                endpoint="analyses",
+                status__in="STARTED,SUBMITTED",
+                application=analysis["application"]["pk"],
+                projects=i["pk"],
+            )
 
-    for i in projects.values():
-        pending = api.get_instances_count(
-            endpoint="analyses",
-            status__in="STARTED,SUBMITTED",
-            application=analysis["application"]["pk"],
-            projects=i["pk"],
-        )
+            if not pending:
+                application.submit_project_merge(i)
 
-        if not pending:
-            application.submit_project_merge(i)
+    if not hasattr(application.merge_individual_analyses, "__isabstractmethod__"):
+        individuals = {
+            i.sample.individual.pk: i.sample.individual for i in analysis["targets"]
+        }
+
+        for i in individuals.values():
+            pending = api.get_instances_count(
+                endpoint="analyses",
+                status__in="STARTED,SUBMITTED",
+                application=analysis["application"]["pk"],
+                targets__sample__individual__pk=i.pk,
+            )
+
+            if not pending:
+                application.submit_individual_merge(i)
 
 
 def trash_analysis_storage(analysis):

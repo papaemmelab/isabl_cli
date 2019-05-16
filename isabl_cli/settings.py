@@ -35,6 +35,7 @@ _DEFAULTS = {
         "isabl_cli.data.symlink_analysis_to_targets",
         "isabl_cli.data.trigger_analyses_merge",
     ],
+    "SUBMIT_INDIVIDUAL_LEVEL_MERGE": None,
     "SUBMIT_PROJECT_LEVEL_MERGE": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
@@ -53,6 +54,7 @@ _DEFAULTS = {
         "isabl_cli.commands.get_results",
         "isabl_cli.commands.login",
         "isabl_cli.commands.merge_project_analyses",
+        "isabl_cli.commands.merge_individual_analyses",
         "isabl_cli.commands.patch_status",
     ],
 }

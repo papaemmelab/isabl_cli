@@ -44,11 +44,22 @@ def login():  # pragma: no cover
 @click.option("--project", help="primary key of project to merge by", type=int)
 @click.option("--application", help="analyses application primary key", type=int)
 def merge_project_analyses(project, application):  # pragma: no cover
-    """Merge analyses by project primary key."""
+    """Merge analyses by project."""
     project = api.get_instance("projects", project)
     application = api.get_instance("applications", application)
     application = import_from_string(application["application_class"])()
     application.run_project_merge(project)
+
+
+@click.command()
+@click.option("--individual", help="primary key of individual to merge by", type=int)
+@click.option("--application", help="analyses application primary key", type=int)
+def merge_individual_analyses(individual, application):  # pragma: no cover
+    """Merge analyses by individual."""
+    individual = api.get_instance("individuals", individual)
+    application = api.get_instance("applications", application)
+    application = import_from_string(application["application_class"])()
+    application.run_individual_merge(individual)
 
 
 @click.command()

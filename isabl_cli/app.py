@@ -44,6 +44,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     application_inputs = {}
     application_results = {}
     application_project_level_results = {}
+    application_individual_level_results = {}
     application_settings = {}
     application_import_strings = {}
     cli_help = ""
@@ -147,9 +148,49 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         raise NotImplementedError()
 
-    # -----------------------------
-    # USER OPTIONAL IMPLEMENTATIONS
-    # -----------------------------
+    # ------------------------
+    # OPTIONAL IMPLEMENTATIONS
+    # ------------------------
+
+    def get_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
+        """
+        Get dictionary of analysis results.
+
+        This function is run on completion.
+
+        Arguments:
+            analysis (dict): succeeded analysis instance.
+
+        Returns:
+            dict: a jsonable dictionary.
+        """
+        return {}  # pragma: no cover
+
+    def get_after_completion_status(self, analysis):  # pylint: disable=W0613
+        """Possible values are FINISHED and IN_PROGRESS."""
+        return "FINISHED"
+
+    def validate_settings(self, settings):
+        """Validate settings."""
+        return
+
+    # --------------------------------------
+    # PROJECT LEVEL OPTIONAL IMPLEMENTATIONS
+    # --------------------------------------
+
+    def get_project_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
+        """
+        Get dictionary of results for a project level analysis.
+
+        This function is run on completion.
+
+        Arguments:
+            analysis (dict): succeeded analysis instance.
+
+        Returns:
+            dict: a jsonable dictionary.
+        """
+        return {}  # pragma: no cover
 
     @abc.abstractmethod  # add __isabstractmethod__ property to method
     def merge_project_analyses(self, analysis, analyses):
@@ -170,9 +211,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Raise AssertionError if project level analysis logic shouldn't happen."""
         return
 
-    def get_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
+    # --------------------------------------
+    # INDIVIDUAL LEVEL OPTIONAL IMPLEMENTATIONS
+    # --------------------------------------
+
+    def get_individual_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
         """
-        Get dictionary of analysis results.
+        Get dictionary of results for a individual level analysis.
 
         This function is run on completion.
 
@@ -184,31 +229,90 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         return {}  # pragma: no cover
 
-    def get_project_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
+    @abc.abstractmethod  # add __isabstractmethod__ property to method
+    def merge_individual_analyses(self, analysis, analyses):
         """
-        Get dictionary of results for a project level analysis.
+        Merge analyses on a individual level basis.
 
-        This function is run on completion.
+        If implemented, a new individual level analyses will be created. This
+        function will only be called if no other analysis of the same
+        application is currently running or submitted.
 
         Arguments:
-            analysis (dict): succeeded analysis instance.
-
-        Returns:
-            dict: a jsonable dictionary.
+            analysis (dict): the individual level analysis.
+            analyses (list): list of succeeded analyses instances.
         """
-        return {}  # pragma: no cover
+        raise NotImplementedError("No merging logic available!")
 
-    def get_after_completion_status(self, analysis):  # pylint: disable=W0613
-        """Possible values are FINISHED and IN_PROGRESS."""
-        return "FINISHED"
-
-    def validate_settings(self, settings):
-        """Validate settings."""
+    def validate_individual_analyses(self, individual, analyses):
+        """Raise AssertionError if individual level analysis logic shouldn't happen."""
         return
 
     # ----------------------
     # MERGE BY PROJECT LOGIC
     # ----------------------
+
+    def _run_analyses_merge(self, instance, analyses):
+        merge_analyses = self.merge_project_analyses
+        validate_analyses = self.validate_project_analyses
+        get_analysis = self.get_project_level_analysis
+        cli_command = (
+            f"isabl merge-project-analyses --project {instance['pk']} "
+            f"--application {self.primary_key}\n"
+        )
+
+        if "species" in instance:
+            merge_analyses = self.merge_individual_analyses
+            validate_analyses = self.validate_individual_analyses
+            get_analysis = self.get_individual_level_analysis
+            cli_command = (
+                f"isabl merge-individual-analyses --individual {instance['pk']} "
+                f"--application {self.primary_key}\n"
+            )
+
+        if not analyses:
+            return
+
+        try:
+            validate_analyses(instance, analyses)
+            analysis = get_analysis(instance, patch=True)
+        except AssertionError as error:
+            click.echo(f"Analysis not created, validation failed: {error}")
+            return
+
+        try:
+            # raise error if can't write in directory
+            with open(self.get_command_script_path(analysis), "w") as f:
+                f.write(cli_command)
+        except PermissionError as error:
+            api.patch_analysis_status(analysis, "FAILED")
+            raise error
+
+        # make sure merge level analyses are group writable
+        oldmask = os.umask(0o07)
+        stdout_path = self.get_command_log_path(analysis)
+        stderr_path = self.get_command_err_path(analysis)
+        error = None
+
+        with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
+            with redirect_stdout(out), redirect_stderr(err):
+                try:
+                    # TODO: setting to submitted here temporarily, will fix later
+                    api.patch_analysis_status(analysis, "SUBMITTED")
+                    api.patch_analysis_status(analysis, "STARTED")
+                    merge_analyses(analysis, analyses)
+                    api.patch_analysis_status(analysis, "SUCCEEDED")
+                except Exception as e:  # pragma: no cover pylint: disable=W0703
+                    print(traceback.format_exc())
+                    click.echo(traceback.format_exc(), file=sys.stderr)
+                    click.echo(e, file=sys.stderr)
+                    api.patch_analysis_status(analysis, "FAILED")
+                    error = e
+
+        api.patch_instance("analyses", analysis.pk, data=analysis.data)
+        os.umask(oldmask)
+        if error is not None:
+            raise Exception(error)
 
     def run_project_merge(self, project):
         """
@@ -217,52 +321,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             project (dict): project instance.
         """
-        analyses = api.get_instances(
-            endpoint="analyses",
-            application=self.application["pk"],
-            projects=project["pk"],
-            status="SUCCEEDED",
+        self._run_analyses_merge(
+            project,
+            api.get_instances(
+                endpoint="analyses",
+                application=self.application["pk"],
+                projects=project["pk"],
+                status="SUCCEEDED",
+            ),
         )
-
-        if analyses:
-            error = None
-
-            try:
-                self.validate_project_analyses(project, analyses)
-                analysis = self.get_project_analysis(project, patch=True)
-            except AssertionError as error:
-                click.echo(f"Project analysis not created, validation failed: {error}")
-                return
-
-            with open(self.get_command_script_path(analysis), "w") as f:
-                f.write(
-                    f"isabl merge-project-analyses --project {project['pk']} "
-                    f"--application {self.primary_key}\n"
-                )
-
-            stdout_path = self.get_command_log_path(analysis)
-            stderr_path = self.get_command_err_path(analysis)
-
-            # make sure project level results are group writable
-            oldmask = os.umask(0o07)
-
-            with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
-                with redirect_stdout(out), redirect_stderr(err):
-                    try:
-                        # TODO: setting to submitted here temporarily, will fix later
-                        api.patch_analysis_status(analysis, "SUBMITTED")
-                        api.patch_analysis_status(analysis, "STARTED")
-                        self.merge_project_analyses(analysis, analyses)
-                        api.patch_analysis_status(analysis, "SUCCEEDED")
-                    except Exception as e:  # pragma: no cover pylint: disable=W0703
-                        print(traceback.format_exc())
-                        click.echo(e, file=sys.stderr)
-                        api.patch_analysis_status(analysis, "FAILED")
-                        error = e
-
-            os.umask(oldmask)
-            if error is not None:
-                raise Exception(error)
 
     def submit_project_merge(self, project):
         """
@@ -281,7 +348,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             self.run_project_merge(project)
 
-    def get_project_analysis(self, project, patch=False):
+    def get_project_level_analysis(self, project, patch=False):
         """
         Get or create project level analysis.
 
@@ -296,6 +363,63 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             endpoint="analyses",
             project_level_analysis=project,
             application=self.project_level_application,
+        )
+
+        return self._patch_analysis(analysis) if patch else analysis
+
+    # -------------------------
+    # MERGE BY INDIVIDUAL LOGIC
+    # -------------------------
+
+    def run_individual_merge(self, individual):
+        """
+        Merge analyses on a individual level basis.
+
+        Arguments:
+            individual (dict): individual instance.
+        """
+        self._run_analyses_merge(
+            individual,
+            api.get_instances(
+                endpoint="analyses",
+                application=self.application["pk"],
+                targets__sample__individual__pk=individual["pk"],
+                status="SUCCEEDED",
+            ),
+        )
+
+    def submit_individual_merge(self, individual):
+        """
+        Directly call `merge_individual_analyses` unless SUBMIT_INDIVIDUAL_LEVEL_MERGE.
+
+        Use setting SUBMIT_INDIVIDUAL_LEVEL_MERGE to submit the merge work with custom
+        logic, for instance by using LSF with `bsub isabl merge-individual-analyses`.
+
+        Arguments:
+            individual (dict): a individual instance.
+        """
+        if system_settings.SUBMIT_INDIVIDUAL_LEVEL_MERGE:
+            system_settings.SUBMIT_INDIVIDUAL_LEVEL_MERGE(
+                individual=individual, application=self
+            )
+        else:
+            self.run_individual_merge(individual)
+
+    def get_individual_level_analysis(self, individual, patch=False):
+        """
+        Get or create individual level analysis.
+
+        Arguments:
+            individual (dict): individual instance.
+            patch (dict): whether or not results and storage_url should be patched.
+
+        Returns:
+            dict: analysis instance.
+        """
+        analysis = api.create_instance(
+            endpoint="analyses",
+            individual_level_analysis=individual,
+            application=self.individual_level_application,
         )
 
         return self._patch_analysis(analysis) if patch else analysis
@@ -346,17 +470,36 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
         )
 
-        return (
-            application
-            if not system_settings.is_admin_user
-            else api.patch_instance(
-                description=self.application_description,
-                endpoint="applications",
-                identifier=application["pk"],
-                application_class=f"{self.__module__}.{self.__class__.__name__}",
-                results=self._application_results,
-                url=self.URL,
-            )
+        return api.patch_instance(
+            description=self.application_description,
+            endpoint="applications",
+            identifier=application["pk"],
+            application_class=f"{self.__module__}.{self.__class__.__name__}",
+            results=self._application_results,
+            url=self.URL,
+        )
+
+    @cached_property
+    def individual_level_application(self):
+        """Get or create an individual level application database object."""
+        assert not hasattr(
+            self.merge_individual_analyses, "__isabstractmethod__"
+        ), "No logic implemented to merge analyses for an individual..."
+
+        application = api.create_instance(
+            endpoint="applications",
+            name=f"{self.NAME} Individual Application",
+            version=self.VERSION,
+            assembly=self.application["assembly"],
+        )
+
+        return api.patch_instance(
+            description=f"{self.NAME} {self.VERSION} Individual Level Application.",
+            endpoint="applications",
+            identifier=application["pk"],
+            results=self._application_individual_level_results,
+            application_class=self.application["application_class"],
+            url=self.URL,
         )
 
     @cached_property
@@ -373,17 +516,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly=self.application["assembly"],
         )
 
-        return (
-            application
-            if not system_settings.is_admin_user
-            else api.patch_instance(
-                description=f"{self.NAME} {self.VERSION} Project Level Application.",
-                endpoint="applications",
-                identifier=application["pk"],
-                results=self._application_project_level_results,
-                application_class=self.application["application_class"],
-                url=self.URL,
-            )
+        return api.patch_instance(
+            description=f"{self.NAME} {self.VERSION} Project Level Application.",
+            endpoint="applications",
+            identifier=application["pk"],
+            results=self._application_project_level_results,
+            application_class=self.application["application_class"],
+            url=self.URL,
         )
 
     @cached_property
@@ -400,6 +539,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @property
     def _application_project_level_results(self):
         ret = self.application_project_level_results
+        ret.update(self._base_results)
+        return ret
+
+    @property
+    def _application_individual_level_results(self):
+        ret = self.application_individual_level_results
         ret.update(self._base_results)
         return ret
 
@@ -689,6 +834,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if analysis["project_level_analysis"]:
             specification = self.application_project_level_results
             get_results = self.get_project_analysis_results
+        elif analysis["individual_level_analysis"]:
+            specification = self.application_individual_level_results
+            get_results = self.get_individual_analysis_results
         else:
             specification = self.application_results
             get_results = self.get_analysis_results
@@ -734,6 +882,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assert self.project_level_application
             click.secho(
                 "\tSuccessfully updated project level application.\n", fg="magenta"
+            )
+
+        # create or update individual level application
+        if not hasattr(self.merge_individual_analyses, "__isabstractmethod__"):
+            assert self.individual_level_application
+            click.secho(
+                "\tSuccessfully updated individual level application.\n", fg="magenta"
             )
 
     @staticmethod
