@@ -44,6 +44,14 @@ class TestApplication(AbstractApplication):
         }
     }
 
+    application_individual_level_results = {
+        "individual_result_key": {
+            "frontend_type": "text-file",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
+
     def get_experiments_from_cli_options(self, targets):
         return [([i], []) for i in targets]
 
@@ -75,6 +83,13 @@ class TestApplication(AbstractApplication):
         with open(join(analysis["storage_url"], "test.merge"), "w") as f:
             f.write(str(len(analyses)))
 
+    def merge_individual_analyses(self, analysis, analyses):
+        try:
+            with open(join(analysis["storage_url"], "test.merge"), "w") as f:
+                f.write(str(len(analyses)))
+        except:
+            pass
+
     def get_analysis_results(self, analysis):
         return {"analysis_result_key": 1}
 
@@ -82,6 +97,11 @@ class TestApplication(AbstractApplication):
         # please note that ipdb wont work here as this function will
         # be submitted by a subprocess call
         return {"project_result_key": join(analysis["storage_url"], "test.merge")}
+
+    def get_individual_analysis_results(self, analysis):
+        # please note that ipdb wont work here as this function will
+        # be submitted by a subprocess call
+        return {"individual_result_key": join(analysis["storage_url"], "test.merge")}
 
 
 def test_get_application_settings():
@@ -259,7 +279,7 @@ def test_engine(tmpdir):
     pks = ",".join(str(i["pk"]) for i in experiments)
     args = ["-fi", "pk__in", pks]
     result = runner.invoke(command, args, catch_exceptions=False)
-    analysis = application.get_project_analysis(project)
+    analysis = application.get_project_level_analysis(project)
     merged = join(analysis["storage_url"], "test.merge")
 
     assert analysis["status"] == "SUCCEEDED", f"Project Analysis failed {analysis}"
@@ -273,6 +293,17 @@ def test_engine(tmpdir):
     with open(merged) as f:
         assert f.read().strip() == "2"
 
+    # check individual level results
+    analysis = application.get_individual_level_analysis(individual)
+    merged = join(analysis["storage_url"], "test.merge")
+    assert analysis["status"] == "SUCCEEDED", f"Individual Analysis failed {analysis}"
+    assert isfile(merged)
+    assert "individual_result_key" in analysis["results"]
+
+    with open(merged) as f:
+        assert f.read().strip() == "2"
+
+    # check passing command line args
     args = ["-fi", "pk__in", pks, "--commit", "--force"]
     result = runner.invoke(command, args)
     assert "--commit not required when using --force" in result.output
