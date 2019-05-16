@@ -11,6 +11,7 @@ import abc
 import os
 import sys
 import traceback
+import subprocess
 
 from cached_property import cached_property
 from click import progressbar
@@ -270,15 +271,22 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f"--application {self.primary_key}\n"
             )
 
-        if not analyses:
+        if not analyses or len(analyses) < 2:
             return
 
         try:
             validate_analyses(instance, analyses)
-            analysis = get_analysis(instance, patch=True)
+            analysis = get_analysis(instance)
         except AssertionError as error:
             click.echo(f"Analysis not created, validation failed: {error}")
             return
+
+        if analysis.status == "STARTED":
+            click.secho(f"analysis {analysis} is 'STARTED', exiting...", fg="blue")
+            return
+
+        if not analysis.storage_url:
+            self._patch_analysis(analysis)
 
         try:
             # raise error if can't write in directory
@@ -292,6 +300,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         oldmask = os.umask(0o07)
         stdout_path = self.get_command_log_path(analysis)
         stderr_path = self.get_command_err_path(analysis)
+        group = system_settings.DEFAULT_LINUX_GROUP or "not_a_group"
         error = None
 
         with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
@@ -308,6 +317,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     click.echo(e, file=sys.stderr)
                     api.patch_analysis_status(analysis, "FAILED")
                     error = e
+
+        for i in [
+            ["chgrp", "-R", group, analysis.storage_url],
+            ["chmod", "-R", "g+rwX", analysis.storage_url],
+        ]:
+            try:
+                subprocess.check_output(i)
+            except subprocess.CalledProcessError:
+                pass
 
         api.patch_instance("analyses", analysis.pk, data=analysis.data)
         os.umask(oldmask)
@@ -348,24 +366,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             self.run_project_merge(project)
 
-    def get_project_level_analysis(self, project, patch=False):
+    def get_project_level_analysis(self, project):
         """
         Get or create project level analysis.
 
         Arguments:
             project (dict): project instance.
-            patch (dict): whether or not results and storage_url should be patched.
 
         Returns:
             dict: analysis instance.
         """
-        analysis = api.create_instance(
+        return api.create_instance(
             endpoint="analyses",
             project_level_analysis=project,
             application=self.project_level_application,
         )
-
-        return self._patch_analysis(analysis) if patch else analysis
 
     # -------------------------
     # MERGE BY INDIVIDUAL LOGIC
@@ -405,24 +420,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             self.run_individual_merge(individual)
 
-    def get_individual_level_analysis(self, individual, patch=False):
+    def get_individual_level_analysis(self, individual):
         """
         Get or create individual level analysis.
 
         Arguments:
             individual (dict): individual instance.
-            patch (dict): whether or not results and storage_url should be patched.
 
         Returns:
             dict: analysis instance.
         """
-        analysis = api.create_instance(
+        return api.create_instance(
             endpoint="analyses",
             individual_level_analysis=individual,
             application=self.individual_level_application,
         )
-
-        return self._patch_analysis(analysis) if patch else analysis
 
     # ----------
     # PROPERTIES
@@ -790,6 +802,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             f"umask g+wrx && date && cd {outdir} && "
             f"{started} && {command} && {finished}"
         )
+
+        if system_settings.DEFAULT_LINUX_GROUP:
+            command += (
+                f" && (chgrp -R {system_settings.DEFAULT_LINUX_GROUP}"
+                f" {outdir} &> /dev/null || echo chgrp failed)"
+            )
 
         if system_settings.is_admin_user and status == "SUCCEEDED":
             command += f" && chmod -R a-w {analysis['storage_url']}"

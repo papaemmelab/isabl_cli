@@ -221,6 +221,7 @@ def test_application_settings(tmpdir):
 def test_engine(tmpdir):
     data_storage_directory = tmpdir.mkdir("data_storage_directory")
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
+    _DEFAULTS["DEFAULT_LINUX_GROUP"] = "not_a_group"
 
     individual = factories.IndividualFactory(species="HUMAN")
     sample = factories.SampleFactory(individual=individual)

@@ -18,6 +18,7 @@ import six
 from isabl_cli import exceptions
 
 _DEFAULTS = {
+    "DEFAULT_LINUX_GROUP": None,
     "MAKE_STORAGE_DIRECTORY": "isabl_cli.data._make_storage_directory",
     "TRASH_ANALYSIS_STORAGE": "isabl_cli.data.trash_analysis_storage",
     "REFERENCE_DATA_IMPORTER": "isabl_cli.data.LocalReferenceDataImporter",
