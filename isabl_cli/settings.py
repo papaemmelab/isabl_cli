@@ -36,8 +36,7 @@ _DEFAULTS = {
         "isabl_cli.data.symlink_analysis_to_targets",
         "isabl_cli.data.trigger_analyses_merge",
     ],
-    "SUBMIT_INDIVIDUAL_LEVEL_MERGE": None,
-    "SUBMIT_PROJECT_LEVEL_MERGE": None,
+    "SUBMIT_MERGE_ANALYSIS": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
         "isabl_cli.commands.process_finished",

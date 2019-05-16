@@ -250,27 +250,39 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Raise AssertionError if individual level analysis logic shouldn't happen."""
         return
 
-    # ----------------------
-    # MERGE BY PROJECT LOGIC
-    # ----------------------
+    # --------------------
+    # MERGE ANALYSES LOGIC
+    # --------------------
+
+    def submit_merge_analysis(self, instance):
+        """
+        Directly call merge logic unless SUBMIT_MERGE_ANALYSIS.
+
+        Use setting SUBMIT_MERGE_ANALYSIS to submit the merge work with custom logic.
+
+        Arguments:
+            unused-argument (dict): a project or individual instance.
+        """
+        if system_settings.SUBMIT_MERGE_ANALYSIS:
+            system_settings.SUBMIT_MERGE_ANALYSIS(
+                instance=instance,
+                application=self,
+                command=self._get_cli_merge_command(instance),
+            )
+        elif "species" in instance:
+            self.run_individual_merge(instance)
+        else:
+            self.run_project_merge(instance)
 
     def _run_analyses_merge(self, instance, analyses):
         merge_analyses = self.merge_project_analyses
         validate_analyses = self.validate_project_analyses
         get_analysis = self.get_project_level_analysis
-        cli_command = (
-            f"isabl merge-project-analyses --project {instance['pk']} "
-            f"--application {self.primary_key}\n"
-        )
 
         if "species" in instance:
             merge_analyses = self.merge_individual_analyses
             validate_analyses = self.validate_individual_analyses
             get_analysis = self.get_individual_level_analysis
-            cli_command = (
-                f"isabl merge-individual-analyses --individual {instance['pk']} "
-                f"--application {self.primary_key}\n"
-            )
 
         if not analyses or len(analyses) < 2:
             return
@@ -292,7 +304,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         try:
             # raise error if can't write in directory
             with open(self.get_command_script_path(analysis), "w") as f:
-                f.write(cli_command)
+                f.write(self._get_cli_merge_command(instance))
         except PermissionError as error:
             api.patch_analysis_status(analysis, "FAILED")
             raise error
@@ -332,6 +344,22 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         os.umask(oldmask)
         if error is not None:
             raise Exception(error)
+
+    def _get_cli_merge_command(self, instance):
+        if "species" in instance:
+            return (
+                f"isabl merge-individual-analyses --individual {instance['pk']} "
+                f"--application {self.primary_key}\n"
+            )
+
+        return (
+            f"isabl merge-project-analyses --project {instance['pk']} "
+            f"--application {self.primary_key}\n"
+        )
+
+    # ----------------------
+    # MERGE BY PROJECT LOGIC
+    # ----------------------
 
     def run_project_merge(self, project):
         """
@@ -403,23 +431,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 status="SUCCEEDED",
             ),
         )
-
-    def submit_individual_merge(self, individual):
-        """
-        Directly call `merge_individual_analyses` unless SUBMIT_INDIVIDUAL_LEVEL_MERGE.
-
-        Use setting SUBMIT_INDIVIDUAL_LEVEL_MERGE to submit the merge work with custom
-        logic, for instance by using LSF with `bsub isabl merge-individual-analyses`.
-
-        Arguments:
-            individual (dict): a individual instance.
-        """
-        if system_settings.SUBMIT_INDIVIDUAL_LEVEL_MERGE:
-            system_settings.SUBMIT_INDIVIDUAL_LEVEL_MERGE(
-                individual=individual, application=self
-            )
-        else:
-            self.run_individual_merge(individual)
 
     def get_individual_level_analysis(self, individual):
         """

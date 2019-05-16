@@ -580,7 +580,7 @@ def _protect_analysis_results(analysis):
         subprocess.check_call(cmd, shell=True)
     elif protect_results:
         cmd = ["chmod", "-R", "a-w", analysis.storage_url]
-        subprocess.check_call(cmd, shell=True)
+        subprocess.check_call(cmd)
 
 
 def _get_analysis_results(analysis, raise_error=True):

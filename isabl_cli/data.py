@@ -115,7 +115,7 @@ def trigger_analyses_merge(analysis):
             )
 
             if not pending:
-                application.submit_project_merge(i)
+                application.submit_merge_analysis(i)
 
     if not hasattr(application.merge_individual_analyses, "__isabstractmethod__"):
         individuals = {
@@ -131,7 +131,7 @@ def trigger_analyses_merge(analysis):
             )
 
             if not pending:
-                application.submit_individual_merge(i)
+                application.submit_merge_analysis(i)
 
 
 def trash_analysis_storage(analysis):
