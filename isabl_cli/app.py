@@ -54,7 +54,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     # individual level analyses configs
     unique_analysis_per_individual = False
-    unique_analysis_per_individual_include_tuples = False
 
     cli_help = ""
     cli_options = []
@@ -579,7 +578,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @property
     def has_individual_auto_merge(self):
         """Return True if individual level auto merge logic is defined."""
-        return not hasattr(self.merge_project_analyses, "__isabstractmethod__")
+        return not hasattr(self.merge_individual_analyses, "__isabstractmethod__")
 
     @property
     def _application_results(self):
@@ -1273,27 +1272,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 assert len(analysis) == 1, "Multiple analyses returned..."
                 analysis = analysis[0]
 
-                if self.unique_analysis_per_individual_include_tuples:
-                    for ix, key in enumerate(["targets", "references", "analyses"]):
-                        current = {getattr(j, "pk", j) for j in analysis[key]}
-                        passed = {getattr(j, "pk", j) for j in i[ix]}
+                for ix, key in enumerate(["targets", "references", "analyses"]):
+                    current = {getattr(j, "pk", j) for j in analysis[key]}
+                    passed = {getattr(j, "pk", j) for j in i[ix]}
 
-                        if current.difference(passed):
-                            analysis = api.patch_instance(
-                                "analyses",
-                                analysis.pk,
-                                targets=i[0],
-                                references=i[1],
-                                analyses=i[2],
-                            )
-                            break
+                    if current.difference(passed):
+                        analysis = api.patch_instance(
+                            "analyses",
+                            analysis.pk,
+                            targets=i[0],
+                            references=i[1],
+                            analyses=i[2],
+                        )
+                        break
 
                 existing.append(analysis)
-
-            elif self.unique_analysis_per_individual_include_tuples:
-                missing.append(i + (individual,))
             else:
-                missing.append(([], [], [], i[3], individual))
+                missing.append(i + (individual,))
 
         return existing, missing
 
