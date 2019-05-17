@@ -1276,7 +1276,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     current = {getattr(j, "pk", j) for j in analysis[key]}
                     passed = {getattr(j, "pk", j) for j in i[ix]}
 
-                    if current.difference(passed):
+                    if current.difference(passed) or passed.difference(current):
                         analysis = api.patch_instance(
                             "analyses",
                             analysis.pk,

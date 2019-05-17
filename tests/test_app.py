@@ -134,10 +134,9 @@ class UniquePerIndividualApplication(AbstractApplication):
         return {"analysis_result_key": analysis.individual_level_analysis.system_id}
 
 
-class UniquePerIndividualWithTuplesApplication(UniquePerIndividualApplication):
+class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
 
-    NAME = "UNIQUE_PER_INDIVIDUAL_WITH_TUPLES"
-    unique_analysis_per_individual_include_tuples = True
+    NAME = "UNIQUE_PER_INDIVIDUAL_NO_PROTECT"
     application_protect_results = False
 
 
@@ -275,13 +274,13 @@ def test_unique_analysis_per_individual_app(tmpdir):
 
     assert len(ran_analyses) == 1
     assert "analysis_result_key" in ran_analyses[0][0]["results"]
-    assert len(ran_analyses[0][0].targets) == 0
+    assert len(ran_analyses[0][0].targets) == 4
     assert (
         ran_analyses[0][0]["results"].analysis_result_key
         == experiments[0].sample.individual.system_id
     )
 
-    application = UniquePerIndividualWithTuplesApplication()
+    application = UniquePerIndividualProtectResultsFalse()
     ran_analyses, _, __ = application.run(tuples, commit=True)
     assert len(ran_analyses) == 1
     assert "analysis_result_key" in ran_analyses[0][0]["results"]
@@ -289,7 +288,7 @@ def test_unique_analysis_per_individual_app(tmpdir):
 
     # test application_protect_results false
     tuples = [(experiments[:3], [])]
-    application = UniquePerIndividualWithTuplesApplication()
+    application = UniquePerIndividualProtectResultsFalse()
     ran_analyses, _, __ = application.run(tuples, commit=True)
 
     assert len(ran_analyses) == 1
