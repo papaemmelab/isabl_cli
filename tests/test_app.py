@@ -44,7 +44,7 @@ class TestApplication(AbstractApplication):
         }
     }
 
-    application_individual_level_results = {
+    application_individual_level_auto_merge_results = {
         "individual_result_key": {
             "frontend_type": "text-file",
             "description": "A random description",
@@ -102,6 +102,43 @@ class TestApplication(AbstractApplication):
         # please note that ipdb wont work here as this function will
         # be submitted by a subprocess call
         return {"individual_result_key": join(analysis["storage_url"], "test.merge")}
+
+
+class UniquePerIndividualApplication(AbstractApplication):
+
+    NAME = "UNIQUE_PER_INDIVIDUAL"
+    VERSION = "STILL_TESTING"
+    ASSEMBLY = "GRCh4000"
+    SPECIES = "HUMAN"
+
+    cli_options = [options.TARGETS]
+    unique_analysis_per_individual = True
+    application_results = {
+        "analysis_result_key": {
+            "frontend_type": "string",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
+
+    def validate_experiments(self, targets, references):
+        return True
+
+    def get_experiments_from_cli_options(self, targets):
+        return [([i], []) for i in targets]
+
+    def get_command(self, analysis, inputs, settings):
+        return f"echo {analysis.individual_level_analysis.system_id}"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": analysis.individual_level_analysis.system_id}
+
+
+class UniquePerIndividualWithTuplesApplication(UniquePerIndividualApplication):
+
+    NAME = "UNIQUE_PER_INDIVIDUAL_WITH_TUPLES"
+    unique_analysis_per_individual_include_tuples = True
+    application_protect_results = False
 
 
 def test_get_application_settings():
@@ -218,6 +255,48 @@ def test_application_settings(tmpdir):
     # assert application.settings.foo == "from_the_env"
 
 
+def test_unique_analysis_per_individual_app(tmpdir):
+    data_storage_directory = tmpdir.mkdir("data_storage_directory")
+    _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
+
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiments = [
+        factories.ExperimentFactory(center_id=str(i), sample=sample, projects=[project])
+        for i in range(4)
+    ]
+
+    experiments = [api.create_instance("experiments", **i) for i in experiments]
+    tuples = [(experiments, [])]
+    command = UniquePerIndividualApplication.as_cli_command()
+    application = UniquePerIndividualApplication()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 0
+    assert (
+        ran_analyses[0][0]["results"].analysis_result_key
+        == experiments[0].sample.individual.system_id
+    )
+
+    application = UniquePerIndividualWithTuplesApplication()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 4
+
+    # test application_protect_results false
+    tuples = [(experiments[:3], [])]
+    application = UniquePerIndividualWithTuplesApplication()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 3
+
+
 def test_engine(tmpdir):
     data_storage_directory = tmpdir.mkdir("data_storage_directory")
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
@@ -240,8 +319,8 @@ def test_engine(tmpdir):
     ran_analyses, _, __ = application.run(tuples, commit=True)
     target = api.Experiment(ran_analyses[1][0].targets[0].pk)
 
-    assert "analysis_result_key" in ran_analyses[1][0]["results"]
-    assert "analysis_result_key" in ran_analyses[2][0]["results"]
+    assert "analysis_result_key" in ran_analyses[1][0]["results"].keys()
+    assert "analysis_result_key" in ran_analyses[2][0]["results"].keys()
 
     # test that get results work as expected
     assert application.get_results(
@@ -280,7 +359,7 @@ def test_engine(tmpdir):
     pks = ",".join(str(i["pk"]) for i in experiments)
     args = ["-fi", "pk__in", pks]
     result = runner.invoke(command, args, catch_exceptions=False)
-    analysis = application.get_project_level_analysis(project)
+    analysis = application.get_project_level_auto_merge_analysis(project)
     merged = join(analysis["storage_url"], "test.merge")
 
     assert analysis["status"] == "SUCCEEDED", f"Project Analysis failed {analysis}"
@@ -295,7 +374,7 @@ def test_engine(tmpdir):
         assert f.read().strip() == "2"
 
     # check individual level results
-    analysis = application.get_individual_level_analysis(individual)
+    analysis = application.get_individual_level_auto_merge_analysis(individual)
     merged = join(analysis["storage_url"], "test.merge")
     assert analysis["status"] == "SUCCEEDED", f"Individual Analysis failed {analysis}"
     assert isfile(merged)

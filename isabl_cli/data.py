@@ -103,7 +103,7 @@ def trigger_analyses_merge(analysis):
     except ImportError:
         return
 
-    if not hasattr(application.merge_project_analyses, "__isabstractmethod__"):
+    if application.has_project_auto_merge:
         projects = {j["pk"]: j for i in analysis["targets"] for j in i["projects"]}
 
         for i in projects.values():
@@ -117,7 +117,7 @@ def trigger_analyses_merge(analysis):
             if not pending:
                 application.submit_merge_analysis(i)
 
-    if not hasattr(application.merge_individual_analyses, "__isabstractmethod__"):
+    if application.has_individual_auto_merge:
         individuals = {
             i.sample.individual.pk: i.sample.individual for i in analysis["targets"]
         }

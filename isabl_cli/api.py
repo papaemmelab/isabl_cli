@@ -600,16 +600,19 @@ def _get_analysis_results(analysis, raise_error=True):
 
     try:
         # just used to make sure the app results are patched
-        if analysis.project_level_analysis:
-            expected_app = application.project_level_application.pk
-        elif analysis.individual_level_analysis:
-            expected_app = application.individual_level_application.pk
-        else:
-            expected_app = application.primary_key
+        expected_app = application.primary_key
 
-        assert (
-            analysis.application.pk == expected_app
-        ), f"{app_name} does not match: {analysis.application.application_class}"
+        if analysis.project_level_analysis:
+            expected_app = application.project_level_auto_merge_application.pk
+        elif (
+            analysis.individual_level_analysis and application.has_individual_auto_merge
+        ):
+            expected_app = application.individual_level_auto_merge_application.pk
+
+        assert analysis.application.pk == expected_app, (
+            f"{application.__class__} does not match: "
+            f"{analysis.application.application_class}"
+        )
 
         results = application._get_analysis_results(analysis)
     except Exception as error:  # pylint: disable=broad-except

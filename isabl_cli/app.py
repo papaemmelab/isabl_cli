@@ -45,10 +45,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     application_description = ""
     application_inputs = {}
     application_results = {}
-    application_project_level_results = {}
-    application_individual_level_results = {}
     application_settings = {}
     application_import_strings = {}
+
+    # auto merge configurations
+    application_project_level_results = {}
+    application_individual_level_results = {}
+
+    # individual level analyses configs
+    unique_analysis_per_individual = False
+    unique_analysis_per_individual_include_tuples = False
+
     cli_help = ""
     cli_options = []
     cli_allow_force = True
@@ -277,12 +284,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def _run_analyses_merge(self, instance, analyses):
         merge_analyses = self.merge_project_analyses
         validate_analyses = self.validate_project_analyses
-        get_analysis = self.get_project_level_analysis
+        get_analysis = self.get_project_level_auto_merge_analysis
 
         if "species" in instance:
             merge_analyses = self.merge_individual_analyses
             validate_analyses = self.validate_individual_analyses
-            get_analysis = self.get_individual_level_analysis
+            get_analysis = self.get_individual_level_auto_merge_analysis
 
         if not analyses or len(analyses) < 2:
             return
@@ -395,7 +402,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             self.run_project_merge(project)
 
-    def get_project_level_analysis(self, project):
+    def get_project_level_auto_merge_analysis(self, project):
         """
         Get or create project level analysis.
 
@@ -408,7 +415,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return api.create_instance(
             endpoint="analyses",
             project_level_analysis=project,
-            application=self.project_level_application,
+            application=self.project_level_auto_merge_application,
         )
 
     # -------------------------
@@ -422,6 +429,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             individual (dict): individual instance.
         """
+        assert not self.unique_analysis_per_individual, (
+            "Applications that require a unique analysis per individual "
+            "don't support individual"
+        )
+
         self._run_analyses_merge(
             individual,
             api.get_instances(
@@ -432,7 +444,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             ),
         )
 
-    def get_individual_level_analysis(self, individual):
+    def get_individual_level_auto_merge_analysis(self, individual):
         """
         Get or create individual level analysis.
 
@@ -442,10 +454,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             dict: analysis instance.
         """
+        assert not self.unique_analysis_per_individual, (
+            "Applications that require a unique analysis per individual "
+            "don't support individual"
+        )
+
         return api.create_instance(
             endpoint="analyses",
             individual_level_analysis=individual,
-            application=self.individual_level_application,
+            application=self.individual_level_auto_merge_application,
         )
 
     # ----------
@@ -504,7 +521,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         )
 
     @cached_property
-    def individual_level_application(self):
+    def individual_level_auto_merge_application(self):
         """Get or create an individual level application database object."""
         assert not hasattr(
             self.merge_individual_analyses, "__isabstractmethod__"
@@ -527,7 +544,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         )
 
     @cached_property
-    def project_level_application(self):
+    def project_level_auto_merge_application(self):
         """Get or create a project level application database object."""
         assert not hasattr(
             self.merge_project_analyses, "__isabstractmethod__"
@@ -553,6 +570,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def assembly(self):
         """Get assembly database object."""
         return self.application["assembly"]
+
+    @property
+    def has_project_auto_merge(self):
+        """Return True if project level auto merge logic is defined."""
+        return not hasattr(self.merge_project_analyses, "__isabstractmethod__")
+
+    @property
+    def has_individual_auto_merge(self):
+        """Return True if individual level auto merge logic is defined."""
+        return not hasattr(self.merge_project_analyses, "__isabstractmethod__")
 
     @property
     def _application_results(self):
@@ -748,9 +775,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         with progressbar(analyses, label="Building commands...\t\t") as bar:
             for i in bar:
-                if force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
+                # if not protect results we need to change the status to staged
+                if (
+                    not self.application_protect_results
+                    and commit
+                    and i.status == "SUCCEEDED"
+                ):
+                    api.patch_analysis_status(i, "STAGED")
+
+                # trash analysis and create outdir again
+                elif force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
                     os.makedirs(i["storage_url"], exist_ok=True)
+
+                # only restart failed analyses
                 elif (
                     not (restart and i["status"] == "FAILED")
                     and i["status"] in self.skip_status
@@ -857,10 +895,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if created:
             return results
 
-        if analysis["project_level_analysis"]:
+        if analysis.project_level_analysis:
             specification = self.application_project_level_results
             get_results = self.get_project_analysis_results
-        elif analysis["individual_level_analysis"]:
+        elif analysis.individual_level_analysis and self.has_individual_auto_merge:
             specification = self.application_individual_level_results
             get_results = self.get_individual_analysis_results
         else:
@@ -904,15 +942,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
 
         # create or update project level application
-        if not hasattr(self.merge_project_analyses, "__isabstractmethod__"):
-            assert self.project_level_application
+        if self.has_project_auto_merge:
+            assert self.project_level_auto_merge_application
             click.secho(
                 "\tSuccessfully updated project level application.\n", fg="magenta"
             )
 
         # create or update individual level application
-        if not hasattr(self.merge_individual_analyses, "__isabstractmethod__"):
-            assert self.individual_level_application
+        if self.has_individual_auto_merge:
+            assert self.individual_level_auto_merge_application
             click.secho(
                 "\tSuccessfully updated individual level application.\n", fg="magenta"
             )
@@ -1104,10 +1142,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         # add dependencies and inputs
         invalid_tuples, valid_tuples, created_analyses = [], [], []
+        unique_individuals = set()
 
         for i in tuples:
             try:
                 valid_tuples.append(i + self._get_dependencies(*i))
+
+                if self.unique_analysis_per_individual:
+                    individual = self._get_individuals_from_tuple(i[0], i[1])
+
+                    if individual.pk not in unique_individuals:
+                        unique_individuals.add(individual.pk)
+                    else:
+                        raise exceptions.ValidationError(
+                            "Another tuple with the same individual has been passed."
+                        )
             except (
                 exceptions.ValidationError,
                 exceptions.ConfigurationError,
@@ -1116,7 +1165,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
 
         # get existing analyses from valid tuples
-        existing_analyses, valid_tuples = self.get_existing_analyses(valid_tuples)
+        if self.unique_analysis_per_individual:
+            get_existing_analyses = self.get_individual_level_analyses
+        else:
+            get_existing_analyses = self.get_existing_analyses
+
+        existing_analyses, valid_tuples = get_existing_analyses(valid_tuples)
 
         if len(valid_tuples) > 1000:
             click.secho(
@@ -1132,7 +1186,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         ) as bar:
             for i in bar:
                 try:
-                    targets, references, analyses, inputs = i
+                    targets, references, analyses, inputs, individual = i
                     self.validate_species(targets + references)
                     self.validate_experiments(targets, references)
                     analysis = self._patch_analysis(
@@ -1142,6 +1196,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                             targets=targets,
                             references=references,
                             analyses=analyses,
+                            individual_level_analysis=individual,
                         )
                     )
 
@@ -1199,7 +1254,46 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     break
 
             if not found_existing:
-                missing.append((targets, references, analyses, inputs))
+                missing.append((targets, references, analyses, inputs, None))
+
+        return existing, missing
+
+    def get_individual_level_analyses(self, tuples):
+        """Get existing individual level analyses."""
+        existing, missing = [], []
+
+        for i in tuples:
+            individual = self._get_individuals_from_tuple(i[0], i[1])
+            analysis = api.get_analyses(
+                individual_level_analysis=individual.pk,
+                application__pk=self.primary_key,
+            )
+
+            if analysis:
+                assert len(analysis) == 1, "Multiple analyses returned..."
+                analysis = analysis[0]
+
+                if self.unique_analysis_per_individual_include_tuples:
+                    for ix, key in enumerate(["targets", "references", "analyses"]):
+                        current = {getattr(j, "pk", j) for j in analysis[key]}
+                        passed = {getattr(j, "pk", j) for j in i[ix]}
+
+                        if current.difference(passed):
+                            analysis = api.patch_instance(
+                                "analyses",
+                                analysis.pk,
+                                targets=i[0],
+                                references=i[1],
+                                analyses=i[2],
+                            )
+                            break
+
+                existing.append(analysis)
+
+            elif self.unique_analysis_per_individual_include_tuples:
+                missing.append(i + (individual,))
+            else:
+                missing.append(([], [], [], i[3], individual))
 
         return existing, missing
 
@@ -1214,6 +1308,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             results=self._get_analysis_results(analysis, created=True),
             storage_url=analysis["storage_url"],
         )
+
+    def _get_individuals_from_tuple(self, targets, references):
+        individual = {
+            i.sample.individual.pk: i.sample.individual for i in targets + references
+        }
+
+        assert len(individual) == 1, "More than one individual passed!"
+        return list(individual.values())[0]
 
     # ---------------
     # SPECIAL METHODS
