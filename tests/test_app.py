@@ -287,13 +287,22 @@ def test_unique_analysis_per_individual_app(tmpdir):
     assert len(ran_analyses[0][0].targets) == 4
 
     # test application_protect_results false
-    tuples = [(experiments[:3], [])]
+    tuples = [(experiments[:2], [])]
     application = UniquePerIndividualProtectResultsFalse()
     ran_analyses, _, __ = application.run(tuples, commit=True)
 
     assert len(ran_analyses) == 1
     assert "analysis_result_key" in ran_analyses[0][0]["results"]
-    assert len(ran_analyses[0][0].targets) == 3
+    assert len(ran_analyses[0][0].targets) == 2
+
+    # test application_protect_results reduce add more samples - dont remove this test
+    tuples = [(experiments, [])]
+    application = UniquePerIndividualProtectResultsFalse()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 4
 
 
 def test_engine(tmpdir):
