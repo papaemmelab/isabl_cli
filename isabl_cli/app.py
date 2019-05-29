@@ -1148,7 +1148,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 valid_tuples.append(i + self._get_dependencies(*i))
 
                 if self.unique_analysis_per_individual:
-                    individual = self._get_individuals_from_tuple(i[0], i[1])
+                    individual = self._get_individual_from_tuple(i[0], i[1])
 
                     if individual.pk not in unique_individuals:
                         unique_individuals.add(individual.pk)
@@ -1259,38 +1259,37 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_individual_level_analyses(self, tuples):
         """Get existing individual level analyses."""
-        existing, missing = [], []
+        # add individual to tuples
+        tuples = [i + (self._get_individual_from_tuple(*i[:2]),) for i in tuples]
+        tuples_map = {i[-1].pk: i for i in tuples}
+        existing = {}
 
-        for i in tuples:
-            individual = self._get_individuals_from_tuple(i[0], i[1])
-            analysis = api.get_analyses(
-                individual_level_analysis=individual.pk,
-                application__pk=self.primary_key,
-            )
+        for i in api.get_analyses(
+            application=self.application.pk,
+            individual_level_analysis__pk__in=",".join(map(str, tuples_map)),
+        ):
+            individual = i.individual_level_analysis
+            current_tuple = tuples_map[individual.pk]
 
-            if analysis:
-                assert len(analysis) == 1, "Multiple analyses returned..."
-                analysis = analysis[0]
+            # make sure we only have one analysis per individual
+            assert individual.pk not in existing, f"Multiple analyses for {individual}"
+            existing[individual.pk] = i
 
-                for ix, key in enumerate(["targets", "references", "analyses"]):
-                    current = {getattr(j, "pk", j) for j in analysis[key]}
-                    passed = {getattr(j, "pk", j) for j in i[ix]}
+            # patch analysis if tuples differ
+            for ix, key in enumerate(["targets", "references", "analyses"]):
+                if {getattr(j, "pk", j) for j in i[key]} != {
+                    getattr(j, "pk", j) for j in current_tuple[ix]
+                }:
+                    existing[individual.pk] = api.patch_instance(
+                        "analyses",
+                        i.pk,
+                        targets=current_tuple[0],
+                        references=current_tuple[1],
+                        analyses=current_tuple[2],
+                    )
+                    break
 
-                    if current != passed:
-                        analysis = api.patch_instance(
-                            "analyses",
-                            analysis.pk,
-                            targets=i[0],
-                            references=i[1],
-                            analyses=i[2],
-                        )
-                        break
-
-                existing.append(analysis)
-            else:
-                missing.append(i + (individual,))
-
-        return existing, missing
+        return list(existing.values()), [i for i in tuples if i[-1].pk not in existing]
 
     def _patch_analysis(self, analysis):
         analysis["storage_url"] = data.get_storage_url(
@@ -1304,7 +1303,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             storage_url=analysis["storage_url"],
         )
 
-    def _get_individuals_from_tuple(self, targets, references):
+    def _get_individual_from_tuple(self, targets, references):
         individual = {
             i.sample.individual.pk: i.sample.individual for i in targets + references
         }
