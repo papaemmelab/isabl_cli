@@ -656,5 +656,11 @@ def _run_signals(endpoint, instance, signals):
             with open(join(errors_dir, datetime.now().isoformat()), "+w") as f:
                 f.write(msg)
 
+            click.echo(
+                click.style("\nERROR:", fg="red")
+                + " some signals failed!\n\n"
+                + click.style(msg, fg="red")
+            )
+
         except Exception as error:  # pylint: disable=broad-except
             click.secho(f"Failed to log signal errors ({error}):\n\n{msg}", fg="red")

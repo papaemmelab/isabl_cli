@@ -115,6 +115,12 @@ def trigger_analyses_merge(analysis):
             )
 
             if not pending:
+                click.secho(
+                    f"Submitting project merge for {i} and "
+                    f"application {analysis.application}",
+                    fg="green",
+                )
+
                 application.submit_merge_analysis(i)
 
     if application.has_individual_auto_merge:
@@ -131,6 +137,12 @@ def trigger_analyses_merge(analysis):
             )
 
             if not pending:
+                click.secho(
+                    f"Submitting individual merge for {i} and "
+                    f"application {analysis.application}",
+                    fg="green",
+                )
+
                 application.submit_merge_analysis(i)
 
 
