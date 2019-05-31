@@ -319,7 +319,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         oldmask = os.umask(0o07)
         stdout_path = self.get_command_log_path(analysis)
         stderr_path = self.get_command_err_path(analysis)
-        group = system_settings.DEFAULT_LINUX_GROUP or "not_a_group"
         error = None
 
         with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
@@ -336,15 +335,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     click.echo(e, file=sys.stderr)
                     api.patch_analysis_status(analysis, "FAILED")
                     error = e
-
-        for i in [
-            ["chgrp", "-R", group, analysis.storage_url],
-            ["chmod", "-R", "g+rwX", analysis.storage_url],
-        ]:
-            try:
-                subprocess.check_output(i)
-            except subprocess.CalledProcessError:
-                pass
 
         api.patch_instance("analyses", analysis.pk, data=analysis.data)
         os.umask(oldmask)
@@ -455,7 +445,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         assert not self.unique_analysis_per_individual, (
             "Applications that require a unique analysis per individual "
-            "don't support individual"
+            "don't support individual auto merge"
         )
 
         return api.create_instance(
@@ -852,12 +842,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             f"umask g+wrx && date && cd {outdir} && "
             f"{started} && {command} && {finished}"
         )
-
-        if system_settings.DEFAULT_LINUX_GROUP:
-            command += (
-                f" && (chgrp -R {system_settings.DEFAULT_LINUX_GROUP}"
-                f" {outdir} &> /dev/null || echo chgrp failed)"
-            )
 
         with open(self.get_command_script_path(analysis), "w") as f:
             f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")

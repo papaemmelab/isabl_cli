@@ -540,6 +540,8 @@ def patch_analysis_status(analysis, status):
     """
     data = {"status": status}
     storage_url = analysis["storage_url"]
+    analysis["status"] = status  # make sure that the analysis status is updated
+    _set_analysis_permissions(analysis)
 
     if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS"}:
         data["storage_usage"] = utils.get_tree_size(storage_url)
@@ -547,15 +549,8 @@ def patch_analysis_status(analysis, status):
     if status == "STARTED":
         data["ran_by"] = system_settings.api_username
 
-    # admin must own directory of regular analyses
-    if status == "SUCCEEDED" and not (
-        analysis["project_level_analysis"] or analysis["individual_level_analysis"]
-    ):
-        _protect_analysis_results(analysis)
-
     if status in {"SUCCEEDED", "IN_PROGRESS"}:
         try:
-            analysis["status"] = status  # make sure that the analysis status is updated
             data["results"] = _get_analysis_results(analysis, raise_error=True)
         except Exception as error:  # pragma: no cover
             data["status"] = "FAILED"
@@ -565,22 +560,55 @@ def patch_analysis_status(analysis, status):
     return patch_instance("analyses", analysis["pk"], **data)
 
 
-def _protect_analysis_results(analysis):
-    try:
-        utils.check_admin()
-        application = import_from_string(analysis.application.application_class)()
-        protect_results = application.application_protect_results
-    except ImportError:
-        protect_results = True
+def _set_analysis_permissions(analysis):
+    protect_results = analysis.status == "SUCCEEDED"
+    unique_analysis_per_individual = False
+    application_protect_results = True
+    chgrp_cmd = (
+        ["false"]
+        if not system_settings.DEFAULT_LINUX_GROUP
+        else ["chgrp", "-R", system_settings.DEFAULT_LINUX_GROUP, analysis.storage_url]
+    )
 
-    if analysis.ran_by != system_settings.api_username and protect_results:
-        src = analysis.storage_url + "__tmp"
-        shutil.move(analysis.storage_url, src)
-        cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
-        subprocess.check_call(cmd, shell=True)
-    elif protect_results:
-        cmd = ["chmod", "-R", "a-w", analysis.storage_url]
-        subprocess.check_call(cmd)
+    try:
+        application = import_from_string(analysis.application.application_class)()
+        unique_analysis_per_individual = application.unique_analysis_per_individual
+        application_protect_results = application.application_protect_results
+    except ImportError:
+        pass
+
+    if (
+        # dont protect results if project level analysis
+        analysis.project_level_analysis
+        # dont protect results if individual level automerge
+        or (analysis.individual_level_analysis and not unique_analysis_per_individual)
+        # dont protect results if the application says so
+        or not application_protect_results
+    ):
+        protect_results = False
+
+    if protect_results:
+        utils.check_admin()
+
+        if analysis.ran_by != system_settings.api_username:
+            src = analysis.storage_url + "__tmp"
+            shutil.move(analysis.storage_url, src)
+            cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
+            subprocess.check_call(cmd, shell=True)
+        else:
+            subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
+
+        try:
+            subprocess.check_output(chgrp_cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            pass
+
+    elif not protect_results or analysis.status in {"FAILED", "FINISHED"}:
+        for i in [chgrp_cmd, ["chmod", "-R", "g+rwX", analysis.storage_url]]:
+            try:
+                subprocess.check_output(i, stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError:
+                pass
 
 
 def _get_analysis_results(analysis, raise_error=True):
