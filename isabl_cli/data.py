@@ -575,6 +575,12 @@ class LocalDataImporter(BaseImporter):
         (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
     )
 
+    def annotate_file_data(
+        self, experiment, file_data, file_type, src, dst
+    ):  # pylint: disable=no-self-use,unused-argument
+        """Overwrite this method to provide custom file_data annotations."""
+        return file_data
+
     def import_data(
         self,
         directories,
@@ -597,7 +603,8 @@ class LocalDataImporter(BaseImporter):
             key (function): given a experiment dict returns id to match.
             filters (dict): key value pairs to use as API query params.
             files_data (dict): keys are files basenames and values are
-                dicts with extra annotations such as PL, LB, or any other.
+                dicts with extra annotations such as PL, LB, or any other,
+                see also annotate_file_data.
 
         Raises:
             click.UsageError: if `key` returns the same identifier for multiple
@@ -632,7 +639,7 @@ class LocalDataImporter(BaseImporter):
                     f"and {identifiers[identifier]}: {identifier}"
                 )
 
-            if i["sequencing_data"]:
+            if i["sequencing_data"] or i["bam_files"]:
                 using_id = f"{i['system_id']} (Skipped, experiment has data)"
             elif identifier:
                 identifiers[identifier] = i["system_id"]
@@ -766,11 +773,17 @@ class LocalDataImporter(BaseImporter):
                 src_dst.append((src, dst))
                 sequencing_data.append(
                     dict(
-                        file_url=dst,
-                        file_type=file_type,
-                        file_data=file_data,
                         hash_value=getsize(src),
                         hash_method="os.path.getsize",
+                        file_url=dst,
+                        file_type=file_type,
+                        file_data=self.annotate_file_data(
+                            experiment=instance,
+                            file_type=file_type,
+                            file_data=file_data,
+                            src=src,
+                            dst=dst,
+                        ),
                     )
                 )
 
