@@ -250,11 +250,33 @@ def get_reference(assembly, data_id):
         click.UsageError(f"No {data_id} reference for {assembly['name']}.")
 
 
+def cb_app_results_keys(ctx, param, value):
+    """Print applications results keys."""
+    if not value or ctx.resilient_parsing:
+        return
+
+    click.echo(
+        "\n".join(
+            f"{click.style(i, fg='green')}\t{j.description}"
+            for i, j in sorted(api.get_instance("applications", value).results.items())
+        ).expandtabs(15)
+    )
+    ctx.exit()
+
+
 @click.command()
 @options.NULLABLE_IDENTIFIERS
 @options.NULLABLE_FILTERS
 @options.VERBOSE
 @click.option("-r", "--result-key", help="result identifier", required=True)
+@click.option(
+    "--app-results",
+    help="Provide an application primary key to get a list of available results.",
+    callback=cb_app_results_keys,
+    expose_value=False,
+    is_eager=True,
+    type=click.INT,
+)
 def get_results(filters, identifiers, result_key, verbose):
     """Get analyses results."""
     for i in _filters_or_identifiers(
