@@ -207,8 +207,8 @@ def get_token_headers():
         if not response.ok and "non_field_errors" in response.text:
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
             return get_token_headers()
-        else:
-            click.echo(f"Request Error: {response.url}")
+        elif not response.ok:
+            click.secho(f"Request Error: {response.url}", fg="red")
             response.raise_for_status()
 
         user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name

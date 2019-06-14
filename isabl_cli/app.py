@@ -11,7 +11,6 @@ import abc
 import os
 import sys
 import traceback
-import subprocess
 
 from cached_property import cached_property
 from click import progressbar
