@@ -18,6 +18,20 @@ from isabl_cli.settings import import_from_string
 from isabl_cli.settings import user_settings
 
 
+def cb_app_results_keys(ctx, param, value):
+    """Print applications results keys."""
+    if not value or ctx.resilient_parsing:
+        return
+
+    click.echo(
+        "\n".join(
+            f"{click.style(i, fg='green')}\t{j.description}"
+            for i, j in sorted(api.get_instance("applications", value).results.items())
+        ).expandtabs(30)
+    )
+    ctx.exit()
+
+
 def _filters_or_identifiers(endpoint, identifiers, filters, fields=None):
     if filters and identifiers:
         raise click.UsageError("Can't combine filters and identifiers.")
@@ -240,28 +254,33 @@ def get_bed(technique, bed_type, assembly):
 
 @click.command()
 @click.argument("assembly", required=True)
-@click.option("--data-id", help="data identifier", default="genome_fasta")
-def get_reference(assembly, data_id):
+@click.option(
+    "--data-id",
+    help="data identifier of the reference resource",
+    default="genome_fasta",
+    show_default=True,
+)
+@click.option(
+    "--resources",
+    help="Print the list of available reference files for this assembly.",
+    is_flag=True,
+)
+def get_reference(assembly, data_id, resources):
     """Get reference resource for an Assembly."""
     try:
         assembly = api.get_instance("assemblies", assembly)
-        click.echo(assembly["reference_data"][data_id]["url"])
     except KeyError:
         click.UsageError(f"No {data_id} reference for {assembly['name']}.")
 
-
-def cb_app_results_keys(ctx, param, value):
-    """Print applications results keys."""
-    if not value or ctx.resilient_parsing:
-        return
-
-    click.echo(
-        "\n".join(
-            f"{click.style(i, fg='green')}\t{j.description}"
-            for i, j in sorted(api.get_instance("applications", value).results.items())
-        ).expandtabs(15)
-    )
-    ctx.exit()
+    if resources:
+        click.echo(
+            "\n".join(
+                f"{click.style(i, fg='green')}\t{j.description}"
+                for i, j in sorted(assembly["reference_data"].items())
+            ).expandtabs(30)
+        )
+    else:
+        click.echo(assembly["reference_data"][data_id]["url"])
 
 
 @click.command()
