@@ -292,7 +292,7 @@ class LocalReferenceDataImporter(BaseImporter):
 
         return api.patch_instance(
             endpoint="assemblies",
-            identifier=assembly["pk"],
+            instance_id=assembly["pk"],
             storage_usage=utils.get_tree_size(assembly["storage_url"]),
             reference_data=assembly["reference_data"],
         )
@@ -430,7 +430,7 @@ class LocalReferenceGenomeImporter:
 
             api.patch_instance(
                 endpoint="assemblies",
-                identifier=assembly["pk"],
+                instance_id=assembly["pk"],
                 storage_usage=utils.get_tree_size(assembly["storage_url"]),
                 reference_data=assembly["reference_data"],
             )
@@ -510,7 +510,7 @@ class LocalBedImporter:
 
         return api.patch_instance(
             endpoint="techniques",
-            identifier=technique["pk"],
+            instance_id=technique["pk"],
             storage_usage=utils.get_tree_size(technique["storage_url"]),
             bed_files=technique["bed_files"],
         )
@@ -802,7 +802,7 @@ class LocalDataImporter(BaseImporter):
 
         return api.patch_instance(
             endpoint="experiments",
-            identifier=instance["pk"],
+            instance_id=instance["pk"],
             storage_url=instance["storage_url"],
             storage_usage=utils.get_tree_size(instance["storage_url"]),
             sequencing_data=sorted(sequencing_data, key=lambda i: i["file_url"]),

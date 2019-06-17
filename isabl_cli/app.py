@@ -502,7 +502,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return api.patch_instance(
             description=self.application_description,
             endpoint="applications",
-            identifier=application["pk"],
+            instance_id=application["pk"],
             application_class=f"{self.__module__}.{self.__class__.__name__}",
             results=self._application_results,
             url=self.URL,
@@ -525,7 +525,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return api.patch_instance(
             description=f"{self.NAME} {self.VERSION} Individual Level Application.",
             endpoint="applications",
-            identifier=application["pk"],
+            instance_id=application["pk"],
             results=self._application_individual_level_results,
             application_class=self.application["application_class"],
             url=self.URL,
@@ -548,7 +548,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return api.patch_instance(
             description=f"{self.NAME} {self.VERSION} Project Level Application.",
             endpoint="applications",
-            identifier=application["pk"],
+            instance_id=application["pk"],
             results=self._application_project_level_results,
             application_class=self.application["application_class"],
             url=self.URL,

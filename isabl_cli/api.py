@@ -337,12 +337,12 @@ def create_instance(endpoint, **data):
     return isablfy(api_request("post", url=endpoint, json=data).json())
 
 
-def patch_instance(endpoint, identifier, **data):
+def patch_instance(endpoint, instance_id, **data):
     """
     Patch database instance.
 
     Arguments:
-        identifier (str): a primary key, system_id, email or username.
+        instance_id (str): a primary key, system_id, email or username.
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
         data (dict): fields to be patched.
 
@@ -355,19 +355,19 @@ def patch_instance(endpoint, identifier, **data):
     if (
         endpoint == "analyses"
         and data.get("status")
-        and Analysis(identifier).status != data.get("status")
+        and Analysis(instance_id).status != data.get("status")
     ):
         run_status_change_signals = True
 
     if (
         endpoint == "experiments"
         and data.get("sequencing_data")
-        and Experiment(identifier).sequencing_data != data.get("sequencing_data")
+        and Experiment(instance_id).sequencing_data != data.get("sequencing_data")
     ):
         run_data_import_signals = True
 
     instance = isablfy(
-        api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
+        api_request("patch", url=f"/{endpoint}/{instance_id}", json=data).json()
     )
 
     if run_status_change_signals:
