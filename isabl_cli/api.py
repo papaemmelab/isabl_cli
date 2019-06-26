@@ -1,13 +1,10 @@
 """Logic to interact with API."""
 
-from datetime import datetime
 from itertools import islice
 from os import environ
-from os.path import join
 from urllib.parse import urljoin
 import collections
 import json
-import os
 import shutil
 import subprocess
 import time
