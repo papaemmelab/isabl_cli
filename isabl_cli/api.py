@@ -652,7 +652,7 @@ def _get_analysis_results(analysis, raise_error=True):
     return results
 
 
-def _run_signals(endpoint, instance, signals):
+def _run_signals(endpoint, instance, signals, raise_error=False):
     errors = []
     on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda *_, **__: None)
 
@@ -660,35 +660,35 @@ def _run_signals(endpoint, instance, signals):
         try:
             signal(instance)
         except Exception as error:  # pragma: no cover pylint: disable=W0703
-            errors.append((error, traceback.format_exc()))
+            failure_traceback = traceback.format_exc()
+            errors.append((error, failure_traceback))
 
             try:
                 on_failure(endpoint, instance, signal, error)
             except Exception as on_failure_error:  # pylint: disable=W0703
                 errors.append((on_failure_error, traceback.format_exc()))
+                failure_traceback += traceback.format_exc()
 
-    if errors:
-        errors_dir = join(
-            system_settings.BASE_STORAGE_DIRECTORY,
-            ".failed_signals",
-            endpoint,
-            f"{instance.pk:04d}"[-4:-2],
-            f"{instance.pk:04d}"[-2:],
-            str(instance.pk),
-        )
-
-        try:
-            os.makedirs(errors_dir, exist_ok=True, mode=0o770)
-            msg = "\n".join([f"{i}:\n\t{j}" for i, j in errors])
-
-            with open(join(errors_dir, datetime.now().isoformat()), "+w") as f:
-                f.write(msg)
-
-            click.echo(
-                click.style("\nERROR:", fg="red")
-                + " some signals failed!\n\n"
-                + click.style(msg, fg="red")
+            # get or create signal instance
+            signal_instance = create_instance(
+                "signals",
+                target_endpoint=endpoint,
+                target_id=instance.pk,
+                import_string=".".join([signal.__module__, signal.__name__]),
             )
 
-        except Exception as error:  # pylint: disable=broad-except
-            click.secho(f"Failed to log signal errors ({error}):\n\n{msg}", fg="red")
+            # patch signal with error message
+            signal_instance.data["failure_traceback"] = failure_traceback
+            patch_instance("signals", signal_instance.pk, data=signal_instance.data)
+
+    if errors:
+        msg = (
+            click.style("\nERROR:", fg="red")
+            + " some signals failed!\n\n"
+            + click.style("\n".join([f"{i}:\n\t{j}" for i, j in errors]), fg="red")
+        )
+
+        click.echo(msg)
+
+        if raise_error:
+            raise exceptions.AutomationError(msg)

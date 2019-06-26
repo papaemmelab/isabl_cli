@@ -56,6 +56,7 @@ _DEFAULTS = {
         "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.merge_individual_analyses",
         "isabl_cli.commands.patch_status",
+        "isabl_cli.commands.rerun_signals",
     ],
 }
 

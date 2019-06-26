@@ -1,10 +1,10 @@
 """commands logic."""
 
+from collections import OrderedDict
 from glob import glob
 from os.path import join
-from collections import OrderedDict
-import os
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -12,6 +12,7 @@ import tempfile
 import click
 
 from isabl_cli import api
+from isabl_cli import exceptions
 from isabl_cli import options
 from isabl_cli import utils
 from isabl_cli.settings import import_from_string
@@ -342,3 +343,24 @@ def get_bams(filters, assembly, verbose, identifiers):
             raise click.UsageError(f"No bams for {system_id}, ignore with --verbose")
         else:
             raise click.UsageError(f"Multiple bams for {system_id}, pass --assembly")
+
+
+@click.command()
+@options.NULLABLE_FILTERS
+def rerun_signals(filters):
+    """Rerun failed signals."""
+    for i in api.get_instances("signals", pk__gt=0, **filters):
+        click.secho(f"Rerunning signal: {i.slug}", fg="yellow")
+        instance = api.get_instance(i.target_endpoint, i.target_id)
+
+        try:
+            api._run_signals(
+                endpoint=i.target_endpoint,
+                instance=instance,
+                signals=[import_from_string(i.import_string)],
+                raise_error=True,
+            )
+
+            api.delete_instance("signals", i.pk)
+        except exceptions.AutomationError:
+            pass
