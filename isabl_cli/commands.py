@@ -349,7 +349,9 @@ def get_bams(filters, assembly, verbose, identifiers):
 @options.NULLABLE_FILTERS
 def rerun_signals(filters):
     """Rerun failed signals."""
-    for i in api.get_instances("signals", pk__gt=0, **filters):
+    for i in api.get_instances(
+        "signals", pk__gt=0, data__failure_traceback__isnull=False, **filters
+    ):
         click.secho(f"Rerunning signal: {i.slug}", fg="yellow")
         instance = api.get_instance(i.target_endpoint, i.target_id)
 
