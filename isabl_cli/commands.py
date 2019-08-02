@@ -366,3 +366,31 @@ def rerun_signals(filters):
             api.delete_instance("signals", i.pk)
         except exceptions.AutomationError:
             pass
+
+
+@click.command()
+@options.NULLABLE_FILTERS
+def run_web_signals(filters):
+    """Rerun web signals."""
+    for i in api.get_instances(
+        "signals",
+        import_string__in=[
+            "isabl_cli.signals.resume_analysis_signal",
+            "isabl_cli.signals.force_analysis_signal",
+        ],
+        **filters,
+    ):
+        click.secho(f"Running web signal: {i.slug}", fg="yellow")
+        instance = api.get_instance(i.target_endpoint, i.target_id)
+
+        try:
+            api._run_signals(
+                endpoint=i.target_endpoint,
+                instance=instance,
+                signals=[import_from_string(i.import_string)],
+                raise_error=True,
+            )
+
+            api.delete_instance("signals", i.pk)
+        except exceptions.AutomationError:
+            pass
