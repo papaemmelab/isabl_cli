@@ -6,13 +6,13 @@ from isabl_cli.settings import import_from_string
 
 def resume_analysis_signal(analysis):
     """Signal to resume analysis execution."""
-    click.secho(f"Resuming analysis {analysis.slug}", fg="yellow")
+    click.secho(f"Resuming analysis {analysis}", fg="yellow")
     run_web_signals(analysis, force=False)
 
 
 def force_analysis_signal(analysis):
     """Signal to wipe analysis and restart."""
-    click.secho(f"Forcing analysis {analysis.slug}", fg="yellow")
+    click.secho(f"Forcing analysis {analysis}", fg="yellow")
     run_web_signals(analysis, force=True)
 
 
