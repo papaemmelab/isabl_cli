@@ -27,9 +27,9 @@ This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil
 [codecov_base]: https://codecov.io/gh/isabl-io/cli
 [contributing guidelines]: https://isabl-io.github.io/docs/#/tutorials/contributing
 [cookiecutter]: https://github.com/audreyr/cookiecutter
-[documentation]: https://isabl-io.github.io/docs
+[documentation]: https://docs.isabl.io
 [leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
-[travis_badge]: https://img.shields.io/travis/isabl-io/cli.svg
-[travis_base]: https://travis-ci.org/isabl-io/cli
+[travis_badge]: https://img.shields.io/travis/com/isabl-io/cli/master.svg
+[travis_base]: https://travis-ci.com/isabl-io/cli

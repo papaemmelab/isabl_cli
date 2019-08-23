@@ -302,8 +302,8 @@ class LocalReferenceDataImporter(BaseImporter):
         """Get reference data importer as click command line interface."""
         # build isabl_cli command and return it
         @click.command(name="import-reference-data")
-        @click.option("--assembly", help="name of reference genome")
-        @click.option("--species", help="species of reference genome")
+        @click.option("--assembly", help="name of reference genome", required=True)
+        @click.option("--species", help="species of reference genome", required=True)
         @click.option("--description", help="reference data description")
         @click.option("--data-id", help="data identifier (will be slugified)")
         @click.option("--sub-dir", help="target resource sub dir, default is data-id")
