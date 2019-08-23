@@ -31,5 +31,5 @@ This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil
 [leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
-[travis_badge]: https://img.shields.io/travis/com/isabl-io/cli/master.svg
+[travis_badge]: https://travis-ci.com/isabl-io/cli.svg?token=VymT5apURZYCYw4zJX7v&branch=master
 [travis_base]: https://travis-ci.com/isabl-io/cli

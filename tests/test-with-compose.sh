@@ -18,5 +18,5 @@ echo "CLI directory set to: $CLI_DIR"
 cd $API_DIR && docker-compose build && docker-compose up -d
 
 # give some time to API to start and test Isabl CLI
-echo "Giving 20 seconds to API to get started..."
-sleep 20 && cd $CLI_DIR && pytest -v tests/
+echo "Giving 30 seconds to API to get started..."
+sleep 30 && cd $CLI_DIR && pytest -v tests/ --cov=isabl_cli
