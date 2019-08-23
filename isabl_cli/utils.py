@@ -5,6 +5,9 @@ import json
 import os
 import sys
 import tarfile
+from getpass import getuser
+from os import stat
+from pwd import getpwuid
 
 import click
 
@@ -208,3 +211,18 @@ def echo_title(title, color="cyan", blink=False):
     title = "\n" + title.strip().upper() + "\n"
     title += "".join("-" for i in title.strip()) + "\n"
     click.secho(title, fg=color, file=sys.stderr, blink=blink)
+
+
+def find_owner(filename):
+    """Find directory owner."""
+    return getpwuid(stat(filename).st_uid).pw_name
+
+
+def assert_same_owner(path):
+    """Validate that a path is owned by the same user."""
+    try:
+        assert find_owner(path) == getuser(), f"{path} must be owned by {getuser()}"
+    except AssertionError as error:
+        raise click.UsageError(str(error))
+    except FileNotFoundError:
+        pass

@@ -1,5 +1,6 @@
 """isabl_cli utils tests."""
 
+from getpass import getuser
 from os.path import join
 import os
 import tarfile
@@ -8,6 +9,11 @@ import pytest
 
 from isabl_cli import utils
 from isabl_cli.settings import _DEFAULTS
+
+
+def test_find_user(tmpdir):
+    assert getuser() == utils.find_owner(str(tmpdir))
+    assert utils.assert_same_owner(str(tmpdir)) is None
 
 
 def test_force_symlink(tmpdir):
