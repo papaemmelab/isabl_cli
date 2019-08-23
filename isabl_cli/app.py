@@ -1,5 +1,5 @@
 """Abstract Application."""
-# pylint: disable=R0201,C0103
+# pylint: disable=R0201,C0103,too-many-lines
 
 from collections import defaultdict
 from contextlib import redirect_stderr
@@ -372,23 +372,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 status="SUCCEEDED",
             ),
         )
-
-    def submit_project_merge(self, project):
-        """
-        Directly call `merge_project_analyses` if SUBMIT_PROJECT_LEVEL_MERGE is not set.
-
-        Use setting SUBMIT_PROJECT_LEVEL_MERGE to submit the merge work with custom
-        logic, for instance by using LSF with `bsub isabl merge-project-analyses`.
-
-        Arguments:
-            project (dict): a project instance.
-        """
-        if system_settings.SUBMIT_PROJECT_LEVEL_MERGE:
-            system_settings.SUBMIT_PROJECT_LEVEL_MERGE(
-                project=project, application=self
-            )
-        else:
-            self.run_project_merge(project)
 
     def get_project_level_auto_merge_analysis(self, project):
         """
@@ -912,13 +895,19 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Patch application settings if necessary."""
         assert system_settings.is_admin_user, "Apps can be patched only by admin user."
         click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
+        client_id = system_settings.client.get("pk", "default")
 
         try:
-            assert self.application["settings"] == settings
+            assert self.application.settings.get(client_id, {}) == settings
             click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
-                api.patch_instance("applications", self.primary_key, settings=settings)
+                api.patch_instance(
+                    "applications",
+                    self.primary_key,
+                    settings={**self.application.settings, client_id: settings},
+                )
+
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:
                 click.secho(f"\tPatched failed with error: {error}.\n", fg="red")

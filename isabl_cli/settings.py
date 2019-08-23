@@ -12,6 +12,7 @@ import os
 
 from cached_property import cached_property
 from munch import Munch
+import click
 import pytz
 import six
 
@@ -178,6 +179,9 @@ class BaseSettings:
 
 
 class SystemSettings(BaseSettings):
+
+    client_id = os.environ.get("ISABL_CLIENT_ID")
+
     @cached_property
     def is_admin_user(self):
         """Return True if current user is ADMIN_USER."""
@@ -191,15 +195,25 @@ class SystemSettings(BaseSettings):
         return api_request("get", url="/rest-auth/user/").json()["username"]
 
     @cached_property
+    def client(self):
+        """Get client configuration from database."""
+        from isabl_cli.api import get_instance
+
+        if not self.client_id:
+            click.secho(
+                "Set environment variable ISABL_CLIENT_ID "
+                "to your databased client primary key or slug "
+                "to configure Isabl CLI directly from the API.",
+                fg="yellow",
+            )
+
+            return {}
+        return get_instance("clients", self.client_id)
+
+    @cached_property
     def _settings(self):
         """Return dictionary system with settings."""
-        from isabl_cli.api import api_request
-
-        if os.environ.get("ISABL_CLIENT_ID"):
-            url = f"/clients/{os.environ.get('ISABL_CLIENT_ID')}"
-            return api_request("get", url).json()["settings"]
-
-        return api_request("get", "/client/settings/", authenticate=False).json()
+        return self.client.get("settings", {})
 
 
 def get_application_settings(defaults, settings, reference_data, import_strings):
