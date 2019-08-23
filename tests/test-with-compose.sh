@@ -17,8 +17,5 @@ echo "CLI directory set to: $CLI_DIR"
 # build container
 cd $API_DIR && docker-compose build && docker-compose up -d
 
-# create superuser
-docker-compose run --rm django python manage.py shell -c "from django.contrib.auth.models import User; User.objects.create_superuser('admin', 'admin@admin.admin', 'admin')"
-
 # test Isabl CLI
 cd $CLI_DIR && pytest -v tests/
