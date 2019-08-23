@@ -10,7 +10,7 @@ install:
   - pip install -U codecov
 
 script:
-  - bash test-container.sh
+  - bash tests/test-with-compose.sh
 
 after_success:
   - codecov
@@ -18,10 +18,10 @@ after_success:
 deploy:
   provider: pypi
   distributions: sdist bdist_wheel
-  user: isabl_cli-io
+  user: isabl-io
   password: <TO REPLACE THIS RUN `travis encrypt --add deploy.password`>
   on:
-    tags: true
-    repo: isabl_cli-io/isabl_cli
+    tags: false
+    repo: isabl-io/isabl_cli
     python: 3.6
     branch: master

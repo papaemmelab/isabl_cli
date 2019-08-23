@@ -118,3 +118,6 @@ settings.yml
 
 # ipython
 Untitled.ipynb
+
+# ignore API cloned for testing
+api/

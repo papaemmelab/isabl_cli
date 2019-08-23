@@ -17,10 +17,12 @@ from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
+_FAILED_SIGNAL_MESSAGE = "\n\nNo worries!! This error is part of signals testing...\n\n"
+
 
 def besuhof_signal(instance):
     if "please fail" in instance.notes:
-        raise Exception("I was told to fail...")
+        raise Exception(_FAILED_SIGNAL_MESSAGE)
     elif "fail with different msg" in instance.notes:
         raise Exception("I was told to fail, but with a different msg...")
 
@@ -40,7 +42,7 @@ def test_failed_signal():
     api._run_signals("analyses", analysis, [besuhof_signal])
     instances = api.get_instances(**get_kwargs)
     assert len(instances) == 1
-    assert "I was told to fail..." in instances[0].data["failure_traceback"]
+    assert _FAILED_SIGNAL_MESSAGE in instances[0].data["failure_traceback"]
 
     # assert that error traceback is updated
     runner = CliRunner()
