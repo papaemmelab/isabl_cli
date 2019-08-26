@@ -441,6 +441,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # ----------
 
     @cached_property
+    def client_id(self):
+        """Get current client ID."""
+        return system_settings.client.get("pk", "default_client")
+
+    @cached_property
     def primary_key(self):
         """Space separated name, version and assembly."""
         return self.application["pk"]
@@ -459,7 +464,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return get_application_settings(
             defaults=defaults,
-            settings=self.application.settings or {},
+            settings=self.application.settings.get(self.client_id) or {},
             reference_data=self.application.assembly.reference_data or {},
             import_strings=import_strings,
         )
@@ -895,17 +900,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Patch application settings if necessary."""
         assert system_settings.is_admin_user, "Apps can be patched only by admin user."
         click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
-        client_id = system_settings.client.get("pk", "default")
 
         try:
-            assert self.application.settings.get(client_id, {}) == settings
+            assert self.application.settings.get(self.client_id, {}) == settings
             click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
-                api.patch_instance(
+                del self.settings  # make sure cached settings are re-computed
+                self.application = api.patch_instance(
                     "applications",
                     self.primary_key,
-                    settings={**self.application.settings, client_id: settings},
+                    settings={**self.application.settings, self.client_id: settings},
                 )
 
                 click.secho("\tSuccessfully patched settings.\n", fg="green")

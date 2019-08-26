@@ -22,7 +22,6 @@ deploy:
   provider: pypi
   distributions: sdist bdist_wheel
   user: isabl-io
-  password: '<TO REPLACE THIS RUN `travis encrypt --add deploy.password`>'
   on:
     tags: false
     repo: isabl-io/isabl_cli

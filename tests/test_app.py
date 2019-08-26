@@ -27,7 +27,11 @@ class TestApplication(AbstractApplication):
 
     cli_help = "This is a test application"
     cli_options = [options.TARGETS]
-    application_settings = {"foo": "bar"}
+    application_settings = {
+        "foo": "bar",
+        "test_reference": None,
+        "from_system_settings": None,
+    }
     application_inputs = {"bar": None}
     application_results = {
         "analysis_result_key": {
@@ -227,16 +231,21 @@ def test_get_application_settings():
 
 def test_application_settings(tmpdir):
     application = TestApplication()
-    application.application_settings = {
-        "test_reference": "reference_data_id:test_id",
-        "from_system_settings": None,
-    }
 
+    # test get settings from reference data id
+    application.application_settings["test_reference"] = "reference_data_id:test_id"
     application.assembly["reference_data"]["test_id"] = dict(url="FOO")
     assert application.settings.test_reference == "FOO"
     assert application.settings.from_system_settings is None
+    application.application_settings["test_reference"] = None
 
+    # assert can patch databased settings
+    application.patch_application_settings(from_system_settings="set")
+    assert application.settings.from_system_settings == "set"
+
+    # test bad settings
     application = TestApplication()
+    application.application.settings = {}  # avoid default errors
     application.application_settings = {
         "test_reference": "reference_data_id:invalid_key",
         "needs_to_be_implemented": NotImplemented,
