@@ -98,7 +98,7 @@ class ExperimentFactory(BaseFactory):
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     generating_center = factory.SubFactory(CenterFactory)
     sequencing_data = None
-    sequencing_platform = factory.SubFactory(PlatformFactory)
+    generating_platform = factory.SubFactory(PlatformFactory)
     sample = factory.SubFactory(SampleFactory)
     technique = factory.SubFactory(TechniqueFactory)
 
