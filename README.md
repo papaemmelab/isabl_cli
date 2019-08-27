@@ -1,6 +1,5 @@
 # Isabl CLI
 
-[![pypi badge][pypi_badge]][pypi_base]
 [![travis badge][travis_badge]][travis_base]
 [![codecov badge][codecov_badge]][codecov_base]
 [![code formatting][black_badge]][black_base]
@@ -29,7 +28,11 @@ This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil
 [black_base]: https://github.com/ambv/black
 [codecov_badge]: https://codecov.io/github/isabl-io/cli/coverage.svg?branch=master&token=PSypdR9o4P
 [codecov_base]: https://codecov.io/gh/isabl-io/cli
-[pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
-[pypi_base]: https://pypi.python.org/pypi/isabl_cli
 [travis_badge]: https://travis-ci.com/isabl-io/cli.svg?token=VymT5apURZYCYw4zJX7v&branch=master
 [travis_base]: https://travis-ci.com/isabl-io/cli
+
+<!--
+[![pypi badge][pypi_badge]][pypi_base]
+[pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
+[pypi_base]: https://pypi.python.org/pypi/isabl_cli
+-->
