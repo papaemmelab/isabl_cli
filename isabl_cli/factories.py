@@ -96,7 +96,7 @@ class ExperimentFactory(BaseFactory):
     read_length = fuzzy.FuzzyChoice(["100", "150"])
     read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    sequencing_center = factory.SubFactory(CenterFactory)
+    generating_center = factory.SubFactory(CenterFactory)
     sequencing_data = None
     sequencing_platform = factory.SubFactory(PlatformFactory)
     sample = factory.SubFactory(SampleFactory)
