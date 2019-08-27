@@ -219,19 +219,19 @@ def get_outdirs(pattern, filters, identifiers):
 @options.NULLABLE_IDENTIFIERS
 @options.VERBOSE
 def get_data(filters, identifiers, verbose):
-    """Get file paths for experiments sequencing data."""
+    """Get file paths for experiments raw data."""
     for i in _filters_or_identifiers(
         endpoint="experiments",
         identifiers=identifiers,
         filters=filters,
-        fields="sequencing_data,system_id",
+        fields="raw_data,system_id",
     ):
         system_id = i["system_id"]
 
-        if not i["sequencing_data"] and not verbose:
+        if not i["raw_data"] and not verbose:
             raise click.UsageError(f"No data for {system_id}, ignore with --verbose")
 
-        for j in i["sequencing_data"] or ["None"]:
+        for j in i["raw_data"] or ["None"]:
             click.echo(j["file_url"] if not verbose else f"{system_id}\t{j}")
 
 

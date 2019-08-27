@@ -120,7 +120,7 @@ class Experiment(IsablDict):
         """
         read_1, read_2 = [], []
 
-        for i in self.sequencing_data:
+        for i in self.raw_data:
             if i["file_type"] == "FASTQ_R1":
                 read_1.append(i["file_url"])
             elif i["file_type"] == "FASTQ_R2":
@@ -358,8 +358,8 @@ def patch_instance(endpoint, instance_id, **data):
 
     if (
         endpoint == "experiments"
-        and data.get("sequencing_data")
-        and Experiment(instance_id).sequencing_data != data.get("sequencing_data")
+        and data.get("raw_data")
+        and Experiment(instance_id).raw_data != data.get("raw_data")
     ):
         run_data_import_signals = True
 

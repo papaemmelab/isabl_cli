@@ -9,7 +9,7 @@ def create_experiment(
     bam,
     bedfile="/a/fake/bedfile",
     assembly="GRCh37",
-    sequencing_data=None,
+    raw_data=None,
     method="TD",
     analyte="DNA",
     species="HUMAN",
@@ -17,8 +17,8 @@ def create_experiment(
     technique_name=None,
     sample=None,
 ):
-    """Easily create a sequencing experiment for testing purposes."""
-    # create sequencing technique
+    """Easily create an experiment for testing purposes."""
+    # create technique
     technique = factories.TechniqueFactory(
         method=method, analyte=analyte, name=technique_name or str(uuid.uuid4())
     )
@@ -35,7 +35,7 @@ def create_experiment(
         experiment["sample"]["individual"]["species"] = species
         experiment["sample"]["sample_class"] = sample_class
 
-    experiment["sequencing_data"] = sequencing_data or []
+    experiment["raw_data"] = raw_data or []
     experiment["bam_files"][assembly] = dict(url=bam, analysis=1)
     return api.create_instance("experiments", **experiment)
 

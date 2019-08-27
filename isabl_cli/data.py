@@ -4,8 +4,8 @@ from collections import defaultdict
 from datetime import datetime
 from getpass import getuser
 from glob import glob
-from os.path import dirname
 from os.path import basename
+from os.path import dirname
 from os.path import getsize
 from os.path import isdir
 from os.path import join
@@ -19,10 +19,34 @@ import click
 import yaml
 
 from isabl_cli import api
+from isabl_cli import exceptions
 from isabl_cli import options
 from isabl_cli import utils
-from isabl_cli.settings import system_settings
 from isabl_cli.settings import import_from_string
+from isabl_cli.settings import system_settings
+
+
+def sequencing_data_inspector(path):
+    """Determine if a path is a supported sequencing file."""
+    fastq_regex = (
+        (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
+        (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
+    )
+
+    if re.search(r"\.bam$", path):
+        return "BAM"
+    elif re.search(r"\.cram$", path):
+        return "CRAM"
+
+    for i in [1, 2]:
+        for pattern, fq_type in fastq_regex:
+            if re.search(pattern.format(i), path):
+                return f"FASTQ_{fq_type}{i}"
+
+    if re.search(r"\.f(ast)?q(\.gz)?$", path):
+        raise click.UsageError(f"cant determine fastq type from: {path}")
+
+    return None
 
 
 def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
@@ -563,17 +587,11 @@ class LocalDataImporter(BaseImporter):
     A Data import engine for experiments.
 
     Attributes:
-        FASTQ_REGEX (str): a regex pattern used to match fastq files.
-        BAM_REGEX (str): a regex pattern to match bams.
-        CRAM_REGEX (str): a regex pattern to match crams.
+        RAW_DATA_INSPECTORS (list): list of functions which argument is a path and
+            are tasked to return the data type of supported formats.
     """
 
-    BAM_REGEX = r"\.bam$"
-    CRAM_REGEX = r"\.cram$"
-    FASTQ_REGEX = (
-        (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
-        (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
-    )
+    RAW_DATA_INSPECTORS = [sequencing_data_inspector]
 
     def annotate_file_data(
         self, experiment, file_data, file_type, src, dst
@@ -593,7 +611,7 @@ class LocalDataImporter(BaseImporter):
         """
         Import raw data for multiple experiments.
 
-        Experiments's `storage_url`, `storage_usage`, `sequencing_data` are
+        Experiments's `storage_url`, `storage_usage`, `raw_data` are
         updated.
 
         Arguments:
@@ -639,8 +657,8 @@ class LocalDataImporter(BaseImporter):
                     f"and {identifiers[identifier]}: {identifier}"
                 )
 
-            if i["sequencing_data"] or i["bam_files"]:
-                using_id = f"{i['system_id']} (Skipped, experiment has data)"
+            if i["raw_data"] or i["bam_files"]:
+                using_id = f"{i['system_id']} (Skipped, experiment has raw data)"
             elif identifier:
                 identifiers[identifier] = i["system_id"]
                 patterns.append(self.get_regex_pattern(index, identifier))
@@ -669,10 +687,10 @@ class LocalDataImporter(BaseImporter):
                                     )
 
                                 path = join(root, i)
-                                index = self.match_path(path, pattern)
+                                match = self.match_path(path, pattern)
 
-                                if index:
-                                    cache[index]["files"].append(path)
+                                if match:
+                                    cache[match.pop("index")]["files"].append(match)
 
             # process files if needed
             label = "Processing..."
@@ -696,28 +714,25 @@ class LocalDataImporter(BaseImporter):
     def match_path(self, path, pattern):
         """Match `path` with `pattern` and update cache if fastq or bam."""
         try:
+            # first match ids in path
             matches = pattern.finditer(path)
             index = next(matches).lastgroup
             assert index is not None  # happens when pattern is empty
 
-            # check if valid data type
-            valid = True if re.search(self.BAM_REGEX, path) else False
-            valid |= True if re.search(self.CRAM_REGEX, path) else False
+            # determine if valid data type
+            dtypes = [i(path) for i in self.RAW_DATA_INSPECTORS]
+            dtypes = set(i for i in dtypes if i)
 
-            for i in [1, 2]:
-                for j, _ in self.FASTQ_REGEX:
-                    if re.search(j.format(i), path):
-                        valid = True
+            # raise error if multiple data types matched
+            if len(dtypes) != 1:
+                raise exceptions.ImplementationError(
+                    f"Conflicting data types ({dtypes}) were "
+                    f"identified by inspectors: {self.RAW_DATA_INSPECTORS} "
+                )
 
-            if re.search(r"\.f(ast)?q(\.gz)?$", path) and not valid:
-                msg = f"cant determine fastq type from: {path}"
-                raise click.UsageError(msg)
-
-            assert valid
+            return dict(index=index, path=path, dtype=dtypes.pop())
         except (StopIteration, AssertionError):  # pragma: no cover
             return None
-
-        return index
 
     def import_files(self, instance, files, files_data, symlink):
         """
@@ -736,8 +751,7 @@ class LocalDataImporter(BaseImporter):
         Returns:
             dict: patched experiment instance.
         """
-        dtypes = set()
-        sequencing_data = []
+        raw_data = []
         src_dst = []
 
         if not instance["storage_url"]:
@@ -748,19 +762,9 @@ class LocalDataImporter(BaseImporter):
         data_dir = join(instance["storage_url"], "data")
         os.makedirs(data_dir, exist_ok=True)
 
-        for src in files:
+        for src, file_type in [(i["path"], i["dtype"]) for i in files]:
             file_name = basename(src)
             file_data = files_data.get(file_name, {})
-
-            if re.search(self.BAM_REGEX, src):
-                file_type = "BAM"
-                dtypes.add(file_type)
-            elif re.search(self.CRAM_REGEX, src):
-                file_type = "CRAM"
-                dtypes.add(file_type)
-            else:
-                file_type = self.get_fastq_type(file_name)
-                dtypes.add("FASTQ")
 
             # make sure there are no duplicate file names
             if not file_name.startswith(instance["system_id"]):
@@ -771,7 +775,7 @@ class LocalDataImporter(BaseImporter):
             if all(i != src for i, _ in src_dst):
                 dst = join(data_dir, file_name)
                 src_dst.append((src, dst))
-                sequencing_data.append(
+                raw_data.append(
                     dict(
                         hash_value=getsize(src),
                         hash_method="os.path.getsize",
@@ -787,13 +791,6 @@ class LocalDataImporter(BaseImporter):
                     )
                 )
 
-        if len(dtypes) > 1:
-            raise click.UsageError(
-                "We should have catched this earlier, but multiple formats are "
-                f'not supported, these were found for {instance["system_id"]}: '
-                f'{",".join(i["file_url"] for i in sequencing_data)}'
-            )
-
         for src, dst in src_dst:
             if symlink:
                 self.symlink(src, dst)
@@ -805,17 +802,8 @@ class LocalDataImporter(BaseImporter):
             instance_id=instance["pk"],
             storage_url=instance["storage_url"],
             storage_usage=utils.get_tree_size(instance["storage_url"]),
-            sequencing_data=sorted(sequencing_data, key=lambda i: i["file_url"]),
+            raw_data=sorted(raw_data, key=lambda i: i["file_url"]),
         )
-
-    def get_fastq_type(self, file_name):
-        """Return destination file name."""
-        for index in [1, 2]:
-            for pattern, fq_type in self.FASTQ_REGEX:
-                if re.search(pattern.format(index), file_name):
-                    return f"FASTQ_{fq_type}{index}"
-
-        raise AssertionError(f"Couldn't determine R1, R2 or I1 from {file_name}")
 
     @staticmethod
     def get_regex_pattern(group_name, identifier):
@@ -840,13 +828,15 @@ class LocalDataImporter(BaseImporter):
         skipped, missing, matched, total_matched, nl = [], [], [], 0, "\n"
 
         for i in cache.values():
-            if i["instance"]["sequencing_data"]:
+            if i["instance"]["raw_data"]:
                 msg = click.style(f"skipped {i['using_id']}\t", fg="cyan")
                 skipped.append(msg)
             elif i["files"]:
-                msg = click.style(f"found {i['using_id']}\n\t\t", fg="green")
                 total_matched += len(i["files"])
-                matched.append(msg + "\n\t\t".join(i["files"]))
+                matched.append(
+                    click.style(f"found {i['using_id']}\n\t\t", fg="green")
+                    + "\n\t\t".join([f"{j['dtype']} - {j['path']}" for j in i["files"]])
+                )
             else:
                 msg = click.style(f"missing {i['using_id']}\t", fg="red")
                 missing.append(msg + "no files matched")
@@ -877,7 +867,7 @@ class LocalDataImporter(BaseImporter):
             """
             Find and import experiments data from many directories.
 
-            Search is recursive and any cram, bam or fastq file that matches
+            Search is recursive and any cram, bam, fastq, or images that matches
             the experiment identifier will be imported. Multiple data types for
             same experiment is not currently supported.
 

@@ -1,6 +1,7 @@
 from os.path import isfile
 from os.path import join
 import os
+import uuid
 
 from click.testing import CliRunner
 import click
@@ -19,7 +20,7 @@ from isabl_cli.settings import system_settings
 
 class TestApplication(AbstractApplication):
 
-    NAME = "HELLO_WORLD"
+    NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
     SPECIES = "HUMAN"
@@ -464,16 +465,16 @@ def test_validate_reference_genome(tmpdir):
 
 def test_validate_fastq_only():
     application = AbstractApplication()
-    targets = [{"sequencing_data": [], "system_id": "FOO"}]
+    targets = [{"raw_data": [], "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
-        application.validate_has_raw_sequencing_data(targets)
+        application.validate_has_raw_data(targets)
 
     assert "FOO" in str(error.value)
 
     targets = [
-        {"sequencing_data": [{"file_type": "BAM"}], "system_id": "FOO"},
-        {"sequencing_data": [{"file_type": "FASTQ_R1"}], "system_id": "BAR"},
+        {"raw_data": [{"file_type": "BAM"}], "system_id": "FOO"},
+        {"raw_data": [{"file_type": "FASTQ_R1"}], "system_id": "BAR"},
     ]
 
     with pytest.raises(AssertionError) as error:
@@ -481,7 +482,7 @@ def test_validate_fastq_only():
 
     assert "FOO" in str(error.value)
 
-    targets = [{"sequencing_data": [{"file_type": "BAM"}], "system_id": "FOO"}]
+    targets = [{"raw_data": [{"file_type": "BAM"}], "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
         application.validate_fastq_only(targets)
@@ -496,7 +497,7 @@ def test_validate_methods():
     with pytest.raises(AssertionError) as error:
         application.validate_methods(targets, "BAR")
 
-    assert "Only 'BAR' sequencing method allowed" in str(error.value)
+    assert "Only 'BAR' method(s) allowed" in str(error.value)
 
 
 def test_validate_pdx_only():

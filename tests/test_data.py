@@ -142,15 +142,16 @@ def test_local_data_import(tmpdir):
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
 
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
-    experiments = [factories.ExperimentFactory(projects=projects) for i in range(3)]
+    experiments = [factories.ExperimentFactory(projects=projects) for i in range(4)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     keys = [i["pk"] for i in experiments]
 
     importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
     obtained = len(summary.rsplit("no files matched"))
-    assert obtained == 3 + 1
+    assert obtained == 4 + 1
 
+    # test can't determine type of fastq
     with pytest.raises(click.UsageError) as error:
         path_1 = tmpdir.join(f'{experiments[0]["system_id"]}.fastq')
         path_1.write("foo")
@@ -159,46 +160,49 @@ def test_local_data_import(tmpdir):
     path_1.remove()
     assert "cant determine fastq type from" in str(error.value)
 
+    # test imports fastq
     path_1 = tmpdir.join(f'{experiments[0]["system_id"]}_R1_foo.fastq')
     path_2 = tmpdir.join(f'{experiments[0]["system_id"]}_R2_foo.fastq')
     path_1.write("foo")
     path_2.write("foo")
-
     _, summary = importer.import_data(
         directories=[tmpdir.strpath], pk__in=keys, commit=True
     )
+
+    click.echo(summary)
     assert "samples matched: 1" in summary
 
-    with pytest.raises(click.UsageError) as error:
-        path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
-        path_2 = tmpdir.join(f'{experiments[1]["system_id"]}.bam')
-        path_1.write("foo")
-        path_2.write("foo")
-        importer.import_data(directories=[tmpdir.strpath], pk__in=keys, commit=True)
+    # test can import multiple formats
+    path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
+    path_2 = tmpdir.join(f'{experiments[1]["system_id"]}.bam')
+    path_1.write("foo")
+    path_2.write("foo")
+    _, summary = importer.import_data(
+        directories=[tmpdir.strpath], pk__in=keys, commit=True
+    )
+    click.echo(summary)
+    assert "FASTQ_R1" in str(summary)
+    assert "BAM" in str(summary)
 
-    path_1.remove()
-    path_2.remove()
-    assert "multiple formats" in str(error.value)
-
+    # test raise error if duplicated ids
     with pytest.raises(click.UsageError) as error:
-        api.patch_instance("experiments", experiments[1]["pk"], center_id="dup_id")
         api.patch_instance("experiments", experiments[2]["pk"], center_id="dup_id")
+        api.patch_instance("experiments", experiments[3]["pk"], center_id="dup_id")
         importer.import_data(
             key=lambda x: x["center_id"], directories=[tmpdir.strpath], pk__in=keys
         )
 
     assert "same identifier for" in str(error.value)
 
-    path_1 = tmpdir.join(f'_{experiments[1]["system_id"]}_cram1_.cram')
-    path_2 = tmpdir.join(f'_{experiments[1]["system_id"]}_cram2_.cram')
-    path_3 = tmpdir.join(f'_{experiments[2]["system_id"]}_bam1_.bam')
-    path_4 = tmpdir.join(f'_{experiments[2]["system_id"]}_bam2_.bam')
-
+    # test summary
+    path_1 = tmpdir.join(f'_{experiments[2]["system_id"]}_cram1_.cram')
+    path_2 = tmpdir.join(f'_{experiments[2]["system_id"]}_cram2_.cram')
+    path_3 = tmpdir.join(f'_{experiments[3]["system_id"]}_bam1_.bam')
+    path_4 = tmpdir.join(f'_{experiments[3]["system_id"]}_bam2_.bam')
     path_1.write("foo")
     path_2.write("foo")
     path_3.write("foo")
     path_4.write("foo")
-
     imported, summary = importer.import_data(
         directories=[tmpdir.strpath], commit=True, symlink=True, pk__in=keys
     )
@@ -206,14 +210,19 @@ def test_local_data_import(tmpdir):
     project = api.get_instance("projects", projects[0]["pk"])
     assert project["storage_url"]
     assert imported[0]["storage_usage"] > 0
-    assert imported[0]["sequencing_data"]
-    assert imported[1]["sequencing_data"]
+    assert imported[0]["raw_data"]
+    assert imported[1]["raw_data"]
     assert "experiments" in imported[1]["storage_url"]
     assert len(os.listdir(os.path.join(imported[1]["storage_url"], "data"))) == 2
     assert "samples matched: 2" in summary
-    assert "samples skipped: 1" in summary
+    assert "samples skipped: 2" in summary
 
-    api.patch_instance("experiments", experiments[1]["pk"], sequencing_data=None)
+    # test import data from command line and files_data functionality
+    path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
+    path_2 = tmpdir.join(f'{experiments[1]["system_id"]}_2.fastq')
+    path_1.write("foo")
+    path_2.write("foo")
+    api.patch_instance("experiments", experiments[1]["pk"], raw_data=None)
     file_data = tmpdir.join("file_data.yaml")
 
     with open(file_data.strpath, "w") as f:
@@ -244,9 +253,10 @@ def test_local_data_import(tmpdir):
     result = runner.invoke(command, args, catch_exceptions=False)
     assert "samples matched: 1" in result.output
     experiments[1] = api.get_instance("experiments", experiments[1]["pk"])
-    assert experiments[1]["sequencing_data"][0]["file_data"]["PU"] == "TEST_PU"
-    assert experiments[1]["sequencing_data"][1]["file_data"]["PU"] == "TEST_PU"
+    assert experiments[1]["raw_data"][0]["file_data"]["PU"] == "TEST_PU"
+    assert experiments[1]["raw_data"][1]["file_data"]["PU"] == "TEST_PU"
 
+    # test import using invalid identifier
     args = ["-di", tmpdir.strpath, "-id", "sample", "-fi", "pk__in", keys]
     result = runner.invoke(command, args)
     assert "invalid type for identifier" in result.output
@@ -268,19 +278,21 @@ def test_get_dst():
     ]
 
     for i in bam_test:
-        assert re.search(importer.BAM_REGEX, i)
-        assert not re.search(importer.BAM_REGEX, i + "not a bam")
+        assert data.sequencing_data_inspector(i) == "BAM"
+        assert not data.sequencing_data_inspector(i + "not a bam")
 
     for i in cram_test:
-        assert re.search(importer.CRAM_REGEX, i)
-        assert not re.search(importer.CRAM_REGEX, i + "not a cram")
+        assert data.sequencing_data_inspector(i) == "CRAM"
+        assert not data.sequencing_data_inspector(i + "not a cram")
 
     for test, fq_type in fastq_test:
         for index in [1, 2]:
             for fastq in [".fastq", ".fq"]:
                 for gzipped in ["", ".gz"]:
-                    file_type = importer.get_fastq_type(
-                        test.format(index) + fastq + gzipped
+                    assert (
+                        data.sequencing_data_inspector(
+                            test.format(index) + fastq + gzipped
+                        )
+                        == f"FASTQ_{fq_type}{index}"
                     )
-                    assert file_type == f"FASTQ_{fq_type}{index}"
 

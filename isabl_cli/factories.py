@@ -23,7 +23,6 @@ class ProjectFactory(BaseFactory):
 
 class CenterFactory(BaseFactory):
     acronym = fuzzy.FuzzyText(length=3, chars=string.ascii_letters)
-    internal = fuzzy.FuzzyChoice([True, False])
     name = fuzzy.FuzzyText(length=6, chars=string.ascii_letters)
 
 
@@ -97,7 +96,7 @@ class ExperimentFactory(BaseFactory):
     read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     generating_center = factory.SubFactory(CenterFactory)
-    sequencing_data = None
+    raw_data = None
     generating_platform = factory.SubFactory(PlatformFactory)
     sample = factory.SubFactory(SampleFactory)
     technique = factory.SubFactory(TechniqueFactory)

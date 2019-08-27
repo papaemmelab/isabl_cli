@@ -1323,23 +1323,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             f'{reference} > {reference + ".dict"}'
         )
 
-    def validate_has_raw_sequencing_data(self, experiments):
-        """Validate experiments have sequencing data."""
+    def validate_has_raw_data(self, experiments):
+        """Validate experiments have raw data."""
         msg = []
 
         for i in experiments:
-            if not i["sequencing_data"]:
-                msg.append(f'{i["system_id"]} has no sequencing data...')
+            if not i["raw_data"]:
+                msg.append(f'{i["system_id"]} has no raw data...')
 
         assert not msg, "\n".join(msg)
 
     def validate_single_data_type(self, experiments):
-        """Validate experiments have only one type of sequencing data."""
-        self.validate_has_raw_sequencing_data(experiments)
+        """Validate experiments have only one type of raw data."""
+        self.validate_has_raw_data(experiments)
         types = defaultdict(list)
 
         for i in experiments:
-            for j in i["sequencing_data"]:
+            for j in i["raw_data"]:
                 file_type = j["file_type"]
 
                 if file_type.startswith("FASTQ_"):
@@ -1351,7 +1351,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return list(types.keys())[0]
 
     def validate_fastq_only(self, experiments):
-        """Validate sequencing data is only fastq."""
+        """Validate raw data is only fastq."""
         dtype = self.validate_single_data_type(experiments)
         assert dtype == "FASTQ", f"Only FASTQ supported, found: {dtype}"
 
@@ -1385,13 +1385,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         assert not msg, "\n".join(msg)
 
     def validate_methods(self, experiments, methods):
-        """Make sure all experiments methods are those expected."""
+        """Make sure all experimental methods are those expected."""
         msg = []
 
         for i in experiments:
             if i["technique"]["method"] not in methods:
                 msg.append(
-                    f"Only '{methods}' sequencing method allowed, "
+                    f"Only '{methods}' method(s) allowed, "
                     f"found {i['technique']['method']} for {i['system_id']}."
                 )
 
