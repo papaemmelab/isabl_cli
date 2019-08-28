@@ -138,6 +138,7 @@ def test_import_bedfiles(tmpdir):
 
 
 def test_local_data_import(tmpdir):
+    dirs = [tmpdir.strpath]
     data_storage_directory = tmpdir.mkdir("data_storage_directory")
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
 
@@ -147,7 +148,7 @@ def test_local_data_import(tmpdir):
     keys = [i["pk"] for i in experiments]
 
     importer = data.LocalDataImporter()
-    _, summary = importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
+    _, summary = importer.import_data(directories=dirs, pk__in=keys)
     obtained = len(summary.rsplit("no files matched"))
     assert obtained == 4 + 1
 
@@ -155,7 +156,7 @@ def test_local_data_import(tmpdir):
     with pytest.raises(click.UsageError) as error:
         path_1 = tmpdir.join(f'{experiments[0]["system_id"]}.fastq')
         path_1.write("foo")
-        importer.import_data(directories=[tmpdir.strpath], pk__in=keys)
+        importer.import_data(directories=dirs, pk__in=keys)
 
     path_1.remove()
     assert "cant determine fastq type from" in str(error.value)
@@ -165,22 +166,20 @@ def test_local_data_import(tmpdir):
     path_2 = tmpdir.join(f'{experiments[0]["system_id"]}_R2_foo.fastq')
     path_1.write("foo")
     path_2.write("foo")
-    _, summary = importer.import_data(
-        directories=[tmpdir.strpath], pk__in=keys, commit=True
-    )
-
-    click.echo(summary)
+    _, summary = importer.import_data(directories=dirs, pk__in=keys, commit=True)
     assert "samples matched: 1" in summary
 
-    # test can import multiple formats
+    # test can exclude formats
     path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
     path_2 = tmpdir.join(f'{experiments[1]["system_id"]}.bam')
     path_1.write("foo")
     path_2.write("foo")
-    _, summary = importer.import_data(
-        directories=[tmpdir.strpath], pk__in=keys, commit=True
-    )
-    click.echo(summary)
+    _, summary = importer.import_data(directories=dirs, pk__in=keys, dtypes=["BAM"])
+    assert "FASTQ_R1" not in str(summary)
+    assert "BAM" in str(summary)
+
+    # test can import multiple formats
+    _, summary = importer.import_data(directories=dirs, pk__in=keys, commit=True)
     assert "FASTQ_R1" in str(summary)
     assert "BAM" in str(summary)
 
@@ -189,7 +188,7 @@ def test_local_data_import(tmpdir):
         api.patch_instance("experiments", experiments[2]["pk"], center_id="dup_id")
         api.patch_instance("experiments", experiments[3]["pk"], center_id="dup_id")
         importer.import_data(
-            key=lambda x: x["center_id"], directories=[tmpdir.strpath], pk__in=keys
+            key=lambda x: x["center_id"], directories=dirs, pk__in=keys
         )
 
     assert "same identifier for" in str(error.value)
@@ -204,7 +203,7 @@ def test_local_data_import(tmpdir):
     path_3.write("foo")
     path_4.write("foo")
     imported, summary = importer.import_data(
-        directories=[tmpdir.strpath], commit=True, symlink=True, pk__in=keys
+        directories=dirs, commit=True, symlink=True, pk__in=keys
     )
 
     project = api.get_instance("projects", projects[0]["pk"])
@@ -264,9 +263,32 @@ def test_local_data_import(tmpdir):
 
 def test_get_dst():
     importer = data.LocalDataImporter()
-    bam_test = ["sample.bam"]
-    cram_test = ["sample.cram"]
-    fastq_test = [
+
+    for i, j in [
+        # sequencing
+        ("sample.bam", "BAM"),
+        ("sample.cram", "CRAM"),
+        # imaging
+        ("sample.png", "PNG"),
+        ("sample.jpg", "JPEG"),
+        ("sample.jpeg", "JPEG"),
+        ("sample.tiff", "TIFF"),
+        ("sample.dicom", "DICOM"),
+        # text
+        ("sample.tsv", "TSV"),
+        ("sample.csv", "CSV"),
+        ("sample.txt", "TXT"),
+        ("sample.tsv.gz", "TSV"),
+        ("sample.csv.gz", "CSV"),
+        ("sample.txt.gz", "TXT"),
+        # other
+        ("sample.pdf", "PDF"),
+        ("sample.html", "HTML"),
+    ]:
+        assert data.raw_data_inspector(i) == j
+        assert not data.raw_data_inspector(i + "not raw data")
+
+    for test, fq_type in [
         ("sample_R{}_moretext", "R"),
         ("sample_R{}_", "R"),
         ("sample_R{}", "R"),
@@ -275,24 +297,12 @@ def test_get_dst():
         ("sample.R{}", "R"),
         ("sample_{}", "R"),
         ("sample_S1_L001_I{}_001", "I"),
-    ]
-
-    for i in bam_test:
-        assert data.sequencing_data_inspector(i) == "BAM"
-        assert not data.sequencing_data_inspector(i + "not a bam")
-
-    for i in cram_test:
-        assert data.sequencing_data_inspector(i) == "CRAM"
-        assert not data.sequencing_data_inspector(i + "not a cram")
-
-    for test, fq_type in fastq_test:
+    ]:
         for index in [1, 2]:
             for fastq in [".fastq", ".fq"]:
                 for gzipped in ["", ".gz"]:
                     assert (
-                        data.sequencing_data_inspector(
-                            test.format(index) + fastq + gzipped
-                        )
+                        data.raw_data_inspector(test.format(index) + fastq + gzipped)
                         == f"FASTQ_{fq_type}{index}"
                     )
 

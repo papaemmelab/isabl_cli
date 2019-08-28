@@ -26,20 +26,34 @@ from isabl_cli.settings import import_from_string
 from isabl_cli.settings import system_settings
 
 
-def sequencing_data_inspector(path):
-    """Determine if a path is a supported sequencing file."""
-    fastq_regex = (
-        (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
-        (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
-    )
-
-    if re.search(r"\.bam$", path):
-        return "BAM"
-    elif re.search(r"\.cram$", path):
-        return "CRAM"
+def raw_data_inspector(path):
+    """Determine if a path is a supported raw data file."""
+    for i, j in [
+        # sequencing
+        (r"\.bam$", "BAM"),
+        (r"\.cram$", "CRAM"),
+        # imaging
+        (r"\.png$", "PNG"),
+        (r"\.jp(e)?g$", "JPEG"),
+        (r"\.tiff$", "TIFF"),
+        (r"\.dicom$", "DICOM"),
+        # text
+        (r"\.tsv(\.gz)?$", "TSV"),
+        (r"\.csv(\.gz)?$", "CSV"),
+        (r"\.txt(\.gz)?$", "TXT"),
+        # other
+        (r"\.pdf$", "PDF"),
+        (r"\.html$", "HTML"),
+        (r"\.md5$", "MD5"),
+    ]:
+        if re.search(i, path):
+            return j
 
     for i in [1, 2]:
-        for pattern, fq_type in fastq_regex:
+        for pattern, fq_type in (
+            (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
+            (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
+        ):
             if re.search(pattern.format(i), path):
                 return f"FASTQ_{fq_type}{i}"
 
@@ -591,7 +605,7 @@ class LocalDataImporter(BaseImporter):
             are tasked to return the data type of supported formats.
     """
 
-    RAW_DATA_INSPECTORS = [sequencing_data_inspector]
+    RAW_DATA_INSPECTORS = [raw_data_inspector]
 
     def annotate_file_data(
         self, experiment, file_data, file_type, src, dst
@@ -606,6 +620,7 @@ class LocalDataImporter(BaseImporter):
         commit=False,
         key=lambda x: x["system_id"],
         files_data=None,
+        dtypes=None,
         **filters,
     ):
         """
@@ -620,6 +635,7 @@ class LocalDataImporter(BaseImporter):
             commit (bool): if True perform import operation.
             key (function): given a experiment dict returns id to match.
             filters (dict): key value pairs to use as API query params.
+            dtypes (list): data types that should be matched (e.g. BAM, PNG. etc.).
             files_data (dict): keys are files basenames and values are
                 dicts with extra annotations such as PL, LB, or any other,
                 see also annotate_file_data.
@@ -639,6 +655,7 @@ class LocalDataImporter(BaseImporter):
         cache = defaultdict(dict)
         patterns = []
         identifiers = {}
+        dtypes = set(dtypes or [])
 
         # validate files_data
         for i, j in files_data.items():
@@ -689,7 +706,7 @@ class LocalDataImporter(BaseImporter):
                                 path = join(root, i)
                                 match = self.match_path(path, pattern)
 
-                                if match:
+                                if match and (not dtypes or match["dtype"] in dtypes):
                                     cache[match.pop("index")]["files"].append(match)
 
             # process files if needed
@@ -863,13 +880,15 @@ class LocalDataImporter(BaseImporter):
         @options.COMMIT
         @options.SYMLINK
         @options.FILES_DATA
-        def cmd(identifier, commit, filters, directories, symlink, files_data):
+        @click.option(
+            "--dtypes", help="Limit data types to be imported.", multiple=True
+        )
+        def cmd(identifier, commit, filters, directories, symlink, files_data, dtypes):
             """
             Find and import experiments data from many directories.
 
-            Search is recursive and any cram, bam, fastq, or images that matches
-            the experiment identifier will be imported. Multiple data types for
-            same experiment is not currently supported.
+            A recursive search will match raw data with database identifiers. Use
+            --dtypes to limit the data types that will be matched at a given import.
 
             Its possible to provide custom annotation per file (e.g. PL, PU, or
             LB in the case of fastq data). In order to do so, provide a yaml
@@ -911,6 +930,7 @@ class LocalDataImporter(BaseImporter):
                 commit=commit,
                 key=key,
                 files_data=files_data,
+                dtypes=dtypes,
                 **filters,
             )
 
