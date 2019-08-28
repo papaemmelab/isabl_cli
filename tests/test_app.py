@@ -257,12 +257,6 @@ def test_application_settings(tmpdir):
     assert "Missing required setting: 'test_reference'" in str(error.value)
     assert "Missing required setting: 'needs_to_be_implemented'" in str(error.value)
 
-    # might enable this functionality again in the future
-    # settings_yml = tmpdir.join("test.yml")
-    # settings_yml.write(f"{application.primary_key}:\n  foo: from_the_env")
-    # os.environ["ISABL_DEFAULT_APPS_SETTINGS_PATH"] = settings_yml.strpath
-    # assert application.settings.foo == "from_the_env"
-
 
 def test_unique_analysis_per_individual_app(tmpdir):
     data_storage_directory = tmpdir.mkdir("data_storage_directory")
@@ -512,14 +506,14 @@ def test_validate_pdx_only():
 
 def test_validate_dna_rna_only():
     application = AbstractApplication()
-    targets = [{"technique": {"analyte": "DNA"}, "system_id": "FOO"}]
+    targets = [{"technique": {"category": "DNA"}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
         application.validate_rna_only(targets)
 
     assert "is not RNA" in str(error.value)
 
-    targets = [{"technique": {"analyte": "RNA"}, "system_id": "FOO"}]
+    targets = [{"technique": {"category": "RNA"}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
         application.validate_dna_only(targets)
@@ -578,21 +572,21 @@ def test_validate_targets_not_in_references():
 
 def test_validate_dna_tuples():
     application = AbstractApplication()
-    targets = [{"system_id": 1, "technique": {"analyte": "DNA"}}]
-    references = [{"system_id": 2, "technique": {"analyte": "DNA"}}]
+    targets = [{"system_id": 1, "technique": {"category": "DNA"}}]
+    references = [{"system_id": 2, "technique": {"category": "DNA"}}]
     application.validate_dna_only(targets + references)
 
     with pytest.raises(AssertionError) as error:
-        targets[0]["technique"]["analyte"] = "RNA"
+        targets[0]["technique"]["category"] = "RNA"
         application.validate_dna_only(targets + references)
 
-    assert "analyte is not DNA" in str(error.value)
+    assert "category is not DNA" in str(error.value)
 
 
 def test_validate_dna_pairs():
     application = AbstractApplication()
-    targets = [{"pk": 1, "technique": {"analyte": "DNA"}}]
-    references = [{"pk": 2, "technique": {"analyte": "DNA"}}]
+    targets = [{"pk": 1, "technique": {"category": "DNA"}}]
+    references = [{"pk": 2, "technique": {"category": "DNA"}}]
     application.validate_dna_pairs(targets, references)
 
 

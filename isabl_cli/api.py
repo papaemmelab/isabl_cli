@@ -130,7 +130,7 @@ class Experiment(IsablDict):
             raise exceptions.MissingDataError(
                 f"The # of read 1 files ({len(read_1)}) "
                 f"and read 2 ({len(read_2)}) should be the same "
-                f"for RNA paired-end sequencing, found: {read_1 + read_2}"
+                f"for paired-end sequencing, found: {read_1 + read_2}"
             )
 
         return sorted(read_1), sorted(read_2)

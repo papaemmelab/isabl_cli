@@ -1412,8 +1412,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if i["technique"]["analyte"] != "DNA":
-                msg.append(f"{i['system_id']} analyte is not DNA")
+            if i["technique"]["category"] != "DNA":
+                msg.append(f"{i['system_id']} category is not DNA")
 
         assert not msg, "\n".join(msg)
 
@@ -1422,8 +1422,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if i["technique"]["analyte"] != "RNA":
-                msg.append(f"{i['system_id']} analyte is not RNA")
+            if i["technique"]["category"] != "RNA":
+                msg.append(f"{i['system_id']} category is not RNA")
 
         assert not msg, "\n".join(msg)
 

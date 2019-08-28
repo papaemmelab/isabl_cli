@@ -59,15 +59,8 @@ class AnalysisFactory(BaseFactory):
 
 class TechniqueFactory(BaseFactory):
     bed_files = factory.SubFactory(factory.DictFactory)
-    analyte = fuzzy.FuzzyChoice(["DNA", "RNA"])
     name = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-
-    @factory.lazy_attribute
-    def method(self):
-        """Get method as a function of the analyte."""
-        if self.analyte == "RNA":
-            return random.choice(["TR", "WT"])
-        return random.choice(["CS", "TD", "WE", "WG", "MD"])
+    method = fuzzy.FuzzyChoice(choices=["CS", "TD", "WE", "WG", "MD", "TR", "WT"])
 
 
 class IndividualFactory(BaseFactory):
@@ -103,5 +96,4 @@ class ExperimentFactory(BaseFactory):
 
     @factory.lazy_attribute
     def projects(self):
-        """Get method as a function of the analyte."""
         return [ProjectFactory()]

@@ -11,7 +11,6 @@ def create_experiment(
     assembly="GRCh37",
     raw_data=None,
     method="TD",
-    analyte="DNA",
     species="HUMAN",
     sample_class=None,
     technique_name=None,
@@ -20,7 +19,7 @@ def create_experiment(
     """Easily create an experiment for testing purposes."""
     # create technique
     technique = factories.TechniqueFactory(
-        method=method, analyte=analyte, name=technique_name or str(uuid.uuid4())
+        method=method, name=technique_name or str(uuid.uuid4())
     )
 
     # create experiment
@@ -46,12 +45,11 @@ def create_pair(
     bedfile="/a/fake/bedfile",
     assembly="GRCh37",
     method="TD",
-    analyte="DNA",
     species="HUMAN",
 ):
     """Create pair."""
     pair = []
-    technique = factories.TechniqueFactory(method=method, analyte=analyte)
+    technique = factories.TechniqueFactory(method=method)
     technique["bed_files"][assembly] = dict(targets=bedfile, baits=bedfile)
 
     for i in tumor_bam, normal_bam:
