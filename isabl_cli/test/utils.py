@@ -52,9 +52,10 @@ def create_pair(
     technique = factories.TechniqueFactory(method=method)
     technique["bed_files"][assembly] = dict(targets=bedfile, baits=bedfile)
 
-    for i in tumor_bam, normal_bam:
+    for (i, sample_class) in [(tumor_bam, "TUMOR"), (normal_bam, "NORMAL")]:
         experiment = factories.ExperimentFactory(technique=technique)
         experiment["sample"]["individual"]["species"] = species
+        experiment["sample"]["sample_class"] = sample_class
         experiment["bam_files"][assembly] = dict(url=i, analysis=1)
         pair.append(api.create_instance("experiments", **experiment))
 

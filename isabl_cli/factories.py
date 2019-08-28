@@ -1,6 +1,5 @@
 """Instance factories used for testing."""
 
-import random
 import string
 
 from factory import fuzzy
@@ -95,5 +94,6 @@ class ExperimentFactory(BaseFactory):
     technique = factory.SubFactory(TechniqueFactory)
 
     @factory.lazy_attribute
-    def projects(self):
+    def projects(self):  # pylint: disable=no-self-use
+        """Lazy method to return list of projects."""
         return [ProjectFactory()]

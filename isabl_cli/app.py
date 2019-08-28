@@ -464,7 +464,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return get_application_settings(
             defaults=defaults,
-            settings=self.application.settings.get(self.client_id) or {},
+            settings=self._settings_for_client,
             reference_data=self.application.assembly.reference_data or {},
             import_strings=import_strings,
         )
@@ -487,6 +487,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
         )
 
+        if application.settings.get("default_client") is None:
+            application.settings["default_client"] = {}
+
         return api.patch_instance(
             description=self.application_description,
             endpoint="applications",
@@ -494,6 +497,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             application_class=f"{self.__module__}.{self.__class__.__name__}",
             results=self._application_results,
             url=self.URL,
+            settings=application.settings,
         )
 
     @cached_property
@@ -574,6 +578,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         ret = self.application_individual_level_results
         ret.update(self._base_results)
         return ret
+
+    @property
+    def _settings_for_client(self):
+        return self.application.settings.get(self.client_id) or {}
 
     # ----------------------------
     # COMMAND LINE INTERFACE LOGIC
@@ -902,12 +910,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
 
         try:
-            assert self.application.settings.get(self.client_id, {}) == settings
+            assert self._settings_for_client == settings
             click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
                 del self.settings  # make sure cached settings are re-computed
-                self.application = api.patch_instance(
+                del self.application  # make sure application is refetched
+                api.patch_instance(
                     "applications",
                     self.primary_key,
                     settings={**self.application.settings, self.client_id: settings},
