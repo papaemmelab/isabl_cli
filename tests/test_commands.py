@@ -1,8 +1,13 @@
+import uuid
+
 from click.testing import CliRunner
 
 from isabl_cli import api
 from isabl_cli import commands
+from isabl_cli import data
 from isabl_cli import factories
+from .test_app import TestApplication
+from isabl_cli.test import utils
 
 
 def test_commands(tmpdir):
@@ -25,18 +30,18 @@ def test_commands(tmpdir):
     assert analysis["status"] == "SUCCEEDED"
     assert analysis["storage_usage"]
 
-    runner = CliRunner()
     args = ["--key", analysis["pk"], "--status", "STAGED"]
     runner.invoke(commands.patch_status, args, catch_exceptions=False)
     analysis = api.get_instance("analyses", analysis["pk"])
     assert analysis["status"] == "STAGED"
 
-    runner = CliRunner()
     args = [
         "analyses",
         "-fi",
         "pk",
         analysis["pk"],
+        "-f",
+        "pk",
         "-f",
         "application.name",
         "-f",
@@ -52,8 +57,14 @@ def test_commands(tmpdir):
     assert "application.name" in result.output
     assert "INVALID KEY (carlos)" in result.output
     assert "INVALID KEY (nested_attr)" in result.output
+    result = runner.invoke(
+        commands.get_metadata, args + ["--json"], catch_exceptions=False
+    )
+    assert f'"pk": {analysis["pk"]}' in result.output
+    result = runner.invoke(
+        commands.get_metadata, args + ["--fx"], catch_exceptions=False
+    )
 
-    runner = CliRunner()
     args = ["analyses", "-fi", "pk", analysis["pk"], "--pattern", "*.path"]
     result = runner.invoke(commands.get_paths, args, catch_exceptions=False)
     assert tmpdir.strpath in result.output
@@ -62,3 +73,56 @@ def test_commands(tmpdir):
     args = ["analyses", "-fi", "pk", analysis["pk"]]
     result = runner.invoke(commands.get_paths, args, catch_exceptions=False)
     assert tmpdir.strpath in result.output
+
+    args = ["analyses", "-fi", "pk", analysis["pk"]]
+    result = runner.invoke(commands.get_count, args, catch_exceptions=False)
+    assert "1" in result.output
+
+    args = ["-fi", "pk", analysis["pk"]]
+    result = runner.invoke(commands.get_outdirs, args, catch_exceptions=False)
+    assert tmpdir.strpath in result.output
+    result = runner.invoke(
+        commands.get_outdirs, args + ["--pattern", "*.path"], catch_exceptions=False
+    )
+    assert "test.path" in result.output
+
+    assembly_name = str(uuid.uuid4())
+    species = "HUMAN"
+    reference_test = tmpdir.join("test.fasta")
+    reference_test.write("foo")
+
+    assembly = data.LocalReferenceDataImporter.import_data(
+        assembly=assembly_name,
+        species=species,
+        data_src=reference_test.strpath,
+        description="test description",
+        data_id="reference_link",
+        symlink=True,
+    )
+
+    args = [str(assembly.pk), "--data-id", "reference_link"]
+    result = runner.invoke(commands.get_reference, args, catch_exceptions=False)
+    assert assembly["reference_data"]["reference_link"]["url"] in result.output
+    args = [str(assembly.pk), "--resources"]
+    result = runner.invoke(commands.get_reference, args, catch_exceptions=False)
+    assert "test description" in result.output
+
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(projects=[project])
+    experiment["sample"]["individual"]["species"] = "HUMAN"
+    analysis = utils.assert_run(
+        application=TestApplication(),
+        tuples=[([api.create_instance("experiments", **experiment)], [])],
+        commit=True,
+    )[0]
+
+    args = ["--app-results", analysis.application.pk]
+    result = runner.invoke(commands.get_results, args, catch_exceptions=False)
+    assert "command_script" in result.output
+    args = ["-fi", "pk", analysis.pk, "-r", "command_script"]
+    result = runner.invoke(commands.get_results, args, catch_exceptions=False)
+    assert "head_job.sh" in result.output
+
+    args = ["-fi", "pk", analysis.pk, "--force"]
+    result = runner.invoke(commands.patch_results, args, catch_exceptions=False)
+    assert "Retrieving 1 from analyses API endpoint" in result.output

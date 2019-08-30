@@ -675,7 +675,7 @@ def _get_analysis_results(analysis, raise_error=True):
         )
 
         results = application._get_analysis_results(analysis)
-    except Exception as error:  # pylint: disable=broad-except
+    except Exception as error:  # pragma: no cover pylint: disable=broad-except
         click.secho(f"{error_msg} {error}", fg="red")
         if raise_error:
             raise error

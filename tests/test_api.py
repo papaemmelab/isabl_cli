@@ -79,6 +79,8 @@ def test_api_methods():
     for i in created:
         assert api.delete_instance(endpoint, i["pk"]) is None
 
+    assert api.get_token_headers()["Authorization"]
+
 
 def test_patch_analyses_status():
     application = factories.ApplicationFactory()

@@ -21,7 +21,7 @@ from isabl_cli.settings import user_settings
 
 def cb_app_results_keys(ctx, param, value):
     """Print applications results keys."""
-    if not value or ctx.resilient_parsing:
+    if not value or ctx.resilient_parsing:  # pragma: no cover
         return
 
     click.echo(
@@ -34,7 +34,7 @@ def cb_app_results_keys(ctx, param, value):
 
 
 def _filters_or_identifiers(endpoint, identifiers, filters, fields=None):
-    if filters and identifiers:
+    if filters and identifiers:  # pragma: no cover
         raise click.UsageError("Can't combine filters and identifiers.")
 
     if fields:
@@ -108,7 +108,7 @@ def patch_results(filters, force):
             else:
                 skipped.append(i)
 
-    if skipped:
+    if skipped:  # pragma: no cover
         click.echo(f"{len(skipped)} analyses had results, use --force to update...")
 
 
@@ -134,7 +134,7 @@ def patch_status(key, status):
 @click.option("--fx", "use_fx", help="Visualize json with fx", is_flag=True)
 def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_fx):
     """Retrieve metadata for multiple instances."""
-    if not field and not (json_ or use_fx):
+    if not field and not (json_ or use_fx):  # pragma: no cover
         raise click.UsageError("Pass --field or use --json/--fx")
 
     if use_fx and not shutil.which("fx"):
@@ -155,7 +155,7 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
 
     if json_:
         click.echo(json.dumps(instances, sort_keys=True, indent=4))
-    elif use_fx:
+    elif use_fx:  # pragma: no cover
         fp = tempfile.NamedTemporaryFile("w+", delete=False)
         json.dump(instances, fp)
         fp.close()
@@ -268,10 +268,7 @@ def get_bed(technique, bed_type, assembly):
 )
 def get_reference(assembly, data_id, resources):
     """Get reference resource for an Assembly."""
-    try:
-        assembly = api.get_instance("assemblies", assembly)
-    except KeyError:
-        click.UsageError(f"No {data_id} reference for {assembly['name']}.")
+    assembly = api.get_instance("assemblies", assembly)
 
     if resources:
         click.echo(
@@ -281,7 +278,10 @@ def get_reference(assembly, data_id, resources):
             ).expandtabs(30)
         )
     else:
-        click.echo(assembly["reference_data"][data_id]["url"])
+        try:
+            click.echo(assembly["reference_data"][data_id]["url"])
+        except KeyError:
+            raise click.UsageError(f"No {data_id} reference for {assembly['name']}.")
 
 
 @click.command()

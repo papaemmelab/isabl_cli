@@ -295,11 +295,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         try:
             validate_analyses(instance, analyses)
             analysis = get_analysis(instance)
-        except AssertionError as error:
+        except AssertionError as error:  # pragma: no cover
             click.echo(f"Analysis not created, validation failed: {error}")
             return
 
-        if analysis.status == "STARTED":
+        if analysis.status == "STARTED":  # pragma: no cover
             click.secho(f"analysis {analysis} is 'STARTED', exiting...", fg="blue")
             return
 
@@ -310,7 +310,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             # raise error if can't write in directory
             with open(self.get_command_script_path(analysis), "w") as f:
                 f.write(self._get_cli_merge_command(instance))
-        except PermissionError as error:
+        except PermissionError as error:  # pragma: no cover
             api.patch_analysis_status(analysis, "FAILED")
             raise error
 
@@ -632,7 +632,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 if url:
                     click.secho("\nApplication URL:\n", fg="green")
                     click.secho(url)
-                else:
+                else:  # pragma: no cover
                     click.secho("\nApplication has no url defined.\n")
                 ctx.exit()
 
@@ -654,7 +654,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             if commit and force:
                 raise click.UsageError("--commit not required when using --force")
 
-            if commit and restart:
+            if commit and restart:  # pragma: no cover
                 raise click.UsageError("--restart not required when using --force")
 
             if force and restart:
@@ -923,7 +923,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 del self.settings  # make sure cached settings are re-computed
                 del self.application  # make sure application is refetched
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
-            except TypeError as error:
+            except TypeError as error:  # pragma: no cover
                 click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
 
         # create or update project level application
@@ -962,7 +962,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             [
                 f'analysis: {analysis["pk"]}',
                 f"targets: {targets}",
-                f"references: {references} |",
+                f"references: {references}",
                 f'methods: {" ".join(methods)}',
                 f'projects: {" ".join(projects)}',
                 f'rundir: {analysis["storage_url"]}',
@@ -1138,7 +1138,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                     if individual.pk not in unique_individuals:
                         unique_individuals.add(individual.pk)
-                    else:
+                    else:  # pragma: no cover
                         raise exceptions.ValidationError(
                             "Another tuple with the same individual has been passed."
                         )
@@ -1157,7 +1157,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         existing_analyses, valid_tuples = get_existing_analyses(valid_tuples)
 
-        if len(valid_tuples) > 1000:
+        if len(valid_tuples) > 1000:  # pragma: no cover
             click.secho(
                 f"Attempting to create {len(valid_tuples)} analyses, "
                 f"this process might take some time...",
@@ -1205,7 +1205,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             tuple: list of existing analyses, list of tuples without analysis
         """
-        if not tuples:
+        if not tuples:  # pragma: no cover
             return [], []
 
         click.echo("Checking for existing analyses...", file=sys.stderr)

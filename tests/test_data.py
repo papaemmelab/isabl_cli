@@ -1,7 +1,7 @@
 import os
 import re
-import uuid
 import shutil
+import uuid
 
 from click.testing import CliRunner
 import click
@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from isabl_cli import api
+from isabl_cli import commands
 from isabl_cli import data
 from isabl_cli import factories
 from isabl_cli.settings import _DEFAULTS
@@ -136,6 +137,10 @@ def test_import_bedfiles(tmpdir):
     result = runner.invoke(command, args, catch_exceptions=False)
     assert "has registered bed_files for" in result.output
 
+    args = [str(technique.pk), "--bed-type", "targets"]
+    result = runner.invoke(commands.get_bed, args, catch_exceptions=False)
+    assert technique["bed_files"]["AnAssembly"]["targets"] in result.output
+
 
 def test_local_data_import(tmpdir):
     dirs = [tmpdir.strpath]
@@ -168,6 +173,7 @@ def test_local_data_import(tmpdir):
     path_2.write("foo")
     _, summary = importer.import_data(directories=dirs, pk__in=keys, commit=True)
     assert "samples matched: 1" in summary
+    assert api.Experiment(experiments[0].pk).get_fastq()
 
     # test can exclude formats
     path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
@@ -305,4 +311,3 @@ def test_get_dst():
                         data.raw_data_inspector(test.format(index) + fastq + gzipped)
                         == f"FASTQ_{fq_type}{index}"
                     )
-

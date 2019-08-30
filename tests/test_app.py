@@ -334,6 +334,27 @@ def test_engine(tmpdir):
     assert "analysis_result_key" in ran_analyses[1][0]["results"].keys()
     assert "analysis_result_key" in ran_analyses[2][0]["results"].keys()
 
+    assert f'analysis: {ran_analyses[1][0]["pk"]}' in application.get_job_name(
+        ran_analyses[1][0]
+    )
+
+    bam = join(tmpdir, "fake.bam")
+    application.update_experiment_bam_file(experiments[0], bam, ran_analyses[0][0].pk)
+    assert bam in application.get_bams([experiments[0]])
+
+    with pytest.raises(exceptions.ValidationError) as error:
+        application.validate_bams(experiments)
+
+    assert (
+        f"{experiments[1].system_id} has no registered bam for "
+        f"{application.assembly.name}" in str(error.value)
+    )
+
+    with pytest.raises(exceptions.ValidationError) as error:
+        application.validate_bedfiles(experiments)
+
+    assert f"{experiments[0].system_id} has no registered bedfile" in str(error.value)
+
     # test that get results work as expected
     assert application.get_results(
         result_key="analysis_result_key",
