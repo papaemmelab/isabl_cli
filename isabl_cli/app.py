@@ -472,10 +472,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def application(self):
         """Get application database object."""
-        if not all([self.NAME, self.VERSION, self.ASSEMBLY, self.SPECIES]):
-            raise NotImplementedError(
-                f"NAME must be set: {self.NAME}\n"
-                f"VERSION must be set: {self.VERSION}\n"
+        assert all([self.NAME, self.VERSION]), (
+            f"NAME must be set: {self.NAME}\n" f"VERSION must be set: {self.VERSION}\n"
+        )
+
+        if any([self.ASSEMBLY, self.SPECIES]):
+            assert all([self.ASSEMBLY, self.SPECIES]), (
                 f"ASSEMBLY must be set: {self.ASSEMBLY}\n"
                 f"SPECIES must be set: {self.SPECIES}\n"
             )
@@ -484,7 +486,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             endpoint="applications",
             name=self.NAME,
             version=self.VERSION,
-            assembly={"name": self.ASSEMBLY, "species": self.SPECIES},
+            assembly={"name": self.ASSEMBLY, "species": self.SPECIES}
+            if self.ASSEMBLY
+            else None,
         )
 
         if application.settings.get("default_client") is None:

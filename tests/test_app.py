@@ -18,6 +18,12 @@ from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
 
+class NonSequencingApplication(AbstractApplication):
+
+    NAME = str(uuid.uuid4())
+    VERSION = "STILL_TESTING"
+
+
 class TestApplication(AbstractApplication):
 
     NAME = str(uuid.uuid4())
@@ -143,6 +149,12 @@ class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
 
     NAME = "UNIQUE_PER_INDIVIDUAL_NO_PROTECT"
     application_protect_results = False
+
+
+def test_assembly_is_not_required():
+    assert (
+        NonSequencingApplication().primary_key == NonSequencingApplication().primary_key
+    )
 
 
 def test_get_application_settings():
