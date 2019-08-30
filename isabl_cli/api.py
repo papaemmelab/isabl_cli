@@ -58,12 +58,47 @@ class IsablDict(Munch):
         """Transform a dictionary into IsablDicts recursively."""
         return isablfy(d)
 
+    def get(self, k, default=None):
+        """Check first if k is a custom field."""
+        if self._is_custom_field(k):
+            return self.custom_fields.get(k, default)
+        return super().get(k, default)
+
+    def pop(self, k, default=None):
+        """Check first if k is a custom field."""
+        if self._is_custom_field(k):
+            return self.custom_fields.pop(k, default)
+        return super().pop(k, default)
+
+    def _is_custom_field(self, k):
+        return k != "custom_fields" and k in self.get("custom_fields", {})
+
+    def __contains__(self, k):
+        if self._is_custom_field(k):
+            return True
+        return dict.__contains__(self, k)
+
+    def __setitem__(self, k, v):
+        if self._is_custom_field(k):
+            self.custom_fields[k] = v
+        return super().__setitem__(k, v)
+
+    def __getitem__(self, k):
+        if self._is_custom_field(k):
+            return self.custom_fields[k]
+        return super().__getitem__(k)
+
+    def __delitem__(self, k):
+        if self._is_custom_field(k):
+            return self.custom_fields.__delitem__(k)
+        return super().__delitem__(k)
+
     def __dir__(self):
-        """Bypass Munch's __dir__."""
-        return super(dict, self).__dir__()  # pylint: disable=bad-super-call
+        return super(dict, self).__dir__() + list(  # pylint: disable=bad-super-call
+            self.get("custom_fields", {}).keys()
+        )
 
     def __repr__(self):
-        """Get a simple representation, Munch's is too long."""
         identifier = getattr(
             self, "system_id", getattr(self, "slug", getattr(self, "pk", None))
         )

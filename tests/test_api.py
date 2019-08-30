@@ -9,6 +9,37 @@ from isabl_cli.settings import system_settings
 from isabl_cli.settings import user_settings
 
 
+def test_get_custom_fields():
+    i = api.IsablDict.fromDict(dict(custom_fields={}))
+
+    # assert set
+    i.custom_fields.field = 2
+    assert i.field == 2
+    i.field = 3
+    assert i.custom_fields.field == 3
+    i["field"] = 1
+
+    # check can get
+    assert i.field == 1
+    assert i.custom_fields.field == 1
+    assert i["field"] == 1
+    assert i.get("field") == 1
+
+    # assert contains
+    assert "field" in i
+    assert "field" in dir(i)
+    assert "field" in list(i)
+
+    # assert can delete
+    i.custom_fields.a = 1
+    i.custom_fields.b = 1
+    i.custom_fields.c = 1
+    del i.a
+    del i["b"]
+    assert i.pop("c") == 1
+    assert "a" not in i.custom_fields
+
+
 def test_get_token_headers():
     """Sample test for main command."""
     user_settings.token = None
