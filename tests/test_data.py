@@ -96,7 +96,7 @@ def test_import_bedfiles(tmpdir):
     targets.write("2\t1\t2\n1\t1\t2\n")
     baits.write("2\t1\t2\n1\t1\t2\n")
     species = "HUMAN"
-
+    runner = CliRunner()
     technique = data.LocalBedImporter.import_bedfiles(
         species=species,
         technique=technique["pk"],
@@ -107,19 +107,17 @@ def test_import_bedfiles(tmpdir):
     )
 
     for i in "targets", "baits":
-        assert os.path.isfile(technique["bed_files"]["AnAssembly"][i])
-        assert os.path.isfile(technique["bed_files"]["AnAssembly"][i] + ".tbi")
-        assert os.path.isfile(
-            technique["bed_files"]["AnAssembly"][i].replace(".gz", "")
-        )
-
-        with open(
-            technique["bed_files"]["AnAssembly"][i].replace(".gz", ""), "r"
-        ) as f:  # test bed is sorted
+        bedfile = technique["reference_data"][f"AnAssembly_{i}_bedfile"]["url"]
+        assert os.path.isfile(bedfile)
+        assert os.path.isfile(bedfile + ".tbi")
+        assert os.path.isfile(bedfile.replace(".gz", ""))
+        args = [str(technique.pk), "--bed-type", i]
+        result = runner.invoke(commands.get_bed, args, catch_exceptions=False)
+        assert bedfile in result.output
+        with open(bedfile.replace(".gz", ""), "r") as f:  # test bed is sorted
             assert next(f).startswith("1")
 
     command = data.LocalBedImporter.as_cli_command()
-    runner = CliRunner()
     args = [
         "--targets-path",
         targets.strpath,
@@ -135,11 +133,7 @@ def test_import_bedfiles(tmpdir):
         "Test",
     ]
     result = runner.invoke(command, args, catch_exceptions=False)
-    assert "has registered bed_files for" in result.output
-
-    args = [str(technique.pk), "--bed-type", "targets"]
-    result = runner.invoke(commands.get_bed, args, catch_exceptions=False)
-    assert technique["bed_files"]["AnAssembly"]["targets"] in result.output
+    assert "has registered BED files for" in result.output
 
 
 def test_local_data_import(tmpdir):

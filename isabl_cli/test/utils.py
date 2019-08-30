@@ -23,7 +23,9 @@ def create_experiment(
     )
 
     # create experiment
-    technique["bed_files"][assembly] = dict(targets=bedfile, baits=bedfile)
+    bed_file_dict = dict(url=bedfile, description="")
+    technique["reference_data"][f"{assembly}_targets_bedfile"] = bed_file_dict
+    technique["reference_data"][f"{assembly}_baits_bedfile"] = bed_file_dict
     experiment = factories.ExperimentFactory(technique=technique)
 
     # force sample if provided
@@ -49,8 +51,10 @@ def create_pair(
 ):
     """Create pair."""
     pair = []
+    bed_file_dict = dict(url=bedfile, description="")
     technique = factories.TechniqueFactory(method=method)
-    technique["bed_files"][assembly] = dict(targets=bedfile, baits=bedfile)
+    technique["reference_data"][f"{assembly}_targets_bedfile"] = bed_file_dict
+    technique["reference_data"][f"{assembly}_baits_bedfile"] = bed_file_dict
 
     for (i, sample_class) in [(tumor_bam, "TUMOR"), (normal_bam, "NORMAL")]:
         experiment = factories.ExperimentFactory(technique=technique)

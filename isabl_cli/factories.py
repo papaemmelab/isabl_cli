@@ -57,7 +57,7 @@ class AnalysisFactory(BaseFactory):
 
 
 class TechniqueFactory(BaseFactory):
-    bed_files = factory.SubFactory(factory.DictFactory)
+    reference_data = factory.SubFactory(factory.DictFactory)
     name = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     method = fuzzy.FuzzyChoice(choices=["CS", "TD", "WE", "WG", "MD", "TR", "WT"])
 

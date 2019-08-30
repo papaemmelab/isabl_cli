@@ -242,19 +242,23 @@ def get_data(filters, identifiers, verbose):
 def get_bed(technique, bed_type, assembly):
     """Get a BED file for a given Sequencing Tehcnique."""
     instance = api.get_instance("techniques", technique)
+    data_id = f"{assembly}_{bed_type}_bedfile"
+    paths = {}
 
-    if not instance["bed_files"]:
+    for i, j in instance.reference_data.items():
+        if i.endswith(f"{bed_type}_bedfile"):
+            paths[i] = j["url"]
+
+    if not paths:
         raise click.UsageError("No BED files registered yet...")
-    elif len(instance["bed_files"]) > 1 and not assembly:
+    elif len(paths) > 1 and not assembly:
         raise click.UsageError(f"Multiple BEDs for {technique}, pass --assembly")
-    else:
-        assembly = list(instance["bed_files"].keys())[0]
 
-    click.echo(instance["bed_files"][assembly][bed_type])
+    click.echo(paths[data_id] if assembly else list(paths.values())[0])
 
 
 @click.command()
-@click.argument("assembly", required=True)
+@click.argument("identifier", required=True)
 @click.option(
     "--data-id",
     help="data identifier of the reference resource",
@@ -266,22 +270,31 @@ def get_bed(technique, bed_type, assembly):
     help="Print the list of available reference files for this assembly.",
     is_flag=True,
 )
-def get_reference(assembly, data_id, resources):
-    """Get reference resource for an Assembly."""
-    assembly = api.get_instance("assemblies", assembly)
+@click.option(
+    "--model",
+    help="Default model is assemblies.",
+    type=click.Choice(["assemblies", "techniques"]),
+    default="assemblies",
+)
+def get_reference(identifier, data_id, resources, model):
+    """Retrieve reference data from assemblies (default) or techniques."""
+    try:
+        instance = api.get_instance(model, identifier)
+    except KeyError:
+        click.UsageError(f"No {data_id} reference for {instance['name']}.")
 
     if resources:
         click.echo(
             "\n".join(
                 f"{click.style(i, fg='green')}\t{j.description}"
-                for i, j in sorted(assembly["reference_data"].items())
+                for i, j in sorted(instance["reference_data"].items())
             ).expandtabs(30)
         )
     else:
         try:
-            click.echo(assembly["reference_data"][data_id]["url"])
+            click.echo(instance["reference_data"][data_id]["url"])
         except KeyError:
-            raise click.UsageError(f"No {data_id} reference for {assembly['name']}.")
+            raise click.UsageError(f"No {data_id} reference for {instance['name']}.")
 
 
 @click.command()

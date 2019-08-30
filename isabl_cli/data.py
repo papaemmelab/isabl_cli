@@ -262,6 +262,11 @@ def update_storage_url(endpoint, identifier, use_hash=False, **data):
 
 class BaseImporter:
     @staticmethod
+    def echo_src_dst(msg, src, dst):
+        """Print a src to dst msg."""
+        click.echo(f"\n{msg}:\n\t{src}\n\t{click.style('->', fg='green')} {dst}")
+
+    @staticmethod
     def symlink(src, dst):
         """Create symlink from `src` to `dst`."""
         return utils.force_symlink(os.path.realpath(src), dst)
@@ -317,10 +322,10 @@ class LocalReferenceDataImporter(BaseImporter):
         os.makedirs(data_dir, exist_ok=True)
 
         if symlink:
-            click.echo(f"\nLinking:\n\t{data_src}\n\tto {data_dst}")
+            cls.echo_src_dst("Linking", data_src, data_dst)
             cls.symlink(data_src, data_dst)
         else:
-            click.echo(f"\nMoving:\n\t{data_src}\n\tto {data_dst}")
+            cls.echo_src_dst("Moving", data_src, data_dst)
             cls.move(data_src, data_dst)
 
         click.secho(f'\nSuccess! patching {assembly["name"]}...', fg="green")
@@ -476,9 +481,9 @@ class LocalReferenceGenomeImporter:
         return cmd
 
 
-class LocalBedImporter:
+class LocalBedImporter(BaseImporter):
 
-    """An import engine for techniques' bed_files."""
+    """An import engine for Technique BED files."""
 
     @staticmethod
     def process_bedfile(path):
@@ -508,20 +513,22 @@ class LocalBedImporter:
             baits_path (str): path to baits bedfile.
             assembly (str): name of reference genome for bedfile.
             species (str): name of genome species.
-            description (str): a description of the bed_files.
+            description (str): a description of the BED files.
 
         Returns:
             dict: updated technique instance as retrieved from API.
         """
         utils.check_admin()
         technique = api.get_instance("techniques", technique)
+        targets_key = f"{assembly}_targets_bedfile"
+        baits_key = f"{assembly}_baits_bedfile"
 
-        if assembly in technique["bed_files"]:
+        if targets_key in technique["reference_data"]:
             raise click.UsageError(
                 f"Technique '{technique['slug']}' "
-                f"has registered bed_files for '{assembly}':\n"
-                f'\n\t{technique["bed_files"][assembly]["targets"]}'
-                f'\n\t{technique["bed_files"][assembly]["baits"]}'
+                f"has registered BED files for '{assembly}':\n"
+                f'\n\t{technique["reference_data"][targets_key]}'
+                f'\n\t{technique["reference_data"][baits_key]}'
             )
 
         if not technique["storage_url"]:
@@ -535,22 +542,24 @@ class LocalBedImporter:
         os.makedirs(beds_dir, exist_ok=True)
 
         for src, dst in [(targets_path, targets_dst), (baits_path, baits_dst)]:
-            click.echo(f"\nCopying:\n\t{src}\n\tto {dst}")
+            cls.echo_src_dst("Copying", src, dst)
             shutil.copy(src, dst)
             click.secho(f"\nProcessing {basename(dst)}...", fg="blue")
             cls.process_bedfile(dst)
 
         click.secho(f'\nSuccess! patching {technique["slug"]}...', fg="green")
-        technique["bed_files"][assembly] = {}
-        technique["bed_files"][assembly]["targets"] = targets_dst + ".gz"
-        technique["bed_files"][assembly]["baits"] = baits_dst + ".gz"
-        technique["bed_files"][assembly]["description"] = description
+
+        for i, j in [(targets_key, targets_dst), (baits_key, baits_dst)]:
+            technique["reference_data"][i] = {
+                "url": j + ".gz",
+                "description": description,
+            }
 
         return api.patch_instance(
             endpoint="techniques",
             instance_id=technique["pk"],
             storage_usage=utils.get_tree_size(technique["storage_url"]),
-            bed_files=technique["bed_files"],
+            reference_data=technique["reference_data"],
         )
 
     @classmethod
@@ -563,25 +572,14 @@ class LocalBedImporter:
         @options.BAITS_PATH
         @click.option("--assembly", help="name of reference genome", required=True)
         @click.option("--species", help="name of species", required=True)
-        @click.option("--description", help="bed_files description")
+        @click.option("--description", help="BED files description")
         def cmd(technique, assembly, targets_path, baits_path, description, species):
             """
-            Register targets and baits bed_files in technique's data directory.
+            Register targets and baits BED files in a technique's data directory.
 
-            Incoming bed_files will be compressed and tabixed.
-            Both gzipped and uncompressed versions are kept.
-
-            Instance's storage_url, storage_usage and bed_files fields
-            are updated, setting the latter to:
-
-            \b
-                'bed_files': {
-                    <assembly name>: {
-                        'targets': path/to/targets_bedfile.bed,
-                        'baits': path/to/baits_bedfile.bed
-                        },
-                    ...
-                    }
+            Incoming BED files will be compressed and tabixed. Both gzipped and
+            uncompressed versions are kept. Instance's storage_url, storage_usage,
+            and reference_data fields are updated.
             """
             cls().import_bedfiles(
                 technique=technique,

@@ -60,10 +60,6 @@ def test_commands(tmpdir):
     result = runner.invoke(
         commands.get_metadata, args + ["--json"], catch_exceptions=False
     )
-    assert f'"pk": {analysis["pk"]}' in result.output
-    result = runner.invoke(
-        commands.get_metadata, args + ["--fx"], catch_exceptions=False
-    )
 
     args = ["analyses", "-fi", "pk", analysis["pk"], "--pattern", "*.path"]
     result = runner.invoke(commands.get_paths, args, catch_exceptions=False)

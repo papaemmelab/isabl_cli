@@ -1048,7 +1048,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_bedfile(self, experiment, bedfile_type="targets"):
         """Get targets or baits bedfile for experiment."""
-        return experiment["technique"]["bed_files"][self.ASSEMBLY][bedfile_type]
+        bedfile_key = f"{self.ASSEMBLY}_{bedfile_type}_bedfile"
+        assert bedfile_type in {"targets", "baits"}, "Unsupported bedfile type."
+        return experiment["technique"]["reference_data"][bedfile_key]["url"]
 
     def get_bam(self, experiment):
         """Get experiment bam for application assembly."""
