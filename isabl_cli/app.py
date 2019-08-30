@@ -914,14 +914,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
-                del self.settings  # make sure cached settings are re-computed
-                del self.application  # make sure application is refetched
                 api.patch_instance(
                     "applications",
                     self.primary_key,
                     settings={**self.application.settings, self.client_id: settings},
                 )
 
+                del self.settings  # make sure cached settings are re-computed
+                del self.application  # make sure application is refetched
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:
                 click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
@@ -1411,7 +1411,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if not i["is_pdx"]:
+            if not i.get("is_pdx"):
                 msg.append(f"{i['system_id']} sample is not PDX derived")
 
         assert not msg, "\n".join(msg)

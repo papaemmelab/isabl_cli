@@ -80,12 +80,8 @@ class SampleFactory(BaseFactory):
 
 class ExperimentFactory(BaseFactory):
     bam_files = factory.SubFactory(factory.DictFactory)
-    cell_type = fuzzy.FuzzyChoice(["SINGLE", "BULK"])
     center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     aliquot_id = None
-    analyte_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    read_length = fuzzy.FuzzyChoice(["100", "150"])
-    read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     generating_center = factory.SubFactory(CenterFactory)
     raw_data = None

@@ -496,7 +496,7 @@ def test_validate_methods():
 
 def test_validate_pdx_only():
     application = AbstractApplication()
-    targets = [{"is_pdx": False, "system_id": "FOO"}]
+    targets = [{"custom_fields": {"is_pdx": False}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
         application.validate_pdx_only(targets)
