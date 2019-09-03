@@ -12,7 +12,7 @@ echo "API directory set to: $API_DIR"
 echo "CLI directory set to: $CLI_DIR"
 
 # get current isabl branch in case this test depends on a particular branch
-ISABL_BRANCH=${TRAVIS_BRANCH:-${TRAVIS_PULL_REQUEST_BRANCH:-master}}
+ISABL_BRANCH=${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH:-master}}
 echo "ISABL_BRANCH set to $ISABL_BRANCH given travis branch: $TRAVIS_BRANCH $TRAVIS_PULL_REQUEST_BRANCH"
 
 # clone api from github
