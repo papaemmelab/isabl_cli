@@ -74,7 +74,7 @@ class SampleFactory(BaseFactory):
     disease = factory.SubFactory(DiseaseFactory)
     individual = factory.SubFactory(IndividualFactory)
     pdx_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    sample_class = fuzzy.FuzzyChoice(["TUMOR", "NORMAL"])
+    category = fuzzy.FuzzyChoice(["TUMOR", "NORMAL"])
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
 
 

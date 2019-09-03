@@ -1115,7 +1115,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Raise error not all experiments come from NORMAL sample."""
         for i in experiments:
             msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
-            assert i.sample.sample_class == "NORMAL", msg
+            assert i.sample.category == "NORMAL", msg
 
     # -----------------------
     # ANALYSES CREATION LOGIC

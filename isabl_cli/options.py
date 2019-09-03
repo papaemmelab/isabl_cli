@@ -154,7 +154,7 @@ NORMAL_TARGETS = click.option(
     show_default=True,
     type=(str, str),
     callback=lambda _, __, i: _get_experiments(
-        list(i) + [("sample__sample_class", "NORMAL")]
+        list(i) + [("sample__category", "NORMAL")]
     ),
     required=True,
 )
