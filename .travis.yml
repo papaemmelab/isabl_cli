@@ -18,15 +18,15 @@ script:
 after_success:
   - codecov
 
-deploy:
-  provider: pypi
-  distributions: sdist bdist_wheel
-  user: isabl-io
-  on:
-    tags: false
-    repo: isabl-io/isabl_cli
-    python: 3.6
-    branch: master
+# deploy:
+#   provider: pypi
+#   distributions: sdist bdist_wheel
+#   user: isabl-io
+#   on:
+#     tags: true
+#     repo: isabl-io/isabl_cli
+#     python: 3.6
+#     branch: master
 
 env:
   secure: KJvPPCgrUlU16puT1jWKlVRGAelPz1ojQQjxV0s6dW09m/4O3TqoYeXbkPQWhW6mVJJq/A3flgSmov/0MzlBxJ3DSJoEZwOhW5goeDvd4DFsB+bNILxn1EUigEdsE8niYqV9kpsafQhjHY+thOQsiH3of3AeNyToKGaVwh5xuHiOtsgjlweHqTnUfp9+6jbdrCkfpZxUa94UnnCDDE8kCnZiORqV/x4nkXGnG108VmIABtAleFTjssXcExNtvS7mGmS1aKYW3wSg6U9SWCQs6Xar+hMS4T6E7/jhLZgDg0CRdFm2fiE2RB1sFcgomjIUTtfyu/QI/rWAw4ap9MNZX91y9wLQ2uY6APXOAGHG5ZzXRjtxAt212EegslATRKeSmThYFgw1Hs6HEYt388S3PxlffHE08uhZLuZwQKx7B+kOr+qyCwA8RycGTLWyz2u20hg1G/fCXuTrCPmgo8s8Z/vOANqfDGCiDX/eazFmbzZPm643Rg3r+WdxhmofsB3HEz/fUsj/c9S3klh0xBNUsBtwX7N3GiudDTCoytO8GDyln6u4N+YsKVDyuW+W6LnZVnfrw3Xe3/vs+7NB2APvA0rYR10V4d716xT7sqRvH0i7ZCOKEnCdu0ihQproT+UZZC2y0LLTDhX//ABDi9anBSciG1rTZwqV0DH9qGL5GUQ=
