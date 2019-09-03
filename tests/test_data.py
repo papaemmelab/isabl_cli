@@ -32,56 +32,67 @@ def test__make_storage_directory(tmpdir):
 def test_import_reference_data(tmpdir):
     data_storage_directory = tmpdir.mkdir("data_storage_directory")
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = str(data_storage_directory)
-    assembly_name = str(uuid.uuid4())
-    species = "HUMAN"
-    reference_test = tmpdir.join("test.fasta")
-    reference_test.write("foo")
 
-    assembly = data.LocalReferenceDataImporter.import_data(
-        assembly=assembly_name,
-        species=species,
-        data_src=reference_test.strpath,
-        description="test description",
-        data_id="reference_link",
-        symlink=True,
-    )
+    for model, identifier, factory in [
+        ("assemblies", str(uuid.uuid4()), factories.AssemblyFactory),
+        ("techniques", str(uuid.uuid4()), factories.TechniqueFactory),
+    ]:
+        reference_test = tmpdir.join("test.fasta")
+        reference_test.write("foo")
+        api.create_instance(model, **factory(name=identifier))
+        instance = data.LocalReferenceDataImporter.import_data(
+            identifier=identifier,
+            data_src=reference_test.strpath,
+            description="test description",
+            data_id="reference_link",
+            symlink=True,
+            model=model,
+        )
 
-    assert os.path.islink(assembly["reference_data"]["reference_link"]["url"])
-    assert (
-        assembly["reference_data"]["reference_link"]["description"]
-        == "test description"
-    )
+        assert os.path.islink(instance["reference_data"]["reference_link"]["url"])
+        assert (
+            instance["reference_data"]["reference_link"]["description"]
+            == "test description"
+        )
 
-    assembly = data.LocalReferenceDataImporter.import_data(
-        assembly=assembly_name,
-        species=species,
-        data_src=reference_test.strpath,
-        description="test description",
-        data_id="reference_move",
-        symlink=False,
-    )
+        instance = data.LocalReferenceDataImporter.import_data(
+            identifier=identifier,
+            data_src=reference_test.strpath,
+            description="test description",
+            data_id="reference_move",
+            model=model,
+            symlink=False,
+        )
 
-    assert os.path.isfile(assembly["reference_data"]["reference_move"]["url"])
-    assert not os.path.islink(assembly["reference_data"]["reference_move"]["url"])
+        assert os.path.isfile(instance["reference_data"]["reference_move"]["url"])
+        assert not os.path.islink(instance["reference_data"]["reference_move"]["url"])
 
-    reference_test.write("foo")
-    command = data.LocalReferenceDataImporter.as_cli_command()
-    runner = CliRunner()
-    args = [
-        "--assembly",
-        assembly_name,
-        "--species",
-        species,
-        "--data-src",
-        reference_test.strpath,
-        "--data-id",
-        "reference_move",
-        "--description",
-        "Test",
-    ]
+        reference_test.write("foo")
+        command = data.LocalReferenceDataImporter.as_cli_command()
+        runner = CliRunner()
+        args = [
+            "--identifier",
+            identifier,
+            "--data-src",
+            reference_test.strpath,
+            "--data-id",
+            "reference_move",
+            "--description",
+            "Test",
+            "--model",
+            model,
+        ]
 
-    result = runner.invoke(command, args, catch_exceptions=False)
-    assert "has already reference data registered" in result.output
+        result = runner.invoke(command, args, catch_exceptions=False)
+        assert "has already reference data registered" in result.output
+
+        args = [str(instance.pk), "--data-id", "reference_link", "--model", model]
+        result = runner.invoke(commands.get_reference, args, catch_exceptions=False)
+        assert instance["reference_data"]["reference_link"]["url"] in result.output
+
+        args = [str(instance.pk), "--resources", "--model", model]
+        result = runner.invoke(commands.get_reference, args, catch_exceptions=False)
+        assert "test description" in result.output
 
 
 @pytest.mark.skipif(

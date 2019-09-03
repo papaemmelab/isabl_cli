@@ -283,14 +283,21 @@ class LocalReferenceDataImporter(BaseImporter):
 
     @classmethod
     def import_data(
-        cls, assembly, species, data_src, data_id, symlink, description, sub_dir=None
+        cls,
+        identifier,
+        data_src,
+        data_id,
+        symlink,
+        description,
+        sub_dir=None,
+        model="assemblies",
     ):
         """
         Register reference resources for a given assembly.
 
         Arguments:
-            assembly (str): name of assembly.
-            species (str): name of species.
+            identifier (str): name of assembly or technique.
+            model (str): either `techniques` or `assemblies`.
             data_src (str): path to reference data.
             data_id (str): identifier that will be used for reference data.
             symlink (str): symlink instead of move.
@@ -303,21 +310,18 @@ class LocalReferenceDataImporter(BaseImporter):
         utils.check_admin()
         data_id = slugify(data_id, separator="_")
         click.echo(f'`data_id` set to: {click.style(data_id, fg="green")}')
-        assembly = api.create_instance(
-            endpoint="assemblies", name=assembly, species=species
-        )
+        instance = api.get_instance(model, identifier)
 
-        if data_id in assembly["reference_data"]:
+        if data_id in instance["reference_data"]:
             raise click.UsageError(
-                f"Assembly '{assembly['name']}' "
-                f"has already reference data registered with id '{data_id}':\n"
-                f'\n\t{assembly["reference_data"][data_id]}'
+                f"{instance['name']} has already reference data registered with id "
+                f'"{data_id}":\n\n\t{instance["reference_data"][data_id]}'
             )
 
-        if not assembly["storage_url"]:
-            assembly = update_storage_url("assemblies", assembly["name"])
+        if not instance["storage_url"]:
+            instance = update_storage_url(model, instance["name"])
 
-        data_dir = join(assembly["storage_url"], sub_dir or data_id)
+        data_dir = join(instance["storage_url"], sub_dir or data_id)
         data_dst = join(data_dir, basename(data_src))
         os.makedirs(data_dir, exist_ok=True)
 
@@ -328,16 +332,15 @@ class LocalReferenceDataImporter(BaseImporter):
             cls.echo_src_dst("Moving", data_src, data_dst)
             cls.move(data_src, data_dst)
 
-        click.secho(f'\nSuccess! patching {assembly["name"]}...', fg="green")
-        assembly["reference_data"][data_id] = {}
-        assembly["reference_data"][data_id]["url"] = data_dst
-        assembly["reference_data"][data_id]["description"] = description
-
+        click.secho(f'\nSuccess! patching {instance["name"]}...', fg="green")
+        instance["reference_data"][data_id] = {}
+        instance["reference_data"][data_id]["url"] = data_dst
+        instance["reference_data"][data_id]["description"] = description
         return api.patch_instance(
-            endpoint="assemblies",
-            instance_id=assembly["pk"],
-            storage_usage=utils.get_tree_size(assembly["storage_url"]),
-            reference_data=assembly["reference_data"],
+            endpoint=model,
+            instance_id=instance["pk"],
+            storage_usage=utils.get_tree_size(instance["storage_url"]),
+            reference_data=instance["reference_data"],
         )
 
     @classmethod
@@ -345,40 +348,38 @@ class LocalReferenceDataImporter(BaseImporter):
         """Get reference data importer as click command line interface."""
         # build isabl_cli command and return it
         @click.command(name="import-reference-data")
-        @click.option("--assembly", help="name of reference genome", required=True)
-        @click.option("--species", help="species of reference genome", required=True)
+        @click.option(
+            "--identifier",
+            help="name of technique or assembly, see --model",
+            required=True,
+        )
+        @click.option(
+            "--model",
+            help="default model is assemblies",
+            type=click.Choice(["assemblies", "techniques"]),
+            default="assemblies",
+        )
         @click.option("--description", help="reference data description")
         @click.option("--data-id", help="data identifier (will be slugified)")
         @click.option("--sub-dir", help="target resource sub dir, default is data-id")
         @options.REFERENCE_DATA_SOURCE
         @options.SYMLINK
-        def cmd(assembly, data_id, symlink, description, data_src, species, sub_dir):
+        def cmd(identifier, model, data_id, symlink, description, data_src, sub_dir):
             """
-            Register reference data in the assembly's data directory.
+            Register reference data for assemblies (default) or techniques.
 
             If you want to import a Reference Genome please refer to the
-            import_reference_genome command. Incoming data (files or directories) will
+            import-reference-genome command. Incoming data (files or directories) will
             moved unless `--symlink` is provided.
-
-            Assembly's `storage_url`, `storage_usage` and `reference_data`
-            fields are updated, setting the latter to:
-
-                'reference_data': {
-                    <data identifier>: {
-                        'url': path/to/targets_bedfile.bed,
-                        'description': path/to/baits_bedfile.bed
-                        },
-                    ...
-                    }
             """
             cls().import_data(
                 data_id=data_id,
-                symlink=symlink,
                 data_src=data_src,
-                assembly=assembly,
-                species=species,
                 description=description,
+                identifier=identifier,
+                model=model,
                 sub_dir=sub_dir,
+                symlink=symlink,
             )
 
         return cmd
@@ -393,8 +394,7 @@ class LocalReferenceGenomeImporter:
         """Get reference data importer as click command line interface."""
         # build isabl_cli command and return it
         @click.command(name="import-reference-genome")
-        @click.option("--assembly", help="name of reference genome")
-        @click.option("--species", help="species of reference genome")
+        @click.option("--assembly", help="name of genome assembly")
         @click.option(
             "--genome-path",
             show_default=True,
@@ -408,7 +408,7 @@ class LocalReferenceGenomeImporter:
             help="Do not attempt to generate indexes, I'll do it myself",
         )
         @options.SYMLINK
-        def cmd(assembly, symlink, genome_path, species, dont_index):
+        def cmd(assembly, symlink, genome_path, dont_index):
             """
             Register an assembly reference genome.
 
@@ -418,8 +418,8 @@ class LocalReferenceGenomeImporter:
                 data_id="genome_fasta",
                 symlink=symlink,
                 data_src=genome_path,
-                assembly=assembly,
-                species=species,
+                identifier=assembly,
+                model="assemblies",
                 description="Reference Genome Fasta File.",
             )
 

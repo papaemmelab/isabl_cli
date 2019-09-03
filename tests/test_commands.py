@@ -82,27 +82,6 @@ def test_commands(tmpdir):
     )
     assert "test.path" in result.output
 
-    assembly_name = str(uuid.uuid4())
-    species = "HUMAN"
-    reference_test = tmpdir.join("test.fasta")
-    reference_test.write("foo")
-
-    assembly = data.LocalReferenceDataImporter.import_data(
-        assembly=assembly_name,
-        species=species,
-        data_src=reference_test.strpath,
-        description="test description",
-        data_id="reference_link",
-        symlink=True,
-    )
-
-    args = [str(assembly.pk), "--data-id", "reference_link"]
-    result = runner.invoke(commands.get_reference, args, catch_exceptions=False)
-    assert assembly["reference_data"]["reference_link"]["url"] in result.output
-    args = [str(assembly.pk), "--resources"]
-    result = runner.invoke(commands.get_reference, args, catch_exceptions=False)
-    assert "test description" in result.output
-
     project = api.create_instance("projects", **factories.ProjectFactory())
     experiment = factories.ExperimentFactory(projects=[project])
     experiment["sample"]["individual"]["species"] = "HUMAN"

@@ -272,16 +272,13 @@ def get_bed(technique, bed_type, assembly):
 )
 @click.option(
     "--model",
-    help="Default model is assemblies.",
+    help="default model is assemblies",
     type=click.Choice(["assemblies", "techniques"]),
     default="assemblies",
 )
 def get_reference(identifier, data_id, resources, model):
     """Retrieve reference data from assemblies (default) or techniques."""
-    try:
-        instance = api.get_instance(model, identifier)
-    except KeyError:
-        click.UsageError(f"No {data_id} reference for {instance['name']}.")
+    instance = api.get_instance(model, identifier)
 
     if resources:
         click.echo(
