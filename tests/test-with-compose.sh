@@ -15,7 +15,7 @@ echo "CLI directory set to: $CLI_DIR"
 [ ! -d $API_DIR ] && git clone git@github.com:isabl-io/api.git $API_DIR
 
 # build container
-API_BRANCH=var=${TRAVIS_BRANCH:-${TRAVIS_PULL_REQUEST_BRANCH:-master}}
+API_BRANCH=${TRAVIS_BRANCH:-${TRAVIS_PULL_REQUEST_BRANCH:-master}}
 cd $API_DIR && (git checkout $API_BRANCH || true) && docker-compose build && docker-compose up -d
 
 # give some time to API to start and test Isabl CLI
