@@ -2,11 +2,13 @@
 
 from itertools import islice
 from os import environ
+from os.path import basename
 from urllib.parse import urljoin
 import collections
 import json
 import shutil
 import subprocess
+import sys
 import time
 import traceback
 
@@ -16,8 +18,8 @@ from six import iteritems
 import click
 import requests
 
-from isabl_cli import utils
 from isabl_cli import exceptions
+from isabl_cli import utils
 from isabl_cli.settings import import_from_string
 from isabl_cli.settings import system_settings
 from isabl_cli.settings import user_settings
@@ -215,24 +217,17 @@ def get_token_headers():
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
+        testing = basename(sys.argv[0]) in ("pytest", "py.test")
         response = retry_request(
             "post",
             url=get_api_url("/rest-auth/login/"),
             data={
-                "username": click.prompt(
-                    "username",
-                    type=str,
-                    hide_input=False,
-                    default="admin",
-                    show_default=False,
-                ),
-                "password": click.prompt(
-                    "password",
-                    type=str,
-                    hide_input=True,
-                    default="admin",
-                    show_default=False,
-                ),
+                "username": click.prompt("username", type=str, hide_input=False)
+                if not testing
+                else "admin",
+                "password": click.prompt("password", type=str, hide_input=True)
+                if not testing
+                else "admin",
             },
         )
 
