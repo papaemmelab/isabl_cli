@@ -1,5 +1,3 @@
-import uuid
-
 from click.testing import CliRunner
 
 from isabl_cli import api
