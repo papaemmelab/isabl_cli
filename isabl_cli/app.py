@@ -21,6 +21,7 @@ from isabl_cli import api
 from isabl_cli import data
 from isabl_cli import exceptions
 from isabl_cli import utils
+from isabl_cli.batch_systems import submit_local
 from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
@@ -58,6 +59,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     cli_options = []
     cli_allow_force = True
     cli_allow_restart = True
+    cli_allow_local = True
     skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED"}
     skip_exceptions = (
         AssertionError,
@@ -453,17 +455,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def settings(self):
         """Return the application settings."""
-        defaults = self.application_settings.copy()
         import_strings = set(self.application_import_strings)
         import_strings.add("submit_analyses")
-
-        if "submit_analyses" not in defaults:
-            defaults["submit_analyses"] = os.getenv(
-                "ISABL_DEFAULT_SUBMIT_ANALYSES", "isabl_cli.batch_systems.submit_local"
-            )
-
         return get_application_settings(
-            defaults=defaults,
+            defaults=self.application_settings.copy(),
             settings=self._settings_for_client,
             reference_data=self.application.assembly.reference_data or {},
             import_strings=import_strings,
@@ -622,11 +617,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             is_flag=True,
         )
 
+        local = click.option(
+            "--local",
+            help="Run analyses' head jobs locally, one after the other one.",
+            is_flag=True,
+        )
+
         cli_options = [  # pylint: disable=unused-variable
             (quiet, True),
             (commit, True),
             (force, cls.cli_allow_force),
             (restart, cls.cli_allow_restart),
+            (local, cls.cli_allow_local),
         ]
 
         def print_url(ctx, _, value):
@@ -654,6 +656,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             """Click command to be used in the CLI."""
             force = cli_options.pop("force", False)
             restart = cli_options.pop("restart", False)
+            local = cli_options.pop("local", False)
 
             if commit and force:
                 raise click.UsageError("--commit not required when using --force")
@@ -670,6 +673,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 force=force,
                 verbose=not quiet,
                 restart=restart,
+                local=local,
                 run_args=cli_options,
             )
 
@@ -687,7 +691,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # ------------------------
 
     def run(
-        self, tuples, commit, force=False, restart=False, verbose=True, run_args=None
+        self,
+        tuples,
+        commit,
+        force=False,
+        restart=False,
+        verbose=True,
+        run_args=None,
+        local=False,
     ):
         """
         Run a list of targets, references tuples.
@@ -695,6 +706,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             restart (bool): set settings.restart = True.
             force (bool): if true, analyses are wiped before being submitted.
+            local (bool): if true, analyses will be run locally one by one.
             commit (bool): if true, analyses are started (`force` overwrites).
             verbose (bool): whether or not verbose output should be printed.
             tuples (list): list of (targets, references) tuples.
@@ -737,7 +749,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         # run analyses
         run_tuples, skipped_tuples = self.run_analyses(
-            analyses=analyses, commit=commit, force=force, restart=restart
+            analyses=analyses, commit=commit, force=force, restart=restart, local=local
         )
 
         if verbose:
@@ -751,7 +763,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return run_tuples, skipped_tuples, invalid_tuples
 
-    def run_analyses(self, analyses, commit, force, restart):
+    def run_analyses(self, analyses, commit, force, restart, local):
         """
         Run a list of analyses.
 
@@ -760,6 +772,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         skipped_tuples = []
         command_tuples = []
+        submit_analyses = (
+            submit_local
+            if local
+            else (self.settings.submit_analyses or system_settings.SUBMIT_ANALYSES)
+        )
 
         with progressbar(analyses, label="Building commands...\t\t") as bar:
             for i in bar:
@@ -797,8 +814,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     skipped_tuples.append((i, error))
 
         if commit:
-            click.echo("Running analyses...")
-            run_tuples = self.settings.submit_analyses(self, command_tuples)
+            click.echo(f"Running analyses with {submit_analyses.__name__}...")
+            run_tuples = submit_analyses(self, command_tuples)
         else:
             run_tuples = [(i, self.STAGED_MSG) for i, _ in command_tuples]
 

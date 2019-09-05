@@ -19,6 +19,7 @@ import six
 from isabl_cli import exceptions
 
 _DEFAULTS = {
+    "SUBMIT_ANALYSES": "isabl_cli.batch_systems.submit_local",
     "DEFAULT_LINUX_GROUP": None,
     "MAKE_STORAGE_DIRECTORY": "isabl_cli.data._make_storage_directory",
     "TRASH_ANALYSIS_STORAGE": "isabl_cli.data.trash_analysis_storage",
@@ -63,6 +64,7 @@ _DEFAULTS = {
 }
 
 _IMPORT_STRINGS = {
+    "SUBMIT_ANALYSES",
     "ADMIN_COMMANDS",
     "BED_IMPORTER",
     "CUSTOM_COMMANDS",
