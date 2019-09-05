@@ -69,7 +69,7 @@ class TestApplication(AbstractApplication):
     def validate_experiments(self, targets, references):
         self.validate_one_target_no_references(targets, references)
 
-        if targets[0]["center_id"] == "0":
+        if targets[0]["identifier"] == "0":
             raise AssertionError("Invalid Center ID")
 
         return True
@@ -81,7 +81,7 @@ class TestApplication(AbstractApplication):
         if settings.restart:
             return "echo successfully restarted"
 
-        if analysis["targets"][0]["center_id"] == "1":
+        if analysis["targets"][0]["identifier"] == "1":
             return "exit 1"
 
         assert inputs["bar"] == "foo"
@@ -278,7 +278,9 @@ def test_unique_analysis_per_individual_app(tmpdir):
     sample = factories.SampleFactory(individual=individual)
     project = api.create_instance("projects", **factories.ProjectFactory())
     experiments = [
-        factories.ExperimentFactory(center_id=str(i), sample=sample, projects=[project])
+        factories.ExperimentFactory(
+            identifier=str(i), sample=sample, projects=[project]
+        )
         for i in range(4)
     ]
 
@@ -331,7 +333,9 @@ def test_engine(tmpdir):
     project = api.create_instance("projects", **factories.ProjectFactory())
 
     experiments = [
-        factories.ExperimentFactory(center_id=str(i), sample=sample, projects=[project])
+        factories.ExperimentFactory(
+            identifier=str(i), sample=sample, projects=[project]
+        )
         for i in range(4)
     ]
 

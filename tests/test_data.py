@@ -196,10 +196,10 @@ def test_local_data_import(tmpdir):
 
     # test raise error if duplicated ids
     with pytest.raises(click.UsageError) as error:
-        api.patch_instance("experiments", experiments[2]["pk"], center_id="dup_id")
-        api.patch_instance("experiments", experiments[3]["pk"], center_id="dup_id")
+        api.patch_instance("experiments", experiments[2]["pk"], identifier="dup_id")
+        api.patch_instance("experiments", experiments[3]["pk"], identifier="dup_id")
         importer.import_data(
-            key=lambda x: x["center_id"], directories=dirs, pk__in=keys
+            key=lambda x: x["identifier"], directories=dirs, pk__in=keys
         )
 
     assert "same identifier for" in str(error.value)

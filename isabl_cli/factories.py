@@ -80,12 +80,11 @@ class SampleFactory(BaseFactory):
 
 class ExperimentFactory(BaseFactory):
     bam_files = factory.SubFactory(factory.DictFactory)
-    center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     aliquot_id = None
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    generating_center = factory.SubFactory(CenterFactory)
+    center = factory.SubFactory(CenterFactory)
     raw_data = None
-    generating_platform = factory.SubFactory(PlatformFactory)
+    platform = factory.SubFactory(PlatformFactory)
     sample = factory.SubFactory(SampleFactory)
     technique = factory.SubFactory(TechniqueFactory)
 
