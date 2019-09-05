@@ -457,8 +457,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Return the application settings."""
         import_strings = set(self.application_import_strings)
         import_strings.add("submit_analyses")
+        defaults = self.application_settings.copy()
+        defaults["submit_analyses"] = defaults.get("submit_analyses", None)
         return get_application_settings(
-            defaults=self.application_settings.copy(),
+            defaults=defaults,
             settings=self._settings_for_client,
             reference_data=self.application.assembly.reference_data or {},
             import_strings=import_strings,
