@@ -18,11 +18,6 @@ from isabl_cli import utils
 from isabl_cli.settings import system_settings
 from isabl_cli.settings import perform_import
 
-# settings from environ variables
-LSF_GET_REQUIREMENTS = "ISABL_LSF_GET_REQUIREMENTS"
-LSF_EXTRA_ARGS = "ISABL_LSF_EXTRA_ARGS"
-LSF_THROTTLE_BY = "ISABL_LSF_THROTTLE_BY"
-
 
 def submit_lsf(app, command_tuples):  # pragma: no cover
     """Submit applications as arrays grouped by the target methods."""
@@ -48,19 +43,21 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
 
-        if os.environ.get(LSF_GET_REQUIREMENTS):
-            requirements = perform_import(
-                val=os.environ.get(LSF_GET_REQUIREMENTS),
-                setting_name=LSF_GET_REQUIREMENTS,
-            )(app, methods)
+        # get requirements as a function of the app and target methods
+        get_requirements = system_settings.SUBMIT_CONFIGURATION.get("get_requirements")
+
+        if get_requirements:
+            name = "SUBMIT_CONFIGURATION.get_requirements"
+            get_requirements = perform_import(val=get_requirements, setting_name=name)
+            requirements = get_requirements(app, methods)
 
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
             submit_lsf_array(
                 commands=commands,
-                requirements=requirements,
-                extra_args=os.environ.get(LSF_EXTRA_ARGS, ""),
-                throttle_by=os.environ.get(LSF_THROTTLE_BY, 50),
+                requirements=requirements or "",
+                extra_args=system_settings.SUBMIT_CONFIGURATION.get("extra_args", ""),
+                throttle_by=system_settings.SUBMIT_CONFIGURATION.get("throttle_by", 50),
                 jobname=(
                     f"application: {app} | "
                     f"methods: {', '.join(methods)} | "
