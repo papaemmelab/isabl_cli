@@ -21,6 +21,7 @@ from isabl_cli import api
 from isabl_cli import data
 from isabl_cli import exceptions
 from isabl_cli import utils
+from isabl_cli import options
 from isabl_cli.batch_systems import submit_local
 from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
@@ -28,39 +29,77 @@ from isabl_cli.settings import system_settings
 
 class AbstractApplication:  # pylint: disable=too-many-public-methods
 
-    """An Abstract application."""
+    """An Abstract Isabl application."""
 
-    # application unique together definition
+    # The uniqueness of an application is determined by it's name and version.
+    # A good strategy to applications is to ask are results still comparable?
+    # An optimization that doesn't change outputs might not require a version change.
     NAME = None
     VERSION = None
+
+    # Optionally set ASSEMBLY and SPECIES to version as a function of genome build.
+    # This is particularly useful for NGS applications as often results are only
+    # comparable if data was analyzed against the same version of the genome.
     ASSEMBLY = None
     SPECIES = None
 
-    # optional application info
-    URL = None
-    STAGED_MSG = "READY FOR SUBMISSION"
-
-    # application configuration
-    application_protect_results = True
+    # URL (or comma separated URLs) to be stored in the application database object.
+    application_url = None
     application_description = ""
-    application_inputs = {}
-    application_results = {}
-    application_settings = {}
-    application_import_strings = {}
 
-    # auto merge configurations
-    application_project_level_results = {}
-    application_individual_level_results = {}
+    # Applications can depend on multiple configurations such as paths to executables,
+    # references files, compute requirements, etc. These settings are explicitly
+    # defined using the application_settings dictionary. Learn more at:
+    # https://docs.isabl.io/writing-applications#application-settings
+    application_settings = dict()
+    application_import_strings = set()
 
-    # individual level analyses configs
-    unique_analysis_per_individual = False
-
+    # Applications can be launched from the command line. To support this capability
+    # you have to tell the application how to link analyses to different experiments.
+    # Learn more: https://docs.isabl.io/writing-applications#command-line-configuration
     cli_help = ""
     cli_options = []
     cli_allow_force = True
     cli_allow_restart = True
     cli_allow_local = True
+
+    # You can provide an specification your application results using this attribute.
+    # Each key is a result id and the value is a dictionary with specs of the result.
+    # By default, analysis results are protected upon completion (i.e. permissions are
+    # set to read only).
+    application_results = dict()
+
+    # Disabling application_protect_results makes an app re-runnable. Meaning that
+    # analyses in SUCCEEDED status can be re-run and overwritten.
+    application_protect_results = True
+
+    # Isabl applications can produce auto-merge analyses at a project and individual
+    # level. For example, you may want to merge variants whenever new results are
+    # available for a given project, or update quality control reports when a new
+    # sample is added to an individual. A newly versioned analysis will be created for
+    # each type of auto-merge and your role is to take a list of succeeded analysis
+    # and implement the merge logic.
+    application_project_level_results = dict()
+    application_individual_level_results = dict()
+
+    # application_inputs are analysis-specific settings (settings are the same for all
+    # analyses, yet inputs are potentially different for each analysis). Each input set
+    # to NotImplemented is considered required and must be resolved at get_dependencies
+    application_inputs = dict()
+
+    # It is possible to create applications that are unique at the individual level.
+    # A good example of a unique per individual application could be a patient centric
+    # report that aggregates results across all samples. Applications that require a
+    # unique analysis per individual don't support individual level auto-merge.
+    unique_analysis_per_individual = False
+
+    # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
+    # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
+    # either --force or --restart.
     skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED"}
+
+    # If any of these errors is raised during the command generation process, the
+    # submission will continue. Errors or valdation messages are presented at the end.
     skip_exceptions = (
         AssertionError,
         click.UsageError,
@@ -69,12 +108,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         exceptions.MissingOutputError,
     )
 
+    # private variables
+    _staged_message = "READY FOR SUBMISSION"
+
     # private result keys
     _command_script_key = "command_script"
     _command_log_key = "command_log"
     _command_err_key = "command_err"
-
-    # base results
     _base_results = {
         _command_script_key: {
             "frontend_type": "text-file",
@@ -97,6 +137,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # USER REQUIRED IMPLEMENTATIONS
     # -----------------------------
 
+    def get_command(self, analysis, inputs, settings):  # pylint: disable=W9008
+        """
+        Must return a shell command for the analysis as a string.
+
+        Arguments:
+            analysis (dict): an analysis object as retrieved from API.
+            inputs (dict): as returned by `get_dependencies`.
+            settings (dict): applications settings.
+
+        Returns:
+            str: command
+        """
+        raise NotImplementedError()
+
+    # ------------------------
+    # OPTIONAL IMPLEMENTATIONS
+    # ------------------------
+
+    @abc.abstractmethod
     def get_experiments_from_cli_options(self, **cli_options):  # pylint: disable=W9008
         """
         Must return list of target-reference experiment tuples given the parsed options.
@@ -108,58 +167,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             list: of (targets, references) tuples.
         """
         raise NotImplementedError()
-
-    def validate_experiments(self, targets, references):  # pylint: disable=W9008
-        """
-        Must raise UsageError if tuple combination isn't valid else return True.
-
-        Arguments:
-            targets (list): list of targets dictionaries.
-            references (list): list of references dictionaries.
-
-        Raises:
-            click.UsageError: if tuple is invalid.
-
-        Returns:
-            bool: True if (targets, references, analyses) combination is ok.
-        """
-        raise NotImplementedError()
-
-    def get_dependencies(
-        self, targets, references, settings
-    ):  # pylint: disable=W9008,W0613
-        """
-        Get dictionary of inputs, this function is run before `get_command`.
-
-        Arguments:
-            targets (list): created analysis instance.
-            references (list): created analysis instance.
-            settings (object): settings namespace.
-
-        Returns:
-            tuple: (list of analyses dependencies primary keys, inputs dict).
-        """
-        return [], {}
-
-    def get_command(self, analysis, inputs, settings):  # pylint: disable=W9008
-        """
-        Must return command and final analysis status.
-
-        Allowed final status are SUCCEEDED and IN_PROGRESS.
-
-        Arguments:
-            analysis (dict): an analysis object as retrieved from API.
-            inputs (dict): as returned by `get_dependencies`.
-            settings (dict): applications settings.
-
-        Returns:
-            tuple: command (str), final status (str)
-        """
-        raise NotImplementedError()
-
-    # ------------------------
-    # OPTIONAL IMPLEMENTATIONS
-    # ------------------------
 
     def get_analysis_results(self, analysis):  # pylint: disable=W9008,W0613
         """
@@ -180,8 +187,50 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return "FINISHED"
 
     def validate_settings(self, settings):
-        """Validate settings."""
+        """
+        Validate settings.
+
+        Make sure application settings are valid by raising an AssertionError if
+        something is properly configured.
+
+        Arguments:
+            settings (isabl_cli.settings.ApplicationSettings): an application settings
+            object, which is also a Munch-like dictionary.
+        """
         return
+
+    def validate_experiments(self, targets, references):  # pylint: disable=W9008
+        """
+        Raise AssertionError if tuple combination isn't valid.
+
+        Some of the advantages of metadata-driven applications is that we can prevent
+        analyses that don't make sense, for example running a variant calling
+        application on imaging data.
+
+        Arguments:
+            targets (list): list of targets dictionaries.
+            references (list): list of references dictionaries.
+
+        Raises:
+            AssertionError: if tuple is invalid.
+        """
+        raise NotImplementedError()
+
+    def get_dependencies(
+        self, targets, references, settings
+    ):  # pylint: disable=W9008,W0613
+        """
+        Get dictionary of inputs, this function is run before `get_command`.
+
+        Arguments:
+            targets (list): created analysis instance.
+            references (list): created analysis instance.
+            settings (object): settings namespace.
+
+        Returns:
+            tuple: (list of analyses dependencies primary keys, inputs dict).
+        """
+        return [], {}
 
     # --------------------------------------
     # PROJECT LEVEL OPTIONAL IMPLEMENTATIONS
@@ -270,8 +319,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             unused-argument (dict): a project or individual instance.
         """
-        if system_settings.SUBMIT_MERGE_ANALYSIS:
-            system_settings.SUBMIT_MERGE_ANALYSIS(
+        submit_merge = system_settings.SUBMIT_MERGE_ANALYSIS
+
+        if submit_merge:
+            click.secho(
+                f"Submitting merge analyses for {instance} "
+                f"using: {submit_merge.__module__}.{submit_merge.__name__}"
+            )
+
+            submit_merge(
                 instance=instance,
                 application=self,
                 command=self._get_cli_merge_command(instance),
@@ -292,6 +348,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             get_analysis = self.get_individual_level_auto_merge_analysis
 
         if not analyses or len(analyses) < 2:
+            click.secho(
+                f"Not enough analyses for {instance} merge, "
+                f"at least 2 required but got: {len(analyses)}",
+                fg="yellow",
+            )
             return
 
         try:
@@ -404,7 +465,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         assert not self.unique_analysis_per_individual, (
             "Applications that require a unique analysis per individual "
-            "don't support individual"
+            "don't support individual level auto-merge."
         )
 
         self._run_analyses_merge(
@@ -429,7 +490,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         assert not self.unique_analysis_per_individual, (
             "Applications that require a unique analysis per individual "
-            "don't support individual auto merge"
+            "don't support individual level auto-merge."
         )
 
         return api.create_instance(
@@ -455,14 +516,19 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def settings(self):
         """Return the application settings."""
+        reference_data = dict()
         import_strings = set(self.application_import_strings)
         import_strings.add("submit_analyses")
         defaults = self.application_settings.copy()
         defaults["submit_analyses"] = defaults.get("submit_analyses", None)
+
+        if self.application.assembly:
+            reference_data = self.application.assembly.reference_data or {}
+
         return get_application_settings(
             defaults=defaults,
             settings=self._settings_for_client,
-            reference_data=self.application.assembly.reference_data or {},
+            reference_data=reference_data,
             import_strings=import_strings,
         )
 
@@ -497,7 +563,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             instance_id=application["pk"],
             application_class=f"{self.__module__}.{self.__class__.__name__}",
             results=self._application_results,
-            url=self.URL,
+            url=self.application_url,
             settings=application.settings,
         )
 
@@ -521,7 +587,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             instance_id=application["pk"],
             results=self._application_individual_level_results,
             application_class=self.application["application_class"],
-            url=self.URL,
+            url=self.application_url,
         )
 
     @cached_property
@@ -544,7 +610,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             instance_id=application["pk"],
             results=self._application_project_level_results,
             application_class=self.application["application_class"],
-            url=self.URL,
+            url=self.application_url,
         )
 
     @cached_property
@@ -659,6 +725,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             force = cli_options.pop("force", False)
             restart = cli_options.pop("restart", False)
             local = cli_options.pop("local", False)
+            tuples = []
 
             if commit and force:
                 raise click.UsageError("--commit not required when using --force")
@@ -669,8 +736,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             if force and restart:
                 raise click.UsageError("cant use --force and --restart together")
 
+            if not hasattr(
+                cls.get_experiments_from_cli_options, "__isabstractmethod__"
+            ):
+                tuples = pipe.get_experiments_from_cli_options(**cli_options)
+            else:
+                tuples = cls.get_experiments_from_default_cli_options(cli_options)
+
             pipe.run(
-                tuples=pipe.get_experiments_from_cli_options(**cli_options),
+                tuples=tuples,
                 commit=commit,
                 force=force,
                 verbose=not quiet,
@@ -687,6 +761,52 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def get_cli_command_name(self):
         """Get name for isabl_cli command."""
         return f"{slugify(self.NAME)}-{slugify(self.VERSION, separator='.')}"
+
+    @classmethod
+    def get_experiments_from_default_cli_options(cls, cli_options):
+        """Get experiments from default CLI options."""
+        tuples = []
+        references = []
+        supported_cli_options = [
+            options.ANALYSES,
+            options.NORMAL_TARGETS,
+            options.TARGETS,
+            options.REFERENCES,
+            options.NULLABLE_REFERENCES,
+            options.PAIR,
+            options.PAIRS,
+            options.PAIRS_FROM_FILE,
+        ]
+
+        assert any(i in cls.cli_options for i in supported_cli_options), (
+            f"'{cls.__name__}.cli_options' must include at least one of the "
+            f"supported default options to get experiments: {supported_cli_options}"
+        )
+
+        if options.PAIR in cls.cli_options:
+            tuples += cli_options.get("pair", [])
+
+        if options.PAIRS in cls.cli_options:
+            tuples += cli_options.get("pairs", [])
+
+        if options.PAIRS_FROM_FILE in cls.cli_options:
+            tuples += cli_options.get("pairs_from_file", [])
+
+        if options.ANALYSES in cls.cli_options:
+            for i in cli_options.get("analyses_filters", []):
+                tuples.append((i.targets, i.references))
+
+        if (
+            options.REFERENCES in cls.cli_options
+            or options.NULLABLE_REFERENCES in cls.cli_options
+        ):
+            references += cli_options.get("references", [])
+
+        if any(i in cls.cli_options for i in [options.NORMAL_TARGETS, options.TARGETS]):
+            for i in cli_options.get("targets", []):
+                tuples.append(([i], references))
+
+        return tuples
 
     # ------------------------
     # ANALYSES EXECUTION LOGIC
@@ -736,7 +856,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         self.settings.force = force
 
         # update run arguments attribute
-        self.settings.run_args = run_args or {}
+        self.settings.run_args = api.isablfy(run_args or {})
 
         # run extra settings validation
         self.validate_settings(self.settings)
@@ -746,7 +866,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         # make sure outdir is set
         for i in analyses:
-            if not i.storage_url:
+            if not i.storage_url:  # pragma: no cover
                 self._patch_analysis(i)
 
         # run analyses
@@ -819,7 +939,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             click.echo(f"Running analyses with {submit_analyses.__name__}...")
             run_tuples = submit_analyses(self, command_tuples)
         else:
-            run_tuples = [(i, self.STAGED_MSG) for i, _ in command_tuples]
+            run_tuples = [(i, self._staged_message) for i, _ in command_tuples]
 
         return run_tuples, skipped_tuples
 
@@ -874,8 +994,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         analyses, inputs = self.get_dependencies(targets, references, self.settings)
 
         for i, j in self.application_inputs.items():  # pragma: no cover
-            if i not in inputs and j is NotImplemented:
-                missing.append(i)
+            if i not in inputs:
+                if j is NotImplemented:
+                    missing.append(i)
+                else:
+                    inputs[i] = j
 
         if missing:  # pragma: no cover
             missing = ", ".join(map(str, missing))
@@ -918,7 +1041,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -----------------
 
     @staticmethod
-    def get_result(*args, **kwargs):
+    def get_result(*args, **kwargs):  # pragma: no cover
         """Get an application result."""
         return utils.get_result(*args, **kwargs)
 
@@ -927,20 +1050,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Get application results."""
         return utils.get_results(*args, **kwargs)
 
-    def patch_application_settings(self, **settings):
+    def patch_application_settings(self, client_id=None, **settings):
         """Patch application settings if necessary."""
         assert system_settings.is_admin_user, "Apps can be patched only by admin user."
         click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
+        client_id = client_id or self.client_id
 
         try:
-            assert self._settings_for_client == settings
+            assert self.application.settings.get(client_id) == settings
             click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
         except AssertionError:
             try:
                 api.patch_instance(
                     "applications",
                     self.primary_key,
-                    settings={**self.application.settings, self.client_id: settings},
+                    settings={**self.application.settings, client_id: settings},
                 )
 
                 del self.settings  # make sure cached settings are re-computed
@@ -978,7 +1102,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         if len(references) > 2 or not references:
             references = f"{len(references)} samples."
-        else:
+        else:  # pragma: no cover
             references = " ".join([i["system_id"] for i in references])
 
         return " | ".join(
@@ -1013,7 +1137,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             color = "blue"
             blink = False
 
-            if isinstance(msg, Exception):
+            if isinstance(msg, Exception):  # pragma: no cover
                 color = "red"
             elif msg == "SUCCEEDED":
                 color = "green"
@@ -1021,13 +1145,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 color = "red"
             elif msg == "INVALID":
                 color = "yellow"
-            elif msg == "SUBMITTED":
+            elif msg == "SUBMITTED":  # pragma: no cover
                 color = "cyan"
-            elif msg == self.STAGED_MSG:
+            elif msg == self._staged_message:  # pragma: no cover
                 color = "magenta"
                 blink = True
 
-            if len(msg) > 20:
+            if len(msg) > 20:  # pragma: no cover
                 msg = msg[:100] + "..."
 
             return click.style(msg, fg=color, blink=blink)
@@ -1068,6 +1192,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         summary = "\n".join(summary).expandtabs(20) + "\n"
         click.echo(f"{summary}\n")
+
+    # ------------------
+    # NGS SPECIFIC UTILS
+    # ------------------
 
     def get_bedfile(self, experiment, bedfile_type="targets"):
         """Get targets or baits bedfile for experiment."""
@@ -1130,12 +1258,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if errors:
             raise exceptions.ValidationError("\n".join(errors))
 
-    def validate_are_normals(self, experiments):
-        """Raise error not all experiments come from NORMAL sample."""
-        for i in experiments:
-            msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
-            assert i.sample.category == "NORMAL", msg
-
     # -----------------------
     # ANALYSES CREATION LOGIC
     # -----------------------
@@ -1171,7 +1293,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 exceptions.ValidationError,
                 exceptions.ConfigurationError,
                 AssertionError,
-            ) as error:
+            ) as error:  # pragma: no cover
                 invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
 
         # get existing analyses from valid tuples
@@ -1328,7 +1450,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def __repr__(self):
         """Print name, version and assembly."""
-        return f"{self.NAME} {self.VERSION} ({self.ASSEMBLY})"
+        return f"{self.NAME} {self.VERSION}" + (
+            f" ({self.ASSEMBLY})" if self.ASSEMBLY else ""
+        )
 
     # -------------------------
     # ANALYSES VALIDATION UTILS
@@ -1483,3 +1607,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 msg.append(f'{i["system_id"]} species not supported')
 
         assert not msg, "\n".join(msg)
+
+    def validate_are_normals(self, experiments):
+        """Raise error not all experiments come from NORMAL sample."""
+        for i in experiments:
+            msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
+            assert i.sample.category == "NORMAL", msg
