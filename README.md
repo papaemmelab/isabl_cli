@@ -16,13 +16,12 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 
 ## Credits
 
-This package was created using [Cookiecutter] and the [leukgen/cookiecutter-toil] project template.
+Isabl was created at [Elli Papaemmanuil's lab].
 
 [`Isabl`]: https://isabl.io
 [documentation]: https://docs.isabl.io
 [contributing guidelines]: https://docs.isabl.io/contributing-guide
-[cookiecutter]: https://github.com/audreyr/cookiecutter
-[leukgen/cookiecutter-toil]: https://github.com/leukgen/cookiecutter-toil
+[Elli Papaemmanuil's lab]: https://www.mskcc.org/research-areas/labs/elli-papaemmanuil
 
 [black_badge]: https://img.shields.io/badge/code%20style-black-000000.svg
 [black_base]: https://github.com/ambv/black
