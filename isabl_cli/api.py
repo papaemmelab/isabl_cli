@@ -1,5 +1,6 @@
 """Logic to interact with API."""
 
+from functools import lru_cache
 from itertools import islice
 from os import environ
 from os.path import basename
@@ -135,7 +136,7 @@ class Assembly(IsablDict):
 
     api_endpoint = "assemblies"
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         """Get better representation for assemblies."""
         identifier = getattr(self, "name", getattr(self, "pk", None))
         return super().__repr__() if not identifier else f"Assembly({identifier})"
@@ -163,7 +164,7 @@ class Experiment(IsablDict):
             elif i["file_type"] == "FASTQ_R2":
                 read_2.append(i["file_url"])
 
-        if read_2 and len(read_1) != len(read_2):
+        if read_2 and len(read_1) != len(read_2):  # pragma: no cover
             raise exceptions.MissingDataError(
                 f"The # of read 1 files ({len(read_1)}) "
                 f"and read 2 ({len(read_2)}) should be the same "
@@ -196,7 +197,7 @@ def retry_request(method, **kwargs):
     for i in [0.2, 1, 5, 60, 300]:  # attempt some retries
         try:
             response = getattr(requests, method)(verify=False, **kwargs)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException:  # pragma: no cover
             response = None
 
         if response is not None and not str(response.status_code).startswith("50"):
@@ -208,6 +209,7 @@ def retry_request(method, **kwargs):
     return response
 
 
+@lru_cache(None)
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
     headers = {"Authorization": f"Token {user_settings.api_token}"}
@@ -232,10 +234,13 @@ def get_token_headers():
             },
         )
 
-        if not response.ok and "non_field_errors" in response.text and not testing:
+        if (
+            not response.ok and "non_field_errors" in response.text and not testing
+        ):  # pragma: no cover
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
+            get_token_headers.cache_clear()
             return get_token_headers()
-        elif not response.ok:
+        elif not response.ok:  # pragma: no cover
             click.secho(f"Request Error: {response.url}", fg="red")
             response.raise_for_status()
 
@@ -651,7 +656,7 @@ def _get_analysis_results(analysis, raise_error=True):
         click.secho(f"{error_msg} cant import application class", fg="red")
         return results
 
-    if not analysis.storage_url:
+    if not analysis.storage_url:  # pragma: no cover
         analysis = application._patch_analysis(analysis)
 
     try:

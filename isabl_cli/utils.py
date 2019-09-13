@@ -1,13 +1,13 @@
 """Isabl CLI utils."""
 
+from getpass import getuser
+from os import stat
+from pwd import getpwuid
 import getpass
 import json
 import os
 import sys
 import tarfile
-from getpass import getuser
-from os import stat
-from pwd import getpwuid
 
 import click
 
@@ -50,13 +50,19 @@ def get_results(
 
     for i in experiment.results:
         if i.application.pk == application_key:
-            if targets and {j.pk for j in i.targets}.difference(targets):
+            if targets and {j.pk for j in i.targets}.difference(
+                targets
+            ):  # pragma: no cover
                 continue
 
-            if references and {j.pk for j in i.references}.difference(references):
+            if references and {j.pk for j in i.references}.difference(
+                references
+            ):  # pragma: no cover
                 continue
 
-            if analyses and not analyses.issubset({j.pk for j in i.analyses}):
+            if analyses and not analyses.issubset(
+                {j.pk for j in i.analyses}
+            ):  # pragma: no cover
                 continue
 
             results_dict = i if result_key == "storage_url" else i.results
@@ -222,7 +228,20 @@ def assert_same_owner(path):
     """Validate that a path is owned by the same user."""
     try:
         assert find_owner(path) == getuser(), f"{path} must be owned by {getuser()}"
-    except AssertionError as error:
+    except AssertionError as error:  # pragma: no cover
         raise click.UsageError(str(error))
-    except FileNotFoundError:
+    except FileNotFoundError:  # pragma: no cover
         pass
+
+
+def called_from(depth=1, verbose=True):
+    """Print where the current function was called from."""
+    ret = sys._getframe(1).f_code.co_name + f" -> was called from: (depth={depth})\n"
+    ret += "\n".join(
+        "\t" + sys._getframe(i).f_code.co_name + str(i) for i in range(3, 3 + depth)
+    )
+
+    if verbose:  # pragma: no cover
+        print(ret)
+
+    return ret

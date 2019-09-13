@@ -116,3 +116,16 @@ def test_system_id():
     )
     assert patched["sample"]["data"]["key"] == "value"
     assert patched["sample"]["notes"] == "a note"
+
+
+def test_get_instances():
+    technique = api.create_instance("techniques", **factories.TechniqueFactory())
+    assert api.get_instances("techniques", [technique.name])[0].pk == technique.pk
+
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+    individual = experiment.sample.individual
+    project = experiment.projects[0]
+    assert api.get_experiments([experiment.pk])[0].pk == experiment.pk
+    assert api.get_projects([project.pk])[0].pk == project.pk
+    assert api.get_tree(individual.pk).pk == individual.pk
+    assert api.get_trees([individual.pk])[0].pk == individual.pk

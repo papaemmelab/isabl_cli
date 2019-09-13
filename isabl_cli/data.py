@@ -80,7 +80,7 @@ def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
     pk = experiment["pk"]
     bam_files = experiment["bam_files"]
 
-    if bam_files.get(assembly_name, None):
+    if bam_files.get(assembly_name, None):  # pragma: no cover
         raise click.UsageError(f"Experiment {pk} already has {assembly_name} bam")
 
     bam_files[assembly_name] = {"url": bam_url, "analysis": analysis_pk}
@@ -443,12 +443,12 @@ class LocalReferenceGenomeImporter:
 
             for i in commands:
                 if dont_index:
-                    click.secho(f"Skipping indexing:\n\n\t{' '.join(i)}", fg="orange")
+                    click.secho(f"Skipping indexing:\n\n\t{' '.join(i)}", fg="yellow")
                     continue
 
-                try:
+                try:  # pragma: no cover
                     subprocess.check_call(i)
-                except subprocess.CalledProcessError:
+                except subprocess.CalledProcessError:  # pragma: no cover
                     click.secho(
                         f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}", fg="red"
                     )
@@ -695,7 +695,7 @@ class LocalDataImporter(BaseImporter):
                     for root, _, files in bar:
                         if not root.startswith(data_storage_dir):
                             for i in files:
-                                if len(patterns) > 500:
+                                if len(patterns) > 500:  # pragma: no cover
                                     click.echo(
                                         f"Matching {i} against "
                                         f"{len(patterns)} experiments..."
@@ -740,7 +740,7 @@ class LocalDataImporter(BaseImporter):
 
             # raise error if multiple data types matched
             if len(dtypes) != 1:
-                raise exceptions.ImplementationError(
+                raise exceptions.ImplementationError(  # pragma: no cover
                     f"Conflicting data types ({dtypes}) were "
                     f"identified by inspectors: {self.RAW_DATA_INSPECTORS} "
                 )

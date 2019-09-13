@@ -24,16 +24,37 @@ class NonSequencingApplication(AbstractApplication):
     VERSION = "STILL_TESTING"
 
 
-class TestApplication(AbstractApplication):
+class ExperimentsFromDefaulCLIApplication(AbstractApplication):
 
+    NAME = str(uuid.uuid4())
+    VERSION = "STILL_TESTING"
+    cli_options = [
+        options.TARGETS,
+        options.ANALYSES,
+        options.PAIR,
+        options.PAIRS,
+        options.PAIRS_FROM_FILE,
+        options.NULLABLE_REFERENCES,
+    ]
+
+    def validate_experiments(self, targets, refereces):
+        assert "raise validation error" not in targets.notes
+
+    def get_command(**_):
+        return ""
+
+
+class MockApplication(AbstractApplication):
+
+    pass
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
     SPECIES = "HUMAN"
-    URL = "http://www.fake-test-app.org"
 
     cli_help = "This is a test application"
     cli_options = [options.TARGETS]
+    application_url = "http://www.fake-test-app.org"
     application_settings = {
         "foo": "bar",
         "test_reference": None,
@@ -63,8 +84,9 @@ class TestApplication(AbstractApplication):
         }
     }
 
-    def get_experiments_from_cli_options(self, targets):
-        return [([i], []) for i in targets]
+    # this is commented out to test get_experiments_from_default_cli_options
+    # def get_experiments_from_cli_options(self, targets):
+    #     return [([i], []) for i in targets]
 
     def validate_experiments(self, targets, references):
         self.validate_one_target_no_references(targets, references)
@@ -151,10 +173,27 @@ class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
     application_protect_results = False
 
 
+def submit_merge(instance, application, command):
+    assert "merge-individual-analyses" in command
+    assert isinstance(application, MockApplication)
+    assert instance.pk == 1
+    raise ValueError("stop testing here")
+
+
+def test_custom_submit_merge():
+    _DEFAULTS["SUBMIT_MERGE_ANALYSIS"] = "tests.test_app.submit_merge"
+
+    with pytest.raises(ValueError) as error:
+        MockApplication().submit_merge_analysis(api.IsablDict(pk=1, species="HUMAN"))
+
+    assert "stop testing here" in str(error)
+    _DEFAULTS["SUBMIT_MERGE_ANALYSIS"] = None
+
+
 def test_assembly_is_not_required():
-    assert (
-        NonSequencingApplication().primary_key == NonSequencingApplication().primary_key
-    )
+    app = NonSequencingApplication()
+    assert str(app) == f"{app.NAME} {app.VERSION}"
+    assert app.primary_key == NonSequencingApplication().primary_key
 
 
 def test_get_application_settings():
@@ -243,7 +282,13 @@ def test_get_application_settings():
 
 
 def test_application_settings(tmpdir):
-    application = TestApplication()
+    application = MockApplication()
+
+    # test __repr__
+    assert (
+        str(application)
+        == f"{application.NAME} {application.VERSION} ({application.ASSEMBLY})"
+    )
 
     # test get settings from reference data id
     application.application_settings["test_reference"] = "reference_data_id:test_id"
@@ -256,8 +301,11 @@ def test_application_settings(tmpdir):
     application.patch_application_settings(from_system_settings="set")
     assert application.settings.from_system_settings == "set"
 
+    # run it again just to get coverage when evaluating that no API update is needed
+    application.patch_application_settings(from_system_settings="set")
+
     # test bad settings
-    application = TestApplication()
+    application = MockApplication()
     application.application.settings = {}  # avoid default errors
     application.application_settings = {
         "test_reference": "reference_data_id:invalid_key",
@@ -271,9 +319,6 @@ def test_application_settings(tmpdir):
 
 
 def test_unique_analysis_per_individual_app(tmpdir):
-    data_storage_directory = tmpdir.mkdir("data_storage_directory")
-    _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
-
     individual = factories.IndividualFactory(species="HUMAN")
     sample = factories.SampleFactory(individual=individual)
     project = api.create_instance("projects", **factories.ProjectFactory())
@@ -286,7 +331,6 @@ def test_unique_analysis_per_individual_app(tmpdir):
 
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     tuples = [(experiments, [])]
-    command = UniquePerIndividualApplication.as_cli_command()
     application = UniquePerIndividualApplication()
     ran_analyses, _, __ = application.run(tuples, commit=True)
 
@@ -322,10 +366,15 @@ def test_unique_analysis_per_individual_app(tmpdir):
     assert "analysis_result_key" in ran_analyses[0][0]["results"]
     assert len(ran_analyses[0][0].targets) == 4
 
+    runner = CliRunner()
+    command = UniquePerIndividualApplication.as_cli_command()
+    result = runner.invoke(
+        command, ["-fi", "system_id", experiments[0].system_id], catch_exceptions=False
+    )
+    assert experiments[0].system_id in result.output
+
 
 def test_engine(tmpdir):
-    data_storage_directory = tmpdir.mkdir("data_storage_directory")
-    _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
     _DEFAULTS["DEFAULT_LINUX_GROUP"] = "not_a_group"
 
     individual = factories.IndividualFactory(species="HUMAN")
@@ -342,14 +391,13 @@ def test_engine(tmpdir):
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     tuples = [([i], []) for i in experiments]
 
-    command = TestApplication.as_cli_command()
-    application = TestApplication()
+    command = MockApplication.as_cli_command()
+    application = MockApplication()
     ran_analyses, _, __ = application.run(tuples, commit=True)
     target = api.Experiment(ran_analyses[1][0].targets[0].pk)
 
     assert "analysis_result_key" in ran_analyses[1][0]["results"].keys()
     assert "analysis_result_key" in ran_analyses[2][0]["results"].keys()
-
     assert f'analysis: {ran_analyses[1][0]["pk"]}' in application.get_job_name(
         ran_analyses[1][0]
     )
@@ -357,6 +405,11 @@ def test_engine(tmpdir):
     bam = join(tmpdir, "fake.bam")
     application.update_experiment_bam_file(experiments[0], bam, ran_analyses[0][0].pk)
     assert bam in application.get_bams([experiments[0]])
+
+    # get coverage for when there is no need to update the bam again
+    assert application.update_experiment_bam_file(
+        experiments[0], bam, ran_analyses[0][0].pk
+    )
 
     with pytest.raises(exceptions.ValidationError) as error:
         application.validate_bams(experiments)
@@ -390,8 +443,7 @@ def test_engine(tmpdir):
 
     # test options
     runner = CliRunner()
-    result = runner.invoke(command, ["--help"])
-
+    result = runner.invoke(command, ["--help"], catch_exceptions=False)
     assert "This is a test application" in result.output
     assert "--commit" in result.output
     assert "--force" in result.output
@@ -400,9 +452,15 @@ def test_engine(tmpdir):
     assert "--url" in result.output
 
     runner = CliRunner()
-    result = runner.invoke(command, ["--url"])
-
+    result = runner.invoke(command, ["--url"], catch_exceptions=False)
     assert "http://www.fake-test-app.org" in result.output
+
+    # test get experiments from default cli options
+    runner = CliRunner()
+    result = runner.invoke(
+        command, ["-fi", "system_id", experiments[0].system_id], catch_exceptions=False
+    )
+    assert experiments[0].system_id in result.output
 
     # check project level results
     pks = ",".join(str(i["pk"]) for i in experiments)
@@ -452,9 +510,11 @@ def test_engine(tmpdir):
     with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
         assert "successfully restarted" in f.read()
 
-    TestApplication.cli_allow_force = False
-    TestApplication.cli_allow_restart = False
-    result = runner.invoke(TestApplication.as_cli_command(), ["--help"])
+    MockApplication.cli_allow_force = False
+    MockApplication.cli_allow_restart = False
+    result = runner.invoke(
+        MockApplication.as_cli_command(), ["--help"], catch_exceptions=False
+    )
     assert "--force" not in result.output
     assert "--restart" not in result.output
 
@@ -539,6 +599,20 @@ def test_validate_pdx_only():
         application.validate_pdx_only(targets)
 
     assert "is not PDX" in str(error.value)
+
+
+def test_validate_are_normals():
+    application = AbstractApplication()
+    targets = [
+        api.isablfy(
+            {"sample": {"category": "TUMOR", "system_id": "FOO"}, "system_id": "FOO"}
+        )
+    ]
+
+    with pytest.raises(AssertionError) as error:
+        application.validate_are_normals(targets)
+
+    assert "is not NORMAL" in str(error.value)
 
 
 def test_validate_dna_rna_only():
@@ -644,3 +718,58 @@ def test_validate_same_technique():
         application.validate_same_technique(targets, references)
 
     assert "Expected one technique, got:" in str(error.value)
+
+
+def test_get_experiments_from_default_cli_options(tmpdir):
+    app = ExperimentsFromDefaulCLIApplication()
+    experiments = [
+        api.create_instance("experiments", **factories.ExperimentFactory())
+        for i in range(4)
+    ]
+    analysis = api.create_instance(
+        "analyses",
+        **{
+            **factories.AnalysisFactory(),
+            "targets": experiments,
+            "references": experiments,
+        },
+    )
+
+    pairs_file = tmpdir.join("pairs.txt")
+    pairs_file.write(experiments[1].system_id + "\t" + experiments[0].system_id + "\n")
+
+    # get coverage for invalid experiments
+    api.patch_instance(
+        "experiments", experiments[0].system_id, notes="raise validation error"
+    )
+
+    command = ExperimentsFromDefaulCLIApplication.as_cli_command()
+    runner = CliRunner()
+    result = runner.invoke(
+        command,
+        [
+            "--pair",
+            experiments[0].system_id,
+            experiments[1].system_id,
+            "--pairs",
+            experiments[2].system_id,
+            experiments[3].system_id,
+            "--targets-filters",
+            "pk",
+            experiments[3].pk,
+            "--references-filters",
+            "pk",
+            experiments[2].pk,
+            "--analyses-filters",
+            "pk",
+            analysis.pk,
+            "--pairs-from-file",
+            str(pairs_file),
+        ],
+        catch_exceptions=False,
+    )
+    assert experiments[0].system_id in result.output
+    assert "INVALID" in result.output
+
+    # just get coverage for get_job_name
+    assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)

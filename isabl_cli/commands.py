@@ -52,6 +52,7 @@ def _filters_or_identifiers(endpoint, identifiers, filters, fields=None):
 def login():  # pragma: no cover
     """Login with isabl credentials."""
     user_settings.api_token = None
+    api.get_token_headers.cache_clear()
     api.get_token_headers()
 
 
@@ -105,7 +106,7 @@ def patch_results(filters, force):
             if force or not i.results:
                 results = api._get_analysis_results(i, raise_error=False)
                 api.patch_instance("analyses", i.pk, results=results)
-            else:
+            else:  # pragma: no cover
                 skipped.append(i)
 
     if skipped:  # pragma: no cover
@@ -137,7 +138,7 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
     if not field and not (json_ or use_fx):  # pragma: no cover
         raise click.UsageError("Pass --field or use --json/--fx")
 
-    if use_fx and not shutil.which("fx"):
+    if use_fx and not shutil.which("fx"):  # pragma: no cover
         raise click.UsageError("fx is not installed")
 
     instances = _filters_or_identifiers(
@@ -218,7 +219,8 @@ def get_outdirs(pattern, filters, identifiers):
 @options.NULLABLE_FILTERS
 @options.NULLABLE_IDENTIFIERS
 @options.VERBOSE
-def get_data(filters, identifiers, verbose):
+@click.option("--dtypes", help="Limit data types to be printed.", multiple=True)
+def get_data(filters, identifiers, verbose, dtypes):
     """Get file paths for experiments raw data."""
     for i in _filters_or_identifiers(
         endpoint="experiments",
@@ -232,7 +234,8 @@ def get_data(filters, identifiers, verbose):
             raise click.UsageError(f"No data for {system_id}, ignore with --verbose")
 
         for j in i["raw_data"] or ["None"]:
-            click.echo(j["file_url"] if not verbose else f"{system_id}\t{j}")
+            if not dtypes or j["file_type"] in dtypes:
+                click.echo(j["file_url"] if not verbose else f"{system_id}\t{j}")
 
 
 @click.command()
@@ -290,7 +293,7 @@ def get_reference(identifier, data_id, resources, model):
     else:
         try:
             click.echo(instance["reference_data"][data_id]["url"])
-        except KeyError:
+        except KeyError:  # pragma: no cover
             raise click.UsageError(f"No {data_id} reference for {instance['name']}.")
 
 
@@ -318,9 +321,9 @@ def get_results(filters, identifiers, result_key, verbose):
         if result_key in i["results"]:
             result = i["results"][result_key]
             click.echo(result if not verbose else f"{i['pk']}\t{result}")
-        elif verbose:
+        elif verbose:  # pragma: no cover
             click.echo(f"{i['pk']}\t- No result available")
-        else:
+        else:  # pragma: no cover
             raise click.UsageError(
                 f"No '{result_key}' for {i['pk']}, ignore with --verbose"
             )

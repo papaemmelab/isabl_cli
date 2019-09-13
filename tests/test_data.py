@@ -12,7 +12,6 @@ from isabl_cli import api
 from isabl_cli import commands
 from isabl_cli import data
 from isabl_cli import factories
-from isabl_cli.settings import _DEFAULTS
 
 
 def test_trash_analysis_storage():
@@ -29,10 +28,25 @@ def test__make_storage_directory(tmpdir):
     assert "/test/12345" in j
 
 
-def test_import_reference_data(tmpdir):
-    data_storage_directory = tmpdir.mkdir("data_storage_directory")
-    _DEFAULTS["BASE_STORAGE_DIRECTORY"] = str(data_storage_directory)
+def test_local_reference_genome_importer(tmpdir):
+    runner = CliRunner()
+    command = data.LocalReferenceGenomeImporter.as_cli_command()
+    reference_test = tmpdir.join("test.fasta")
+    reference_test.write("foo")
+    identifier = str(uuid.uuid4())
+    api.create_instance("assemblies", **factories.AssemblyFactory(name=identifier))
+    args = [
+        "--genome-path",
+        reference_test.strpath,
+        "--dont-index",
+        "--assembly",
+        identifier,
+    ]
+    result = runner.invoke(command, args, catch_exceptions=False)
+    print(result.output)
 
+
+def test_import_reference_data(tmpdir):
     for model, identifier, factory in [
         ("assemblies", str(uuid.uuid4()), factories.AssemblyFactory),
         ("techniques", str(uuid.uuid4()), factories.TechniqueFactory),
@@ -99,8 +113,6 @@ def test_import_reference_data(tmpdir):
     not shutil.which("bgzip"), reason="bgzip required for this test, install samtools?"
 )
 def test_import_bedfiles(tmpdir):
-    data_storage_directory = tmpdir.mkdir("data_storage_directory")
-    _DEFAULTS["BASE_STORAGE_DIRECTORY"] = str(data_storage_directory)
     technique = api.create_instance("techniques", **factories.TechniqueFactory())
     targets = tmpdir.join("targets.bed")
     baits = tmpdir.join("baits.bed")
@@ -149,9 +161,6 @@ def test_import_bedfiles(tmpdir):
 
 def test_local_data_import(tmpdir):
     dirs = [tmpdir.strpath]
-    data_storage_directory = tmpdir.mkdir("data_storage_directory")
-    _DEFAULTS["BASE_STORAGE_DIRECTORY"] = data_storage_directory.strpath
-
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
     experiments = [factories.ExperimentFactory(projects=projects) for i in range(4)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]

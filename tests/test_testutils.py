@@ -2,7 +2,7 @@ from isabl_cli import api
 from isabl_cli import factories
 from isabl_cli.test import utils
 
-from .test_app import TestApplication
+from .test_app import MockApplication
 
 
 def test_create_utils():
@@ -18,7 +18,7 @@ def test_assert_run():
     data = factories.ExperimentFactory(projects=[data])
     data["sample"]["individual"]["species"] = "HUMAN"
     assert utils.assert_run(
-        application=TestApplication(),
+        application=MockApplication(),
         tuples=[([api.create_instance("experiments", **data)], [])],
         commit=True,
     )

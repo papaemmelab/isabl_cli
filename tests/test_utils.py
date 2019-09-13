@@ -131,3 +131,17 @@ def test_check_admin():
 
     assert "not the admin" in str(error.value)
     _DEFAULTS["ADMIN_USER"] = admin
+
+
+def test_traverse_dict():
+    assert utils.traverse_dict({"1": {}}, ["1"], serialize=True) == "{}"
+    assert utils.traverse_dict({"1": [{"2": 1}]}, ["1", "2"], serialize=True) == "[1]"
+
+
+def test_called_from():
+    def a_function():
+        return utils.called_from(3, verbose=False)
+
+    assert "a_function" in a_function()
+    assert "test_called_from" in a_function()
+    assert "pytest_pyfunc_call" in a_function()

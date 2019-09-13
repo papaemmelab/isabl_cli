@@ -29,7 +29,7 @@ def create_experiment(
     experiment = factories.ExperimentFactory(technique=technique)
 
     # force sample if provided
-    if sample:
+    if sample:  # pragma: no cover
         experiment["sample"] = sample
     else:
         category = category or experiment["sample"]["category"]
@@ -105,7 +105,7 @@ def assert_run(
             results = results or []
 
             if not commit:
-                assert status == application.STAGED_MSG
+                assert status == application._staged_message
                 continue
 
             for j in results:

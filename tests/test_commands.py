@@ -1,10 +1,13 @@
 from click.testing import CliRunner
+import pytest
+import click
 
 from isabl_cli import api
 from isabl_cli import commands
 from isabl_cli import data
 from isabl_cli import factories
-from .test_app import TestApplication
+
+from .test_app import MockApplication
 from isabl_cli.test import utils
 
 
@@ -80,13 +83,20 @@ def test_commands(tmpdir):
     )
     assert "test.path" in result.output
 
+    # use two experiments to increase coverage with project_results=
     project = api.create_instance("projects", **factories.ProjectFactory())
     experiment = factories.ExperimentFactory(projects=[project])
     experiment["sample"]["individual"]["species"] = "HUMAN"
+    experiment_b = factories.ExperimentFactory(projects=[project])
+    experiment_b["sample"] = experiment["sample"]
     analysis = utils.assert_run(
-        application=TestApplication(),
-        tuples=[([api.create_instance("experiments", **experiment)], [])],
+        application=MockApplication(),
+        tuples=[
+            ([api.create_instance("experiments", **experiment)], []),
+            ([api.create_instance("experiments", **experiment_b)], []),
+        ],
         commit=True,
+        project_results=["project_result_key"],
     )[0]
 
     args = ["--app-results", analysis.application.pk]
@@ -99,3 +109,154 @@ def test_commands(tmpdir):
     args = ["-fi", "pk", analysis.pk, "--force"]
     result = runner.invoke(commands.patch_results, args, catch_exceptions=False)
     assert "Retrieving 1 from analyses API endpoint" in result.output
+
+
+def test_get_bed():
+    runner = CliRunner()
+    technique = api.create_instance("techniques", **factories.TechniqueFactory())
+    args = [str(technique.pk)]
+    result = runner.invoke(commands.get_bed, args, catch_exceptions=False)
+    assert "No BED files" in result.output
+
+    api.patch_instance(
+        "techniques",
+        technique.pk,
+        reference_data={"test_targets_bedfile": {"url": "/hello/world"}},
+    )
+
+    result = runner.invoke(commands.get_bed, args, catch_exceptions=False)
+    assert "/hello/world" in result.output
+
+    api.patch_instance(
+        "techniques",
+        technique.pk,
+        reference_data={
+            "test_targets_bedfile": {"url": "/hello/world"},
+            "another_targets_bedfile": {"url": "/hello/world"},
+        },
+    )
+
+    result = runner.invoke(commands.get_bed, args, catch_exceptions=False)
+    assert "Multiple BEDs" in result.output
+
+
+def test_get_bams():
+    runner = CliRunner()
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+    args = [str(experiment.pk)]
+    result = runner.invoke(commands.get_bams, args, catch_exceptions=False)
+    assert "No bams for" in result.output
+
+    result = runner.invoke(
+        commands.get_bams, args + ["--verbose"], catch_exceptions=False
+    )
+    assert experiment.system_id in result.output
+    assert "None" in result.output
+
+    api.patch_instance(
+        "experiments",
+        experiment.pk,
+        bam_files={"grch": {"url": "/hello/world", "analysis": 1}},
+    )
+
+    result = runner.invoke(commands.get_bams, args, catch_exceptions=False)
+    assert "/hello/world" in result.output
+
+    api.patch_instance(
+        "experiments",
+        experiment.pk,
+        bam_files={
+            "a1": {"url": "/hello/world", "analysis": 1},
+            "a2": {"url": "/hello/mars", "analysis": 2},
+        },
+    )
+
+    result = runner.invoke(commands.get_bams, args, catch_exceptions=False)
+    assert "Multiple bams" in result.output
+
+    result = runner.invoke(
+        commands.get_bams, args + ["--assembly", "a2"], catch_exceptions=False
+    )
+    assert "/hello/mars" in result.output
+
+
+def test_get_data(tmpdir):
+    runner = CliRunner()
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment = data.update_storage_url("experiments", experiment.pk)
+    args = [str(experiment.pk)]
+    result = runner.invoke(commands.get_data, args, catch_exceptions=False)
+    assert "No data for" in result.output
+
+    result = runner.invoke(
+        commands.get_bams, args + ["--verbose"], catch_exceptions=False
+    )
+    assert experiment.system_id in result.output
+    assert "None" in result.output
+
+    api.patch_instance(
+        "experiments",
+        experiment.pk,
+        raw_data=[
+            {"file_url": "/hello/world", "file_type": "TXT"},
+            {"file_url": "/hello/mars", "file_type": "PNG"},
+        ],
+    )
+
+    result = runner.invoke(commands.get_data, args, catch_exceptions=False)
+    assert "/hello/world" in result.output
+    assert "/hello/mars" in result.output
+
+    result = runner.invoke(
+        commands.get_data, args + ["--dtypes", "TXT"], catch_exceptions=False
+    )
+    assert "/hello/mars" not in result.output
+
+
+def test_login():
+    runner = CliRunner()
+    result = runner.invoke(commands.login, input="admin\nadmin", catch_exceptions=False)
+    assert "Successful authorization! Token stored" in result.output
+
+
+def test_run_web_signals():
+    application = MockApplication().application
+    analysis = api.create_instance(
+        "analyses",
+        **factories.AnalysisFactory(
+            targets=[factories.ExperimentFactory()], application=application
+        ),
+    )
+
+    api.create_instance(
+        "signals",
+        import_string="isabl_cli.signals.resume_analysis_signal",
+        target_endpoint="analyses",
+        target_id=analysis.pk,
+    )
+
+    runner = CliRunner()
+    args = ["-fi", "target_id", analysis.pk, "-fi", "target_endpoint", "analyses"]
+    result = runner.invoke(commands.run_web_signals, args, catch_exceptions=False)
+    assert str(analysis.pk) in result.output
+    assert "SUCCEEDED" in result.output
+
+    api.create_instance(
+        "signals",
+        import_string="isabl_cli.signals.force_analysis_signal",
+        target_endpoint="analyses",
+        target_id=analysis.pk,
+    )
+
+    result = runner.invoke(commands.run_web_signals, args, catch_exceptions=False)
+    assert str(analysis.pk) in result.output
+    assert "SUCCEEDED" in result.output
+
+    # increase coverage on get_result
+    assert MockApplication().get_result(
+        experiment=api.get_experiments([analysis.targets[0].pk])[0],
+        application_key=application.pk,
+        result_key="analysis_result_key",
+        application_name=str(MockApplication),
+    )
+

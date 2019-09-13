@@ -43,15 +43,16 @@ def add_apps_groups(apps):
         try:
             command = i.as_cli_command()
             apps_dict[i.ASSEMBLY][command.name] = command
-        except exceptions.ConfigurationError as error:
+        except (exceptions.ConfigurationError, AttributeError) as error:
             click.secho(f"Invalid configuration, failed to register {i}: {error}")
 
-        if (time.time() - start_time) > 0.1:
+        if (time.time() - start_time) > 0.1:  # pragma: no cover
             click.secho(f"{i.__name__} is loading slowly...", err=True, fg="yellow")
 
     for i, j in apps_dict.items():
-        name, _help = f"apps-{slugify(i)}", f"{i} applications."
-        main.add_command(click.Group(name=name, commands=j, help=_help))
+        name = f"apps-{slugify(i)}" if i else "apps"
+        help_text = f"{i} applications." if i else "data processing applications."
+        main.add_command(click.Group(name=name, commands=j, help=help_text))
 
 
 for i in system_settings.SYSTEM_COMMANDS:
@@ -60,7 +61,7 @@ for i in system_settings.SYSTEM_COMMANDS:
 for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
-if system_settings.INSTALLED_APPLICATIONS:
+if system_settings.INSTALLED_APPLICATIONS:  # pragma: no cover
     add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
 
 if system_settings.is_admin_user:
