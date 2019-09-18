@@ -506,7 +506,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def client_id(self):
         """Get current client ID."""
-        return system_settings.client.get("pk", "default_client")
+        return str(system_settings.client.get("pk", "default_client"))
 
     @cached_property
     def primary_key(self):
@@ -1054,7 +1054,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Patch application settings if necessary."""
         assert system_settings.is_admin_user, "Apps can be patched only by admin user."
         click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
-        client_id = client_id or self.client_id
+        client_id = str(client_id or self.client_id)  # must be a string
 
         try:
             assert self.application.settings.get(client_id) == settings
@@ -1067,8 +1067,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     settings={**self.application.settings, client_id: settings},
                 )
 
-                del self.settings  # make sure cached settings are re-computed
-                del self.application  # make sure application is refetched
+                try:
+                    del self.settings  # make sure cached settings are re-computed
+                except AttributeError:
+                    pass
+
+                try:
+                    del self.application  # make sure application is refetched
+                except AttributeError:
+                    pass
+
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:  # pragma: no cover
                 click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
