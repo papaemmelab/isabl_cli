@@ -16,7 +16,10 @@ IDENTIFIER = click.option(
     "--identifier",
     "-id",
     show_default=True,
-    help="identifier to be used (traverse with dot, e.g. `sample.system_id`)",
+    help=(
+        "experiment identifier field to be used (traverse with dot, e.g., "
+        "system_id, sample.system_id, sample.individual.identifier, etc.)"
+    ),
     callback=lambda _, __, i: i.split("."),
     required=True,
 )
