@@ -683,6 +683,24 @@ class LocalDataImporter(BaseImporter):
             cache[index]["instance"] = i
             cache[index]["files"] = []
 
+        # forgive me gods of complexity
+        overlaps = []
+        for i in identifiers:
+            for j in identifiers:
+                if i != j and (i in j or j in i):
+                    overlaps.append((i, j))
+
+        if overlaps:
+            raise click.UsageError(
+                "Overlapping identifiers are not allowed, use a more specific field "
+                "or further filter your experiments:\n\n"
+                + f"\n\n".join(
+                    f"  {identifiers[i]}\t{click.style(i, fg='red')}\n"
+                    + f"  {identifiers[j]}\t{click.style(j, fg='red')}"
+                    for i, j in overlaps
+                ).expandtabs(20)
+            )
+
         if patterns:
             # see http://stackoverflow.com/questions/8888567 for pattern
             pattern = re.compile("|".join(patterns))
