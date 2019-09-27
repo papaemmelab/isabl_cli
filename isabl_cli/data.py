@@ -664,7 +664,11 @@ class LocalDataImporter(BaseImporter):
         for i in api.get_instances("experiments", verbose=True, **filters):
             index = f"primary_key_{i['pk']}"
             using_id = f"{i['system_id']} (Skipped, identifier is NULL)"
-            identifier = key(i)
+
+            try:
+                identifier = key(i)
+            except Exception as error:  # pylint: disable=broad-except
+                raise click.UsageError(f"Failed to retieve id using {key}: {error}")
 
             if identifier in identifiers:  # duplicated identifiers not valid
                 raise click.UsageError(

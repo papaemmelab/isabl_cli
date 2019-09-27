@@ -338,11 +338,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             self.run_project_merge(instance)
 
     def _run_analyses_merge(self, instance, analyses):
+        merge_type = "project"
         merge_analyses = self.merge_project_analyses
         validate_analyses = self.validate_project_analyses
         get_analysis = self.get_project_level_auto_merge_analysis
 
         if "species" in instance:
+            merge_type = "individual"
             merge_analyses = self.merge_individual_analyses
             validate_analyses = self.validate_individual_analyses
             get_analysis = self.get_individual_level_auto_merge_analysis
@@ -382,6 +384,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         stdout_path = self.get_command_log_path(analysis)
         stderr_path = self.get_command_err_path(analysis)
         error = None
+        error_msg = ""
 
         with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
             with redirect_stdout(out), redirect_stderr(err):
@@ -392,16 +395,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     merge_analyses(analysis, analyses)
                     api.patch_analysis_status(analysis, "SUCCEEDED")
                 except Exception as e:  # pragma: no cover pylint: disable=W0703
-                    print(traceback.format_exc())
-                    click.echo(traceback.format_exc(), file=sys.stderr)
+                    error_msg = traceback.format_exc()
+                    click.echo(error_msg, file=sys.stderr)
                     click.echo(e, file=sys.stderr)
                     api.patch_analysis_status(analysis, "FAILED")
                     error = e
+                    print(error_msg)
 
         api.patch_instance("analyses", analysis.pk, data=analysis.data)
         os.umask(oldmask)
         if error is not None:
-            raise Exception(error)
+            raise Exception(
+                f"Merge analysis ({analysis}) failed for {instance}. You can "
+                f"retry this operation with `isabl merge-{merge_type}-analyses "
+                f"--{merge_type} {instance.pk} "
+                f"--application {analyses[0].application.pk}`. "
+                f"The error traceback, if any, was: {error} {error_msg}"
+            )
 
     def _get_cli_merge_command(self, instance):
         if "species" in instance:
