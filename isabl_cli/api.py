@@ -194,7 +194,7 @@ def get_api_url(url):
 
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
-    for i in [0.2, 1, 5, 60, 300]:  # attempt some retries
+    for i in [0.2, 1, 5, 60, 300, 900]:  # attempt some retries
         try:
             response = getattr(requests, method)(verify=False, **kwargs)
         except requests.exceptions.RequestException:  # pragma: no cover
@@ -219,8 +219,10 @@ def get_token_headers():
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
-        # not using "pytest" in sys.modules because pytest is imported in isabl_cli.test
-        testing = basename(sys.argv[0]) in ("pytest", "py.test")
+        testing = (
+            basename(sys.argv[0]) in ("pytest", "py.test")
+        ) or "pytest" in sys.modules
+
         response = retry_request(
             "post",
             url=get_api_url("/rest-auth/login/"),
