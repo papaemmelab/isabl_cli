@@ -197,7 +197,8 @@ def retry_request(method, **kwargs):
     for i in [0.2, 1, 5, 60, 300, 900]:  # attempt some retries
         try:
             response = getattr(requests, method)(verify=False, **kwargs)
-        except requests.exceptions.RequestException:  # pragma: no cover
+        except requests.exceptions.RequestException as error:  # pragma: no cover
+            print(error)
             response = None
 
         if response is not None and not str(response.status_code).startswith("50"):
