@@ -141,6 +141,14 @@ def trigger_analyses_merge(analysis):
     except ImportError:
         return
 
+    def _echo_action(instance, application, pending):
+        click.secho(
+            ("Skipping " if pending else "Submitting ")
+            + ("individual " if "species" in instance else "project ")
+            + f"merge for {instance} and application {application}",
+            fg="green" if pending else "yellow",
+        )
+
     if application.has_project_auto_merge:
         projects = {j["pk"]: j for i in analysis["targets"] for j in i["projects"]}
 
@@ -152,13 +160,9 @@ def trigger_analyses_merge(analysis):
                 projects=i["pk"],
             )
 
-            if not pending:
-                click.secho(
-                    f"Submitting project merge for {i} and "
-                    f"application {analysis.application}",
-                    fg="green",
-                )
+            _echo_action(i, analysis.application, pending)
 
+            if not pending:
                 application.submit_merge_analysis(i)
 
     if application.has_individual_auto_merge:
@@ -174,13 +178,9 @@ def trigger_analyses_merge(analysis):
                 targets__sample__individual__pk=i.pk,
             )
 
-            if not pending:
-                click.secho(
-                    f"Submitting individual merge for {i} and "
-                    f"application {analysis.application}",
-                    fg="green",
-                )
+            _echo_action(i, analysis.application, pending)
 
+            if not pending:
                 application.submit_merge_analysis(i)
 
 
