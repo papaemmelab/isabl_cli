@@ -206,7 +206,7 @@ def retry_request(method, **kwargs):
         if response is not None and not str(response.status_code).startswith("50"):
             break
         else:  # pragma: no cover
-            msg = (f"Request failed with error: {error}, retrying in {i}s...",)
+            msg = f"Request failed with error: {error}, retrying in {i}s..."
             click.secho(msg, fg="yellow", err=True)
             time.sleep(i)
 
