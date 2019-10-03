@@ -194,14 +194,13 @@ def get_api_url(url):
 
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
-    for i in [0.2, 1, 5, 60]:  # , 300, 900]:  # attempt some retries
-        error = None
-        response = None
-
+    for i in [0.2, 1, 5, 10, 60, 90, 120, 300, 900]:  # attempt some retries
         try:
+            error = None
             response = getattr(requests, method)(verify=False, **kwargs)
         except requests.exceptions.RequestException as request_error:  # pragma: no cover
             error = request_error
+            response = None
 
         if response is not None and not str(response.status_code).startswith("50"):
             break
