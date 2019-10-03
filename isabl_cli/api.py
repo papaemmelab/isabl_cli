@@ -194,7 +194,7 @@ def get_api_url(url):
 
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
-    for i in [0.2, 1, 5, 60, 300, 900]:  # attempt some retries
+    for i in [0.2, 1, 5, 60]:  # , 300, 900]:  # attempt some retries
         error = None
         response = None
 
