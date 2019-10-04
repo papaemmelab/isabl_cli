@@ -34,11 +34,9 @@ _DEFAULTS = {
     "TIME_ZONE": "America/New_York",
     "INSTALLED_APPLICATIONS": [],
     "CUSTOM_COMMANDS": [],
-    "ON_DATA_IMPORT": ["isabl_cli.data.symlink_experiment_to_projects"],
-    "ON_STATUS_CHANGE": [
-        "isabl_cli.data.symlink_analysis_to_targets",
-        "isabl_cli.data.trigger_analyses_merge",
-    ],
+    "ON_DATA_IMPORT": [],
+    "ON_STATUS_CHANGE": [],
+    "CREATE_SYMLINKS": True,
     "SUBMIT_MERGE_ANALYSIS": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
@@ -61,6 +59,7 @@ _DEFAULTS = {
         "isabl_cli.commands.patch_status",
         "isabl_cli.commands.rerun_signals",
         "isabl_cli.commands.run_web_signals",
+        "isabl_cli.commands.run_signals",
     ],
 }
 

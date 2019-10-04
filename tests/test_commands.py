@@ -219,6 +219,31 @@ def test_login():
     assert "Successful authorization! Token stored" in result.output
 
 
+def test_run_signals(tmpdir):
+    signal = "isabl_cli.data.symlink_analysis_to_targets"
+    runner = CliRunner()
+    experiment_dir = tmpdir.mkdir("experiment")
+    analysis = api.create_instance(
+        "analyses",
+        **factories.AnalysisFactory(
+            storage_url=str(tmpdir.mkdir("analysis")),
+            targets=[factories.ExperimentFactory(storage_url=str(experiment_dir))],
+        ),
+    )
+
+    api.patch_instance("analyses", analysis.pk, status="CREATED")
+    args = ["analyses", "-fi", "pk", analysis.pk, "-s", signal]
+    result = runner.invoke(commands.run_signals, args, catch_exceptions=False)
+    assert "analyses" not in str(experiment_dir.listdir())
+
+    api.patch_instance("analyses", analysis.pk, status="SUCCEEDED")
+    args = ["analyses", "-fi", "pk", analysis.pk, "-s", signal]
+    result = runner.invoke(commands.run_signals, args, catch_exceptions=False)
+    assert analysis.application.name.lower() in str(
+        experiment_dir.join("analyses").listdir()
+    )
+
+
 def test_run_web_signals():
     application = MockApplication().application
     analysis = api.create_instance(

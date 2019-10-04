@@ -384,7 +384,7 @@ def rerun_signals(filters):
 @click.command()
 @options.NULLABLE_FILTERS
 def run_web_signals(filters):
-    """Rerun web signals."""
+    """Run signals triggered from the frontend."""
     for i in api.get_instances(
         "signals",
         import_string__in=[
@@ -407,3 +407,25 @@ def run_web_signals(filters):
             api.delete_instance("signals", i.pk)
         except exceptions.AutomationError:
             pass
+
+
+@click.command()
+@options.NULLABLE_FILTERS
+@click.option(
+    "--signals",
+    "-s",
+    help="Signal import string (e.g. isabl_cli.data.trigger_analyses_merge)",
+    required=True,
+    multiple=True,
+)
+@click.argument(
+    "endpoint", required=True, type=click.Choice(["experiments", "analyses"])
+)
+def run_signals(endpoint, filters, signals):
+    """Run any arbitrary signal on analyses or experiments using import strings."""
+    count = api.get_instances_count(endpoint, **filters)
+    click.secho(f"Running {', '.join(signals)} for {count} {endpoint}...", fg="blue")
+    signals = [import_from_string(i) for i in signals]
+
+    for i in api.get_instances(endpoint, **filters):
+        api._run_signals(endpoint, i, signals, raise_error=True, create_record=False)
