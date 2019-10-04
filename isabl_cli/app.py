@@ -1378,7 +1378,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         cache = defaultdict(list)
         existing, missing = [], []
         targets_pks = ",".join(str(j.pk) for i in tuples for j in i[0])
-        filters = dict(application=self.application["pk"], projects__pk__in=projects)
+        filters = dict(application=self.application["pk"])
+
+        if projects:
+            filters["projects__pk__in"] = projects
 
         if targets_pks:
             filters["targets__pk__in"] = targets_pks

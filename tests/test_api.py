@@ -40,19 +40,6 @@ def test_get_custom_fields():
     assert "a" not in i.custom_fields
 
 
-def test_get_token_headers():
-    """Sample test for main command."""
-    user_settings.token = None
-
-    @click.command()
-    def test():
-        assert "Authorization" in api.get_token_headers()
-
-    runner = CliRunner()
-    result = runner.invoke(test, input="admin\nadmin")
-    assert not result.exception
-
-
 def test_api_request():
     assert api.api_request("get", url="auth").ok
     with pytest.raises(requests.HTTPError):

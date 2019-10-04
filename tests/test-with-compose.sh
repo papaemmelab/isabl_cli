@@ -16,9 +16,13 @@ ISABL_BRANCH=${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH:-master}}
 echo "ISABL_BRANCH set to $ISABL_BRANCH given travis branch: $TRAVIS_BRANCH $TRAVIS_PULL_REQUEST_BRANCH"
 
 # clone api from github
-[ ! -d $API_DIR ] && git clone git@github.com:isabl-io/api.git $API_DIR
+rm -rf $API_DIR && git clone git@github.com:isabl-io/api.git $API_DIR
 cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker-compose build && docker-compose up -d
 
 # give some time to API to start and test Isabl CLI
 echo "Giving 30 seconds to API to get started..."
-sleep 30 && cd $CLI_DIR && pytest -v tests/ --cov=isabl_cli
+sleep 30 && cd $CLI_DIR && pytest -vs tests/ --cov=isabl_cli || (
+   # print django logs if tests fail
+   cd $API_DIR && docker-compose logs django && exit 1
+)
+
