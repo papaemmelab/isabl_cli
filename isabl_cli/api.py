@@ -387,6 +387,10 @@ def patch_instance(endpoint, instance_id, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
+    from isabl_cli.data import symlink_analysis_to_targets
+    from isabl_cli.data import symlink_experiment_to_projects
+    from isabl_cli.data import trigger_analyses_merge
+
     run_status_change_signals = False
     run_data_import_signals = False
 
@@ -409,10 +413,20 @@ def patch_instance(endpoint, instance_id, **data):
     )
 
     if run_status_change_signals:
-        _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
+        signals = system_settings.ON_STATUS_CHANGE + [trigger_analyses_merge]
+
+        if system_settings.CREATE_SYMLINKS:
+            signals.append(symlink_analysis_to_targets)
+
+        _run_signals("analyses", instance, signals)
 
     if run_data_import_signals:
-        _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
+        signals = system_settings.ON_DATA_IMPORT
+
+        if system_settings.CREATE_SYMLINKS:
+            signals.append(symlink_experiment_to_projects)
+
+        _run_signals("experiments", instance, signals)
 
     return instance
 
@@ -690,7 +704,7 @@ def _get_analysis_results(analysis, raise_error=True):
     return results
 
 
-def _run_signals(endpoint, instance, signals, raise_error=False):
+def _run_signals(endpoint, instance, signals, raise_error=False, create_record=True):
     errors = []
     on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda *_, **__: None)
 
@@ -706,6 +720,9 @@ def _run_signals(endpoint, instance, signals, raise_error=False):
             except Exception as on_failure_error:  # pylint: disable=W0703
                 errors.append((on_failure_error, traceback.format_exc()))
                 failure_traceback += traceback.format_exc()
+
+            if not create_record:
+                continue
 
             # get or create signal instance
             signal_instance = create_instance(
