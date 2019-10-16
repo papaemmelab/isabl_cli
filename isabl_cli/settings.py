@@ -35,7 +35,11 @@ _DEFAULTS = {
     "ADMIN_USER": getpass.getuser(),
     "CLIENT_NAME": None,
     "TIME_ZONE": "America/New_York",
-    "INSTALLED_APPLICATIONS": [],
+    "INSTALLED_APPLICATIONS": [
+       "shahlab_apps.apps.scrna.apps.SCRNA",
+       "shahlab_apps.apps.cellranger.apps.CELLRANGER",
+       "shahlab_apps.apps.scrna_individual.apps.SCRNAIndividual",
+    ],
     "CUSTOM_COMMANDS": [],
     "ON_DATA_IMPORT": [],
     "ON_STATUS_CHANGE": [],
