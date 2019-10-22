@@ -30,7 +30,10 @@ def raw_data_inspector(path):
     """Determine if a path is a supported raw data file."""
     for i, j in [
         # sequencing
+        # (r"\.fastq.gz$", "FASTQ"),
         (r"\.bam$", "BAM"),
+        (r"\.bai$", "BAI"),
+        (r"\.flagstat$", "FLAGSTAT"),
         (r"\.cram$", "CRAM"),
         # imaging
         (r"\.png$", "PNG"),
