@@ -56,6 +56,11 @@ def raw_data_inspector(path):
     for i in [1, 2]:
         for pattern, fq_type in (
             (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
+            # fastq files from 10X specifically files consist of triples {R1, R2, I1} with,
+            #  R1 containing barcode + unique molecular identifier (UMI),
+            #  R2 containing the actual short read and,
+            #  I1 an optional sample index file.
+            # https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/fastq-input
             (r"(([_.]I{0}[_.].+)|([_.]I{0}\.))f(ast)?q(\.gz)?$", "I"),
         ):
             if re.search(pattern.format(i), path):
