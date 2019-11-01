@@ -619,6 +619,7 @@ class LocalDataImporter(BaseImporter):
         key=lambda x: x["system_id"],
         files_data=None,
         dtypes=None,
+        iexact=False,
         **filters,
     ):
         """
@@ -634,6 +635,7 @@ class LocalDataImporter(BaseImporter):
             key (function): given a experiment dict returns id to match.
             filters (dict): key value pairs to use as API query params.
             dtypes (list): data types that should be matched (e.g. BAM, PNG. etc.).
+            iexact (bool): case insensitive match of identifiers.
             files_data (dict): keys are files basenames and values are
                 dicts with extra annotations such as PL, LB, or any other,
                 see also annotate_file_data.
@@ -680,7 +682,7 @@ class LocalDataImporter(BaseImporter):
                 using_id = f"{i['system_id']} (Skipped, experiment has raw data)"
             elif identifier:
                 identifiers[identifier] = i["system_id"]
-                patterns.append(self.get_regex_pattern(index, identifier))
+                patterns.append(self.get_regex_pattern(index, identifier, iexact))
                 using_id = f"{i['system_id']} (using {identifier})"
 
             cache[index]["using_id"] = using_id
@@ -759,6 +761,7 @@ class LocalDataImporter(BaseImporter):
             # determine if valid data type
             dtypes = [i(path) for i in self.RAW_DATA_INSPECTORS]
             dtypes = set(i for i in dtypes if i)
+            assert dtypes  # happens if no data type matched
 
             # raise error if multiple data types matched
             if len(dtypes) != 1:
@@ -843,7 +846,7 @@ class LocalDataImporter(BaseImporter):
         )
 
     @staticmethod
-    def get_regex_pattern(group_name, identifier):
+    def get_regex_pattern(group_name, identifier, iexact=False):
         """
         Get regex pattern for `identifier` group as `group_name`.
 
@@ -856,8 +859,11 @@ class LocalDataImporter(BaseImporter):
         Returns:
             str: a regex pattern.
         """
-        pattern = re.sub(r"[-_. ]", r"[-_. ]", identifier)
-        return r"(?P<{}>(^|[-_. ])?{}[-_. ])".format(group_name, pattern)
+        return r"(?P<{}>{}(^|[-_. ])?{}[-_. ])".format(
+            group_name,
+            r"(?i)" if iexact else "",
+            re.sub(r"[-_. ]", r"[-_. ]", identifier),
+        )
 
     @staticmethod
     def get_summary(cache):
@@ -903,7 +909,19 @@ class LocalDataImporter(BaseImporter):
         @click.option(
             "--dtypes", help="Limit data types to be imported.", multiple=True
         )
-        def cmd(identifier, commit, filters, directories, symlink, files_data, dtypes):
+        @click.option(
+            "--iexact", help="Case insensitive match of identifiers.", is_flag=True
+        )
+        def cmd(
+            identifier,
+            commit,
+            filters,
+            directories,
+            symlink,
+            files_data,
+            dtypes,
+            iexact,
+        ):
             """
             Find and import experiments data from many directories.
 
@@ -951,6 +969,7 @@ class LocalDataImporter(BaseImporter):
                 key=key,
                 files_data=files_data,
                 dtypes=dtypes,
+                iexact=iexact,
                 **filters,
             )
 
