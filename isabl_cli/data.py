@@ -95,7 +95,7 @@ def symlink_experiment_to_projects(experiment):
 
         experiments_dir = join(i["storage_url"], "experiments")
         experiment_dir = join(experiments_dir, experiment["system_id"])
-        os.makedirs(experiments_dir, exist_ok=True)
+        utils.makedirs(experiments_dir)
         utils.force_symlink(experiment["storage_url"], experiment_dir)
 
 
@@ -118,7 +118,7 @@ def symlink_analysis_to_targets(analysis):
             i = update_storage_url("experiments", i["pk"])
 
         analyses_dir = join(i["storage_url"], "analyses")
-        os.makedirs(analyses_dir, exist_ok=True)
+        utils.makedirs(analyses_dir)
         utils.force_symlink(src, join(analyses_dir, dst))
 
     if analysis["project_level_analysis"]:
@@ -127,7 +127,7 @@ def symlink_analysis_to_targets(analysis):
             i = update_storage_url("projects", i["pk"])
 
         analyses_dir = join(i["storage_url"], "analyses")
-        os.makedirs(analyses_dir, exist_ok=True)
+        utils.makedirs(analyses_dir)
         utils.force_symlink(src, join(analyses_dir, dst))
 
 
@@ -240,7 +240,9 @@ def _make_storage_directory(root, base, identifier, use_hash=False):
         path = join(base)
 
     storage_directory = join(root, path, str(identifier))
-    os.makedirs(storage_directory, exist_ok=True, mode=0o770)
+    original_umask = os.umask(0)
+    utils.makedirs(storage_directory)
+    os.umask(original_umask)
     return storage_directory
 
 
@@ -323,7 +325,7 @@ class LocalReferenceDataImporter(BaseImporter):
 
         data_dir = join(instance["storage_url"], sub_dir or data_id)
         data_dst = join(data_dir, basename(data_src))
-        os.makedirs(data_dir, exist_ok=True)
+        utils.makedirs(data_dir)
 
         if symlink:
             cls.echo_src_dst("Linking", data_src, data_dst)
@@ -539,7 +541,7 @@ class LocalBedImporter(BaseImporter):
         base_name = slugify(f'{technique["slug"]}.{assembly}')
         targets_dst = join(beds_dir, f"{base_name}.targets.bed")
         baits_dst = join(beds_dir, f"{base_name}.baits.bed")
-        os.makedirs(beds_dir, exist_ok=True)
+        utils.makedirs(beds_dir)
 
         for src, dst in [(targets_path, targets_dst), (baits_path, baits_dst)]:
             cls.echo_src_dst("Copying", src, dst)
@@ -800,7 +802,7 @@ class LocalDataImporter(BaseImporter):
             )
 
         data_dir = join(instance["storage_url"], "data")
-        os.makedirs(data_dir, exist_ok=True)
+        utils.makedirs(data_dir)
 
         for src, file_type in [(i["path"], i["dtype"]) for i in files]:
             file_name = basename(src)

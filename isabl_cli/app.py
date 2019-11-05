@@ -923,7 +923,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 # trash analysis and create outdir again
                 elif force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
-                    os.makedirs(i["storage_url"], exist_ok=True)
+                    utils.makedirs(i["storage_url"])
 
                 # only restart failed analyses
                 elif (
@@ -975,7 +975,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         # check status, if not run by admin will be marked as succeeded later
         outdir = analysis["storage_url"]
-        os.makedirs(outdir, exist_ok=True)
+        utils.makedirs(outdir)
         status = self.get_after_completion_status(analysis)
         assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
 
