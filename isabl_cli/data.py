@@ -622,6 +622,7 @@ class LocalDataImporter(BaseImporter):
         files_data=None,
         dtypes=None,
         iexact=False,
+        ignore_ownership=False,
         **filters,
     ):
         """
@@ -638,6 +639,7 @@ class LocalDataImporter(BaseImporter):
             filters (dict): key value pairs to use as API query params.
             dtypes (list): data types that should be matched (e.g. BAM, PNG. etc.).
             iexact (bool): case insensitive match of identifiers.
+            ignore_ownership (bool): raise error if files not owned by admin user.
             files_data (dict): keys are files basenames and values are
                 dicts with extra annotations such as PL, LB, or any other,
                 see also annotate_file_data.
@@ -733,6 +735,10 @@ class LocalDataImporter(BaseImporter):
                                 if match and (not dtypes or match["dtype"] in dtypes):
                                     cache[match.pop("index")]["files"].append(match)
 
+            # check ownership if needed
+            if not ignore_ownership and not symlink:
+                self.check_ownership(cache)
+
             # process files if needed
             label = "Processing..."
             bar = sorted(cache.values(), key=lambda x: x["instance"]["pk"])
@@ -751,6 +757,31 @@ class LocalDataImporter(BaseImporter):
                         experiments_matched.append(i["instance"])
 
         return experiments_matched, self.get_summary(cache)
+
+    @staticmethod
+    def check_ownership(cache):
+        """Make sure files matched are owned by current user."""
+        label = "Checking ownership, ignore with --ignore-ownership..."
+        bar = sorted(cache.values(), key=lambda x: x["instance"]["pk"])
+        owner_mismatch = []
+
+        with click.progressbar(bar, label=label) as bar:
+            for i in bar:
+                for j in i["files"]:
+                    try:
+                        utils.assert_same_owner(j["path"])
+                    except AssertionError:
+                        owner_mismatch.append(j["path"])
+
+        if owner_mismatch:
+            raise click.UsageError(
+                click.style(
+                    "The following files are not owned by current user "
+                    "(consider using --ignore-ownership):\n\t",
+                    fg="red",
+                )
+                + "\n\t".join(owner_mismatch)
+            )
 
     def match_path(self, path, pattern):
         """Match `path` with `pattern` and update cache if fastq or bam."""
@@ -839,6 +870,11 @@ class LocalDataImporter(BaseImporter):
             else:
                 self.move(src, dst)
 
+                try:
+                    subprocess.check_call(["chmod", "a-w", dst])
+                except subprocess.CalledProcessError:
+                    pass
+
         return api.patch_instance(
             endpoint="experiments",
             instance_id=instance["pk"],
@@ -857,6 +893,7 @@ class LocalDataImporter(BaseImporter):
         Arguments:
             group_name (str): regex pattern group name.
             identifier (str): identifier to be matched by regex.
+            iexact (bool): use case insensitive match.
 
         Returns:
             str: a regex pattern.
@@ -914,6 +951,7 @@ class LocalDataImporter(BaseImporter):
         @click.option(
             "--iexact", help="Case insensitive match of identifiers.", is_flag=True
         )
+        @click.option("--ignore-ownership", help="Don't check ownership.", is_flag=True)
         def cmd(
             identifier,
             commit,
@@ -923,6 +961,7 @@ class LocalDataImporter(BaseImporter):
             files_data,
             dtypes,
             iexact,
+            ignore_ownership,
         ):
             """
             Find and import experiments data from many directories.
@@ -964,6 +1003,9 @@ class LocalDataImporter(BaseImporter):
             else:
                 files_data = {}
 
+            if symlink and ignore_ownership:
+                click.secho("--ignore-ownership isnt used when --symlink.", fg="yellow")
+
             matched, summary = cls().import_data(
                 directories=directories,
                 symlink=symlink,
@@ -972,6 +1014,7 @@ class LocalDataImporter(BaseImporter):
                 files_data=files_data,
                 dtypes=dtypes,
                 iexact=iexact,
+                ignore_ownership=ignore_ownership,
                 **filters,
             )
 
