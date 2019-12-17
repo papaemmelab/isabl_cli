@@ -45,6 +45,7 @@ def raw_data_inspector(path):
         (r"\.pdf$", "PDF"),
         (r"\.html$", "HTML"),
         (r"\.md5$", "MD5"),
+        (r"\.y[a]?ml$", "YAML"),
     ]:
         if re.search(i, path):
             return j
