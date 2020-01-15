@@ -30,7 +30,7 @@ _DEFAULTS = {
     "DATA_IMPORTER": "isabl_cli.data.LocalDataImporter",
     "YAML_DATA_IMPORTER": "isabl_cli.data.LocalYamlDataImporter",
     "BED_IMPORTER": "isabl_cli.data.LocalBedImporter",
-    "BASE_STORAGE_DIRECTORY": "/work/shah/isabl_data_lake/",
+    "BASE_STORAGE_DIRECTORY": "/temp_area/datadrive/isabl_storage",
     "FASTQ_READ_SUFFIX": "",
     "ADMIN_USER": getpass.getuser(),
     "CLIENT_NAME": None,
