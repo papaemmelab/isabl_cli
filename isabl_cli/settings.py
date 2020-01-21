@@ -38,15 +38,13 @@ _DEFAULTS = {
     "INSTALLED_APPLICATIONS": [
        "shahlab_apps.apps.scrna.apps.SCRNA",
        "shahlab_apps.apps.cellranger.apps.CELLRANGER",
+       "shahlab_apps.apps.cellphonedb.apps.CELLPHONEDB",
+       "shahlab_apps.apps.kallisto.apps.KALLISTO",
     ],
     "CUSTOM_COMMANDS": [],
     "ON_DATA_IMPORT": [],
     "ON_STATUS_CHANGE": [],
     "CREATE_SYMLINKS": True,
-    "INSTALLED_APPLICATIONS": [
-       "shahlab_apps.apps.scrna.apps.SCRNA",
-       "shahlab_apps.apps.cellranger.apps.CELLRANGER",
-    ],
     "SUBMIT_MERGE_ANALYSIS": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [
