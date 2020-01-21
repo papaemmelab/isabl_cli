@@ -108,22 +108,23 @@ def submit_lsf_array(
     total = len(commands)
     index = 0
 
-    for command, exit_command in commands:
-        index += 1
-        rundir = abspath(dirname(command))
+    with click.progressbar(commands, label="preparing submission...") as bar:
+        for command, exit_command in bar:
+            index += 1
+            rundir = abspath(dirname(command))
 
-        with open(join(root, "in.%s" % index), "w") as f:
-            # use random sleep to avoid parallel API hits
-            f.write(f"sleep {random.uniform(0, 10):.3} && bash {command}")
+            with open(join(root, "in.%s" % index), "w") as f:
+                # use random sleep to avoid parallel API hits
+                f.write(f"sleep {random.uniform(0, 10):.3} && bash {command}")
 
-        with open(join(root, "exit_cmd.%s" % index), "w") as f:
-            f.write(exit_command)
+            with open(join(root, "exit_cmd.%s" % index), "w") as f:
+                f.write(exit_command)
 
-        for j in "log", "err", "exit":
-            src = join(rundir, "head_job.{}".format(j))
-            dst = join(root, "{}.{}".format(j, index))
-            open(src, "w").close()
-            utils.force_symlink(src, dst)
+            for j in "log", "err", "exit":
+                src = join(rundir, "head_job.{}".format(j))
+                dst = join(root, "{}.{}".format(j, index))
+                open(src, "w").close()
+                utils.force_symlink(src, dst)
 
     # submit array of commands
     cmd = (

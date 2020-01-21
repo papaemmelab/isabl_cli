@@ -334,7 +334,7 @@ def iterate(url, **filters):
         objects += results["results"]
 
         if len(objects) >= limit:  # pragma: no cover
-            message = f'retrieved {len(objects)} ouf of {results["count"]}...'
+            message = f'retrieved {len(objects)} out of {results["count"]}...'
             click.echo(message, err=True)
 
     return objects
