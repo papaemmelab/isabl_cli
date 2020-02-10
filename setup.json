@@ -6,7 +6,6 @@
         "Natural Language :: English",
         "Operating System :: Unix",
         "Operating System :: POSIX",
-        "Programming Language :: Python :: 2 :: Only",
         "Topic :: Utilities"
     ],
     "entry_points": {
