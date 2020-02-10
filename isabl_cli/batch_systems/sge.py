@@ -19,13 +19,15 @@ from isabl_cli.settings import system_settings
 from isabl_cli.settings import perform_import
 
 
+# catch kill signal using -notify in qsub
 COMMAND = """
 #!/bin/sh
 
 sigusr2()
-{
-  {exit_command}
-}
+{{
+  echo kill signal catched
+  ({exit_command}) &> {exit_log}
+}}
 
 # catch -USR2 signal
 trap sigusr2 USR2
@@ -147,7 +149,7 @@ def submit_sge_array(
                     )
                 )
 
-            for j in "log", "err":
+            for j in "log", "err", "exit":
                 src = join(rundir, f"head_job.{j}")
                 dst = join(root, f"{j}.{index}")
                 open(src, "w").close()
@@ -156,12 +158,15 @@ def submit_sge_array(
     with open(join(root, "in.sh"), "w") as f:
         f.write("bash in.${SGE_TASK_ID}")
 
+    with open(join(root, "clean.sh"), "w") as f:
+        f.write(f"rm -rf {root}")
+
     cmd = (
         f"qsub {requirements} {extra_args} -tc {throttle_by} -t 1-{total} "
-        f'-N "ISABL-{jobname}" -notify 10 -terse '
-        f"-o '{root}/log.$TASK_ID' -e '{root}/err.$TASK_ID' {root}/in.sh"
+        f'-N "ISABL-{jobname}" -notify -terse -wd {root} '
+        f"-o 'log.$TASK_ID' -e 'err.$TASK_ID' {root}/in.sh"
     )
 
-    jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+    jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip().split(".")[0]
     cmd = f'qsub -N "CLEAN-{jobname}" -hold_jid {jobid} {wait} -terse {root}/clean.sh'
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()

@@ -35,8 +35,8 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
     commands = []
     total_jobs = 10
     jobname = "test_execute_headjob"
-    extra_args = "" if scheduler != "sge" else "-l h_rt=00:00:02"
-    exit_cmd = "exit 1" if scheduler != "sge" else "sleep 5"
+    extra_args = "" if scheduler != "sge" else "-l h_rt=00:00:10"
+    exit_cmd = "exit 1" if scheduler != "sge" else "sleep 20"
 
     for i in range(total_jobs):
         rundir = path.join(test_dir, str(i))
@@ -55,7 +55,7 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
     submit_array(
         commands=commands,
         requirements="",
-        extra_args="",
+        extra_args=extra_args,
         throttle_by=total_jobs,
         jobname="Test Job Array",
         wait=True,
