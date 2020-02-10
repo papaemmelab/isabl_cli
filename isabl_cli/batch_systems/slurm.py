@@ -120,9 +120,10 @@ def submit_slurm_array(
 
             with open(join(root, "in.%s" % index), "w") as f:
                 # submit a dependency job on failure
+                # important when the scheduler kills the head job
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 afternotok = (
-                    f"sbatch --depend=afternotok:{dependency} --kill-on-invalid-dep y "
+                    f"sbatch --depend=afternotok:{dependency} --kill-on-invalid-dep yes "
                     f"-o {join(rundir, 'head_job.exit')} -J 'EXIT: {dependency}' "
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
@@ -133,7 +134,7 @@ def submit_slurm_array(
                     f"({afternotok}) && bash {command}"
                 )
 
-            for j in "log", "err":
+            for j in "log", "err", "exit":
                 src = join(rundir, f"head_job.{j}")
                 dst = join(root, f"{j}.{index}")
                 open(src, "w").close()
@@ -143,14 +144,14 @@ def submit_slurm_array(
         f.write(f"#!/bin/sh\nbash {root}/in.$SLURM_ARRAY_TASK_ID")
 
     with open(join(root, "clean.sh"), "w") as f:
-        f.write(f"#!/bin/sh\nrm -rf {root}")
+        f.write(f"#!/bin/sh\necho rm -rf {root}")
 
     cmd = (
         f"sbatch {requirements} {extra_args} --array 1-{total}%{throttle_by} "
         f"-o '{root}/log.%a' -e '{root}/err.%a' "
         f'-J "ISABL: {jobname}" --parsable {root}/in.sh'
     )
-
+    print(cmd)
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
     cmd = (

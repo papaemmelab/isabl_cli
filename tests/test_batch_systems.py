@@ -35,6 +35,11 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
     commands = []
     total_jobs = 10
     jobname = "test_execute_headjob"
+
+    # kill SGE with time limit instead of failing directly
+    # because SGE's implementation uses SIGUSR2 signal to catch
+    # the event when the scheduler kills the job.
+    # The other schedulers allow for direct job dependencies.
     extra_args = "" if scheduler != "sge" else "-l h_rt=00:00:10"
     exit_cmd = "exit 1" if scheduler != "sge" else "sleep 20"
 
