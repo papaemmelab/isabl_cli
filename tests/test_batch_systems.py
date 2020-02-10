@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 import copy
 import shutil
+import pytest
 
 from isabl_cli.batch_systems import lsf
 from isabl_cli.batch_systems import sge
@@ -20,17 +21,17 @@ def test_submit_array_lsf(tmpdir):
 
 
 @pytest.mark.skipif(not shutil.which("qsub"), reason="qsub not found")
-def test_submit_array_lsf(tmpdir):
+def test_submit_array_sge(tmpdir):
     _test_submit_commands(tmpdir, "sge", sge.submit_sge_array)
 
 
 @pytest.mark.skipif(not shutil.which("sbatch"), reason="sbatch not found")
-def test_submit_array_lsf(tmpdir):
+def test_submit_array_slurm(tmpdir):
     _test_submit_commands(tmpdir, "slurm", slurm.submit_slurm_array)
 
 
 def _test_submit_commands(tmpdir, scheduler, submit_array):
-    test_dir = tmpdir.strpath()
+    test_dir = tmpdir.strpath
     commands = []
     total_jobs = 10
     jobname = "test_execute_headjob"
@@ -49,8 +50,7 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
         with open(command_path, "+w") as f:
             f.write(cmd_content)
 
-        rundirs.append(rundir)
-        commands.append(("bash " + command_path, "echo 'LORD' && (>&2 echo 'HENRY')"))
+        commands.append((command_path, "echo 'LORD' && (>&2 echo 'HENRY')"))
 
     submit_array(
         commands=commands,

@@ -153,7 +153,7 @@ def submit_sge_array(
                 open(src, "w").close()
                 utils.force_symlink(src, dst)
 
-    with open(join(root, "in.sh" % index), "w") as f:
+    with open(join(root, "in.sh"), "w") as f:
         f.write("bash in.${SGE_TASK_ID}")
 
     cmd = (

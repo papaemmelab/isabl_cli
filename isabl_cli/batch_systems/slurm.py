@@ -139,10 +139,10 @@ def submit_slurm_array(
                 open(src, "w").close()
                 utils.force_symlink(src, dst)
 
-    with open(join(root, "in.sh" % index), "w") as f:
+    with open(join(root, "in.sh"), "w") as f:
         f.write(f"#!/bin/sh\nbash {root}/in.$SLURM_ARRAY_TASK_ID")
 
-    with open(join(root, "clean.sh" % index), "w") as f:
+    with open(join(root, "clean.sh"), "w") as f:
         f.write(f"#!/bin/sh\nrm -rf {root}")
 
     cmd = (
@@ -154,7 +154,7 @@ def submit_slurm_array(
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
     cmd = (
-        f"sbatch -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep y "
+        f"sbatch -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
         f"--depend=afterany:{jobid} --parsable {root}/clean.sh"
     )
 
