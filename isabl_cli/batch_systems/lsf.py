@@ -53,17 +53,21 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
-            submit_lsf_array(
-                commands=commands,
-                requirements=requirements or "",
-                extra_args=system_settings.SUBMIT_CONFIGURATION.get("extra_args", ""),
-                throttle_by=system_settings.SUBMIT_CONFIGURATION.get("throttle_by", 50),
-                jobname=(
-                    f"application: {app} | "
-                    f"methods: {', '.join(methods)} | "
-                    f"projects: {', '.join(map(str, projects))}"
-                ),
-            )
+            submit_configuration = system_settings.SUBMIT_CONFIGURATION
+
+            # LSF may not like arrays bigger thank 10K
+            for i in api.chunks(commands, 10000):
+                submit_lsf_array(
+                    commands=i,
+                    requirements=requirements or "",
+                    extra_args=submit_configuration.get("extra_args", ""),
+                    throttle_by=submit_configuration.get("throttle_by", 50),
+                    jobname=(
+                        f"application: {app} | "
+                        f"methods: {', '.join(methods)} | "
+                        f"projects: {', '.join(map(str, projects))}"
+                    ),
+                )
 
         except Exception:  # pylint: disable=broad-except
             api.patch_analyses_status(analyses, "STAGED")
@@ -73,7 +77,7 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
 
 def submit_lsf_array(
-    commands, requirements, jobname, extra_args=None, throttle_by=50
+    commands, requirements, jobname, extra_args=None, throttle_by=50, wait=False
 ):  # pragma: no cover
     """
     Submit an array of bash scripts.
@@ -89,6 +93,7 @@ def submit_lsf_array(
         jobname (str): lsf array jobname.
         extra_args (str): extra LSF args.
         throttle_by (int): max number of jobs running at same time.
+        wait (bool): if true, wait until clean command finishes.
 
     Returns:
         str: jobid of clean up job.
@@ -103,6 +108,7 @@ def submit_lsf_array(
         datetime.now(system_settings.TIME_ZONE).isoformat(),
     )
 
+    wait = "-K" if wait else ""
     os.makedirs(root, exist_ok=True)
     jobname += " | rundir: {}".format(root)
     total = len(commands)
@@ -137,6 +143,7 @@ def submit_lsf_array(
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # submit array of exit commands
+    # -ti, or immediate termination, prevents orphan jobs when -w is not valid anymore
     cmd = (
         f'bsub -W 15 -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
         f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash '
@@ -146,8 +153,6 @@ def submit_lsf_array(
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # clean the execution directory
-    cmd = f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti rm -r {root}'
+    cmd = f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti {wait} rm -r {root}'
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    jobid = re.findall("<(.*?)>", jobid)[0]
-
-    return jobid
+    return re.findall("<(.*?)>", jobid)[0]
