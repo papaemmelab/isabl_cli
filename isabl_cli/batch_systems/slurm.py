@@ -124,7 +124,7 @@ def submit_slurm_array(
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 afternotok = (
                     f"sbatch --depend=afternotok:{dependency} --kill-on-invalid-dep yes "
-                    f"-o {join(rundir, 'head_job.exit')} -J 'EXIT: {dependency}' "
+                    f'-o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
 
@@ -144,7 +144,7 @@ def submit_slurm_array(
         f.write(f"#!/bin/sh\nbash {root}/in.$SLURM_ARRAY_TASK_ID")
 
     with open(join(root, "clean.sh"), "w") as f:
-        f.write(f"#!/bin/sh\necho rm -rf {root}")
+        f.write(f"#!/bin/sh\nrm -rf {root}")
 
     cmd = (
         f"sbatch {requirements} {extra_args} --array 1-{total}%{throttle_by} "
@@ -156,7 +156,7 @@ def submit_slurm_array(
 
     cmd = (
         f"sbatch -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
-        f"--depend=afterany:{jobid} --parsable {root}/clean.sh"
+        f"-o /dev/null -e /dev/null --depend=afterany:{jobid} --parsable {root}/clean.sh"
     )
 
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
