@@ -151,7 +151,7 @@ def submit_slurm_array(
         f"-o '{root}/log.%a' -e '{root}/err.%a' "
         f'-J "ISABL: {jobname}" --parsable {root}/in.sh'
     )
-    print(cmd)
+
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
     cmd = (
