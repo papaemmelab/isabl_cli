@@ -46,6 +46,9 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
     for i in range(total_jobs):
         rundir = path.join(test_dir, str(i))
         os.makedirs(rundir, exist_ok=True)
+
+        # the head job script echoes to stdout and stdout, both will be stored in
+        # head_job.log and head_job.err respectively
         cmd_content = "echo 'FERMINA' && (>&2 echo 'VALENTINO') "
         command_path = join(rundir, "head_job.sh")
 
@@ -55,6 +58,8 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
         with open(command_path, "+w") as f:
             f.write(cmd_content)
 
+        # the exit command echoes both stderr and stdout, however
+        # both are meant to be stored in the same file, head_job.exit
         commands.append((command_path, "echo 'LORD' && (>&2 echo 'HENRY')"))
 
     submit_array(
@@ -75,7 +80,7 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
         with open(join(rundir, "head_job.err")) as f:
             assert "VALENTINO" in f.read()
 
-        # Chech both stderr and stdout are redirected to head_job.exit.
+        # chech both stderr and stdout are redirected to head_job.exit
         with open(join(rundir, "head_job.exit")) as f:
             content = f.read()
 

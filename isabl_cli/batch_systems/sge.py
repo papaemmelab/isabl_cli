@@ -167,6 +167,12 @@ def submit_sge_array(
         f"-o 'log.$TASK_ID' -e 'err.$TASK_ID' {root}/in.sh"
     )
 
-    jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip().split(".")[0]
-    cmd = f'qsub -N "CLEAN-{jobname}" -hold_jid {jobid} {wait} -terse {root}/clean.sh'
+    jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
+    jobid = jobid.strip().split(".")[0]
+
+    cmd = (
+        f'qsub -N "CLEAN-{jobname}" -hold_jid {jobid} {wait} -terse '
+        f"-o /dev/null -e /dev/null {root}/clean.sh"
+    )
+
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
