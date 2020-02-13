@@ -740,6 +740,9 @@ class LocalDataImporter(BaseImporter):
             if not ignore_ownership and not symlink:
                 self.check_ownership(cache)
 
+            # check files are readable
+            self.check_are_readable(cache)
+
             # process files if needed
             label = "Processing..."
             bar = sorted(cache.values(), key=lambda x: x["instance"]["pk"])
@@ -782,6 +785,30 @@ class LocalDataImporter(BaseImporter):
                     fg="red",
                 )
                 + "\n\t".join(owner_mismatch)
+            )
+
+    @staticmethod
+    def check_are_readable(cache):
+        """Make sure files matched can be accessed and read."""
+        label = "Checking files are readable..."
+        bar = sorted(cache.values(), key=lambda x: x["instance"]["pk"])
+        unreadable_files = []
+
+        with click.progressbar(bar, label=label) as bar:
+            for i in bar:
+                for j in i["files"]:
+                    try:
+                        assert os.access(j["path"], os.R_OK)
+                    except AssertionError:
+                        unreadable_files.append(j["path"])
+
+        if unreadable_files:
+            raise click.UsageError(
+                click.style(
+                    "The following files are not readable by current user:\n\t",
+                    fg="red",
+                )
+                + "\n\t".join(unreadable_files)
             )
 
     def match_path(self, path, pattern):

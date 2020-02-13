@@ -162,14 +162,14 @@ def test_import_bedfiles(tmpdir):
 def test_local_data_import(tmpdir):
     dirs = [tmpdir.strpath]
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
-    experiments = [factories.ExperimentFactory(projects=projects) for i in range(4)]
+    experiments = [factories.ExperimentFactory(projects=projects) for i in range(5)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     keys = [i["pk"] for i in experiments]
 
     importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=dirs, pk__in=keys)
     obtained = len(summary.rsplit("no files matched"))
-    assert obtained == 4 + 1
+    assert obtained == 5 + 1
 
     # test can't determine type of fastq
     with pytest.raises(click.UsageError) as error:
@@ -279,6 +279,18 @@ def test_local_data_import(tmpdir):
     args = ["-di", tmpdir.strpath, "-id", "sample", "-fi", "pk__in", keys]
     result = runner.invoke(command, args)
     assert "invalid type for identifier" in result.output
+
+    # test import data using files without read permissions
+    path_1 = tmpdir.join(f'{experiments[4]["system_id"]}_1.fastq')
+    path_2 = tmpdir.join(f'{experiments[4]["system_id"]}_2.fastq')
+    path_1.write("foo")
+    path_2.write("foo")
+    os.chmod(path_1.strpath, 0o000)
+    args = ["-di", tmpdir.strpath, "-id", "system_id", "-fi", "pk__in", keys]
+    result = runner.invoke(command, args)
+    assert "The following files are not readable by current user:" in result.output
+    assert path_1.strpath in result.output
+    assert path_2.strpath not in result.output
 
 
 def test_get_dst():
