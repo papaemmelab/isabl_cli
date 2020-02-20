@@ -3,6 +3,7 @@
 from collections import OrderedDict
 from glob import glob
 from os.path import join
+from requests.exceptions import HTTPError
 import json
 import os
 import shutil
@@ -366,9 +367,9 @@ def rerun_signals(filters):
         "signals", pk__gt=0, data__failure_traceback__isnull=False, **filters
     ):
         click.secho(f"Rerunning signal: {i.slug}", fg="yellow")
-        instance = api.get_instance(i.target_endpoint, i.target_id)
 
         try:
+            instance = api.get_instance(i.target_endpoint, i.target_id)
             api._run_signals(
                 endpoint=i.target_endpoint,
                 instance=instance,
@@ -377,6 +378,10 @@ def rerun_signals(filters):
             )
 
             api.delete_instance("signals", i.pk)
+        except HTTPError as error:
+            # Delete the signal if the object doesn't exist anymore
+            if 'Object not found try a different ID' in error.response.text:
+                api.delete_instance("signals", i.pk)
         except exceptions.AutomationError:
             pass
 
