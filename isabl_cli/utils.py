@@ -257,7 +257,7 @@ def called_from(depth=1, verbose=True):
 
 
 def send_analytics(command):  # noqa
-    """Can be used as method or decorator of click group commands to send analtics."""
+    """Can be used as method or decorator of click group commands to send analytics."""
 
     @click.pass_context
     def wrapper(ctx, *args, **kwargs):
