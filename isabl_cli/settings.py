@@ -12,6 +12,7 @@ import os
 
 from cached_property import cached_property
 from munch import Munch
+import analytics
 import click
 import pytz
 import six
@@ -286,6 +287,9 @@ def get_application_settings(defaults, settings, reference_data, import_strings)
 
     return settings
 
+
+# load analytics token
+analytics.write_key = "y1bj5g2hqjZJXEA2berZ7WIick8IDSdc"
 
 # pylint: disable=C0103
 system_settings = SystemSettings(_DEFAULTS, _IMPORT_STRINGS, _PATH_STRINGS)
