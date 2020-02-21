@@ -265,27 +265,28 @@ def send_analytics(user):
     """Send analytics about the identity and group of the user."""
     from isabl_cli import __version__
 
-    username = user["username"]
-    api_url = get_api_url("/")
-    if "localhost" in api_url or "0.0.0.0" in api_url:
-        domain = urlparse(api_url).netloc
-        subdomain = ""
-        group_id = "DEV"
-    else:
-        subdomain, domain, *_, = urlparse(api_url).netloc.split(".")
-        group_id = f"{subdomain.upper()} {domain.upper()}"
+    if user.get("username"):
+        username = user["username"]
+        api_url = get_api_url("/")
+        if "localhost" in api_url or "0.0.0.0" in api_url:
+            domain = urlparse(api_url).netloc
+            subdomain = ""
+            group_id = "DEV"
+        else:
+            subdomain, domain, *_, = urlparse(api_url).netloc.split(".")
+            group_id = f"{subdomain.upper()} {domain.upper()}"
 
-    analytics.identify(username, user)
-    analytics.group(
-        username,
-        group_id,
-        {
-            "subdomain": subdomain,
-            "domain": domain,
-            "component": "cli",
-            "version": __version__,
-        },
-    )
+        analytics.identify(username, user)
+        analytics.group(
+            username,
+            group_id,
+            {
+                "subdomain": subdomain,
+                "domain": domain,
+                "component": "cli",
+                "version": __version__,
+            },
+        )
 
 
 def api_request(method, url, authenticate=True, **kwargs):
