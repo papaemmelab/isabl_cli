@@ -1446,7 +1446,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 tuple(sorted(set(i["pk"] for i in references))),
             )
 
-        for i in api.get_instances("analyses", limit=2000, **filters):
+        for i in api.get_instances("analyses", limit=5000, **filters):
             cache[get_cache_key(i["targets"], i["references"])].append(i)
 
         for targets, references, analyses, inputs in tuples:
