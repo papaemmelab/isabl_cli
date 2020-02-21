@@ -89,6 +89,7 @@ def assert_run(
     commit,
     results=None,
     project_results=None,
+    individual_results=None,
     assert_valid=True,
     assert_skipped=False,
     assert_invalid=False,
@@ -132,6 +133,23 @@ def assert_run(
             ), f"Project level analysis {analyses[0].pk} has not SUCCEEDED status."
 
             for j in project_results:
+                assert analyses[0]["results"].get(j) is not None, (
+                    f"Result {j} is missing in: "
+                    + json.dumps(analyses[0]["results"], sort_keys=True, indent=4)
+                )
+
+    if individual_results:
+        individual = tuples[0][0][0].sample.individual.pk
+        analyses = api.get_instances(
+            endpoint="analyses", individual_level_analysis=individual, limit=1
+        )
+
+        if analyses:
+            assert (
+                analyses[0]["status"] == "SUCCEEDED"
+            ), f"Individual level analysis {analyses[0].pk} has not SUCCEEDED status."
+
+            for j in individual_results:
                 assert analyses[0]["results"].get(j) is not None, (
                     f"Result {j} is missing in: "
                     + json.dumps(analyses[0]["results"], sort_keys=True, indent=4)
