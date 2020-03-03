@@ -274,6 +274,4 @@ def send_analytics(command):  # noqa
 
 def stringify(x):
     """Convert recursively, even nested list models, to strings. Useful to print TSV."""
-    if type(x) is str:
-        return x
     return [", ".join(stringify(i)) if type(i) in {list, tuple} else str(i) for i in x]
