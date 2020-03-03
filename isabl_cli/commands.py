@@ -164,7 +164,7 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
         os.unlink(fp.name)
     else:
         result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
-        result += ["\t".join(map(str, i.values())) for i in instances]
+        result += ["\t".join(utils.stringify(i.values())) for i in instances]
         click.echo("\n".join(result).expandtabs(30))
 
 
