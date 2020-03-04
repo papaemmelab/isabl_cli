@@ -165,7 +165,7 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
         os.unlink(fp.name)
     else:
         result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
-        result += ["\t".join(map(str, i.values())) for i in instances]
+        result += ["\t".join(utils.stringify(i.values())) for i in instances]
         click.echo("\n".join(result).expandtabs(30))
 
 
@@ -456,5 +456,9 @@ def run_failed_analyses(failed_analyses_filters, force, restart):
         tuples = [(i.targets, i.references) for i in app_analyses]
         app = import_from_string(app_class)
         app().run(
-            tuples=tuples, commit=restart or restart, restart=restart, force=force
+            tuples=tuples,
+            commit=False,
+            restart=restart,
+            force=force,
+            run_args=i.data.get("run_args", {}),
         )
