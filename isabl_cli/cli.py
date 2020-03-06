@@ -87,3 +87,6 @@ if system_settings.is_admin_user:
 
     if system_settings.BED_IMPORTER:
         main.add_command(system_settings.BED_IMPORTER.as_cli_command())
+    
+    if system_settings.YAML_DATA_IMPORTER:
+        main.add_command(system_settings.YAML_DATA_IMPORTER.as_cli_command())

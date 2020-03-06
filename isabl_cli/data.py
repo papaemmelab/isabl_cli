@@ -1052,3 +1052,147 @@ class LocalDataImporter(BaseImporter):
                 utils.echo_add_commit_message()
 
         return cmd
+
+
+class LocalYamlDataImporter(LocalDataImporter):
+    def import_data_from_yaml(
+        self,
+        symlink=False,
+        commit=False,
+        files_data=None,
+        ignore_ownership=False,
+        **filters,
+    ):
+        utils.check_admin()
+        experiments_matched = []
+        files_to_import = []
+
+        # retrieve the experiment
+        experiments = api.get_instances("experiments", verbose=True, **filters)
+        assert (
+            len(experiments) == 1
+        ), f"{len(experiments)} experiments retrieved when expected only 1"
+        experiment = experiments[0]
+
+        assert (
+            experiment["raw_data"] is None and len(experiment["bam_files"]) == 0
+        ), f"Experiment already has data"
+
+        # to reuse import_files method, creating a new dictionary w/o absolute paths
+        modified_files_data = {}
+
+        # get files to import
+        with open(files_data) as file:
+            files_data_yaml = yaml.load(file, Loader=yaml.FullLoader)
+
+            for file_to_be_imported in files_data_yaml.keys():
+                # verify files listed in yaml actually exist
+                assert os.path.exists(
+                    file_to_be_imported
+                ), f"File {file_to_be_imported} does not exist"
+
+                # check file ownership, if applicable
+                if not ignore_ownership and not symlink:
+                    utils.assert_same_owner(file_to_be_imported)
+
+                # determine if valid data type
+                dtypes = [i(file_to_be_imported) for i in self.RAW_DATA_INSPECTORS]
+                dtypes = set(i for i in dtypes if i)
+                assert len(dtypes) == 1  # happens if no data type matched
+                files_to_import.append(
+                    {"path": file_to_be_imported, "dtype": dtypes.pop()}
+                )
+
+                modified_files_data[basename(file_to_be_imported)] = files_data_yaml[
+                    file_to_be_imported
+                ]
+
+        # import experiment if commit is set to true and there are files to import
+        if commit and files_to_import:
+            experiments_matched.append(
+                self.import_files(
+                    instance=experiment,
+                    files=files_to_import,
+                    symlink=symlink,
+                    files_data=modified_files_data,
+                )
+            )
+        else:
+            experiments_matched = [experiment]
+
+        return self.get_summary(
+            files_to_import, experiment, commit, experiments_matched
+        )
+
+    @staticmethod
+    def get_summary(files, experiment, commit, matched):
+        summary = (
+            f"\n\nFor experiment '{experiment.system_id}' "
+            f"linked to sample '{experiment.sample.identifier}', "
+            f"{click.style('IMPORTED ' if commit else 'WOULD HAVE IMPORTED ', fg='cyan', bold=True)}"
+        )
+        summary += f"the following {len(files)} files:"
+
+        for file in files:
+            summary += f"\n\t {click.style('->', fg='yellow', bold=True)} {file}"
+
+        if not commit and matched:
+            summary += click.style(
+                "\n\nAdd --commit to proceed.\n", fg="green", blink=True
+            )
+
+        return summary
+
+    @classmethod
+    def as_cli_command(cls):
+        """Get data importer as a click command line interface."""
+
+        # build isabl_cli command and return it
+        @click.command(name="import-data-from-yaml")
+        @options.FILTERS
+        @options.COMMIT
+        @options.SYMLINK
+        @options.FILES_DATA
+        @click.option("--ignore-ownership", help="Don't check ownership.", is_flag=True)
+        def cmd(commit, filters, symlink, files_data, ignore_ownership):
+            """
+            Import data into an experiment by specifying a path to a
+            files_data yaml file. The files_data yaml file must contain
+            absolute file paths.
+
+            files_data.yaml structure:
+            The top level key needs to be an absolute path to a file,
+            while the values can be whatever data is relevant to the person importing.
+
+            \b
+            \b
+            Example of files_data yaml structure:
+                \b
+                absolute/path/to/file/file_name_1.some_extension      <-- top level key
+                    key_1: value_1                                    <-- top level value
+                    key_2: value_2                                    <-- top level value
+                absolute/path/to/file/file_name_2.some_extension      <-- top level key
+                    key_1: value_1                                    <-- top level value
+                    key_2: value_2                                    <-- top level value
+                ...
+            """
+
+            # verify yaml file exits
+            assert os.path.exists(
+                files_data
+            ), f"The following files_data yaml path '{files_data}' does not exist."
+
+            if symlink and ignore_ownership:
+                click.secho("--ignore-ownership isnt used when --symlink.", fg="yellow")
+
+            summary = cls().import_data_from_yaml(
+                symlink=symlink,
+                commit=commit,
+                files_data=files_data,
+                ignore_ownership=ignore_ownership,
+                **filters,
+            )
+
+            click.echo(summary)
+
+        return cmd
