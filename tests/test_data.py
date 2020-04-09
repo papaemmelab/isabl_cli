@@ -337,3 +337,52 @@ def test_get_dst():
                         data.raw_data_inspector(test.format(index) + fastq + gzipped)
                         == f"FASTQ_{fq_type}{index}"
                     )
+
+
+def test_yaml_data_import(tmpdir):
+    # create test data
+    projects = [api.create_instance("projects", **factories.ProjectFactory())]
+    experiment = factories.ExperimentFactory(projects=projects)
+    experiment = api.create_instance("experiments", **experiment)
+    data_files_yaml_path = os.path.join(tmpdir, "files_data.yaml")
+    file1_path = os.path.join(tmpdir, "test_file_1.fastq.gz")
+    file2_path = os.path.join(tmpdir, "test_file_2.fastq.gz")
+    data_files_yaml = {
+        file1_path: {"key1": "value1", "key2": "value2"},
+        file2_path: {"key3": "value3", "key4": "value4"},
+    }
+    open(file1_path, "w").close()
+    open(file2_path, "w").close()
+    with open(data_files_yaml_path, "w") as outfile:
+        yaml.dump(data_files_yaml, outfile, default_flow_style=False)
+
+    # test import from command line
+    command = data.LocalYamlDataImporter.as_cli_command()
+    runner = CliRunner()
+    args = [
+        "-fi",
+        "system_id",
+        experiment.system_id,
+        "--files-data",
+        data_files_yaml_path,
+        "--commit",
+    ]
+    runner.invoke(command, args, catch_exceptions=False)
+
+    # reload experiment to get raw_data
+    experiment = api.get_instance("experiments", experiment.identifier)
+
+    # verify imported as expected
+    assert experiment.raw_data is not None
+    assert len(experiment.raw_data) == 2
+    assert os.path.basename(file1_path) in experiment.raw_data[0].file_url
+    assert experiment.raw_data[0].file_data["key1"] == "value1"
+    assert experiment.raw_data[0].file_data["key2"] == "value2"
+    assert experiment.raw_data[0].file_type == "FASTQ_R1"
+    assert os.path.basename(file2_path) in experiment.raw_data[1].file_url
+    assert experiment.raw_data[1].file_data["key3"] == "value3"
+    assert experiment.raw_data[1].file_data["key4"] == "value4"
+    assert experiment.raw_data[1].file_type == "FASTQ_R2"
+
+    # clean up
+    os.remove(data_files_yaml_path)
