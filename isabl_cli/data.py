@@ -451,7 +451,10 @@ class LocalReferenceGenomeImporter:
 
                 try:  # pragma: no cover
                     subprocess.check_call(i)
-                except subprocess.CalledProcessError:  # pragma: no cover
+                except (
+                    FileNotFoundError,
+                    subprocess.CalledProcessError,
+                ):  # pragma: no cover
                     click.secho(
                         f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}", fg="red"
                     )
