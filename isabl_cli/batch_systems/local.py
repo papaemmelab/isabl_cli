@@ -21,14 +21,7 @@ def submit_local(app, command_tuples):
             err = app.get_command_err_path(i)
             api.patch_analysis_status(i, "STARTED")
             oldmask = os.umask(0o22)
-
-            # make sure that the status is set to SUCCEEDED only if admin user
-            # else default to what the app says should be the after completion status
-            try:
-                utils.check_admin()
-                status = "SUCCEEDED"
-            except PermissionError:
-                status = app.get_after_completion_status(i)
+            status = app._get_after_completion_status(i)
 
             with open(log, "w") as stdout, open(err, "w") as stderr:
                 try:

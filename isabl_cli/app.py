@@ -1030,11 +1030,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # check status, if not run by admin will be marked as succeeded later
         outdir = analysis["storage_url"]
         utils.makedirs(outdir)
-        status = self.get_after_completion_status(analysis)
-        assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
-
-        if system_settings.is_admin_user and status == "FINISHED":
-            status = "SUCCEEDED"
+        status = self._get_after_completion_status(analysis)
 
         # build and write command
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
@@ -1052,6 +1048,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
         return f"isabl patch-status --key {key} --status {status}"
+
+    def _get_after_completion_status(self, analysis):
+        status = self.get_after_completion_status(analysis)
+        assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
+
+        if system_settings.is_admin_user and status == "FINISHED":
+            status = "SUCCEEDED"
+
+        return status
 
     def _get_dependencies(self, targets, references):
         missing = []
