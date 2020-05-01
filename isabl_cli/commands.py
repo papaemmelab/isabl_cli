@@ -84,11 +84,14 @@ def merge_individual_analyses(individual, application):  # pragma: no cover
 def process_finished(filters):
     """Process and update finished analyses."""
     utils.check_admin()
-    filters.update(status="FINISHED")
+    filters.update(status="FINISHED", fields="pk")
     tag = "PROCESSING FINISHED"
 
+    # refetch analysis to avoid race conditions
     for i in api.get_instances("analyses", verbose=True, **filters):
-        if i["status"] == "FINISHED" and tag not in {j.name for j in i.tags}:
+        i = api.Analysis(i.pk)
+
+        if i.status == "FINISHED" and tag not in {j.name for j in i.tags}:
             api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
             api.patch_analysis_status(i, "SUCCEEDED")
             api.patch_instance("analyses", i.pk, tags=i.tags)
