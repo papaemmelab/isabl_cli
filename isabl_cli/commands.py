@@ -85,10 +85,13 @@ def process_finished(filters):
     """Process and update finished analyses."""
     utils.check_admin()
     filters.update(status="FINISHED")
+    tag = "PROCESSING FINISHED"
 
     for i in api.get_instances("analyses", verbose=True, **filters):
-        if i["status"] == "FINISHED":
+        if i["status"] == "FINISHED" and tag not in {j.name for j in i.tags}:
+            api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
             api.patch_analysis_status(i, "SUCCEEDED")
+            api.patch_instance("analyses", i.pk, tags=i.tags)
 
 
 @click.command()
@@ -380,7 +383,7 @@ def rerun_signals(filters):
             api.delete_instance("signals", i.pk)
         except HTTPError as error:
             # Delete the signal if the object doesn't exist anymore
-            if 'Object not found try a different ID' in error.response.text:
+            if "Object not found try a different ID" in error.response.text:
                 api.delete_instance("signals", i.pk)
         except exceptions.AutomationError:
             pass

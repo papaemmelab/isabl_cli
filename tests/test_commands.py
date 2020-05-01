@@ -284,4 +284,3 @@ def test_run_web_signals():
         result_key="analysis_result_key",
         application_name=str(MockApplication),
     )
-
