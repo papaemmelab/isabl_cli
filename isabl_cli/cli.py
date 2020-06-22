@@ -24,6 +24,7 @@ import click
 from isabl_cli import __version__
 from isabl_cli import exceptions
 from isabl_cli.settings import system_settings
+from isabl_cli.utils import send_analytics
 
 
 @click.group()
@@ -56,6 +57,9 @@ def add_apps_groups(apps):
 
 
 for i in system_settings.SYSTEM_COMMANDS:
+    # Add analytics to every system command
+    i.callback = send_analytics(i.callback)
+
     main.add_command(i)
 
 for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
@@ -83,3 +87,6 @@ if system_settings.is_admin_user:
 
     if system_settings.BED_IMPORTER:
         main.add_command(system_settings.BED_IMPORTER.as_cli_command())
+    
+    if system_settings.YAML_DATA_IMPORTER:
+        main.add_command(system_settings.YAML_DATA_IMPORTER.as_cli_command())

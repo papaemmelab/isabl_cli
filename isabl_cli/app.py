@@ -15,6 +15,7 @@ import traceback
 from cached_property import cached_property
 from click import progressbar
 from slugify import slugify
+import analytics
 import click
 
 from isabl_cli import api
@@ -945,6 +946,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
+        # track user app usage from cli
+        self.send_analytics(
+            command_tuples=command_tuples,
+            skipped_tuples=skipped_tuples,
+            commit=commit,
+            force=force,
+            restart=restart,
+            submitter=submit_analyses.__name__,
+        )
+
         if commit:
             click.echo(f"Running analyses with {submit_analyses.__name__}...")
             run_tuples = submit_analyses(self, command_tuples)
@@ -952,6 +963,49 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             run_tuples = [(i, self._staged_message) for i, _ in command_tuples]
 
         return run_tuples, skipped_tuples
+
+    def send_analytics(
+        self, command_tuples, skipped_tuples, commit, force, restart, submitter
+    ):
+        """Send analytics event of analyses ran from cli."""
+        analyses_tuples = []
+        for i, _ in command_tuples:
+            status = (
+                "FORCED"
+                if force
+                else "RESTARTED"
+                if restart
+                else "SUBMITTED"
+                if commit
+                else self._staged_message
+            )
+            analyses_tuples.append((i, status))
+        for i, _ in skipped_tuples:
+            analyses_tuples.append((i, "INVALID"))
+
+        analyses = []
+        for i, status in analyses_tuples:
+            analysis = {
+                "analysis": i.pk,
+                "application": {
+                    "name": i.application.name,
+                    "pk": i.application.pk,
+                    "version": i.application.version,
+                },
+                "status": status,
+            }
+            analyses.append(analysis)
+
+        analytics.track(
+            system_settings.api_username,
+            "Ran app",
+            {
+                "analyses": analyses,
+                "submitter": submitter,
+                "valid": len(command_tuples),
+                "invalid": len(skipped_tuples),
+            },
+        )
 
     def get_command_script_path(self, analysis):
         """Get path to analysis command script."""
@@ -976,11 +1030,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # check status, if not run by admin will be marked as succeeded later
         outdir = analysis["storage_url"]
         utils.makedirs(outdir)
-        status = self.get_after_completion_status(analysis)
-        assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
-
-        if system_settings.is_admin_user and status == "FINISHED":
-            status = "SUCCEEDED"
+        status = self._get_after_completion_status(analysis)
 
         # build and write command
         tmpdir = os.getenv("TMP", "/tmp")
@@ -1000,6 +1050,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
         return f"isabl patch-status --key {key} --status {status}"
+
+    def _get_after_completion_status(self, analysis):
+        status = self.get_after_completion_status(analysis)
+        assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
+
+        if system_settings.is_admin_user and status == "FINISHED":
+            status = "SUCCEEDED"
+
+        return status
 
     def _get_dependencies(self, targets, references):
         missing = []
@@ -1394,7 +1453,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 tuple(sorted(set(i["pk"] for i in references))),
             )
 
-        for i in api.get_instances("analyses", limit=2000, **filters):
+        for i in api.get_instances("analyses", limit=5000, **filters):
             cache[get_cache_key(i["targets"], i["references"])].append(i)
 
         for targets, references, analyses, inputs in tuples:

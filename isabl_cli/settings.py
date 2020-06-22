@@ -12,6 +12,7 @@ import os
 
 from cached_property import cached_property
 from munch import Munch
+import analytics
 import click
 import pytz
 import six
@@ -27,6 +28,7 @@ _DEFAULTS = {
     "REFERENCE_DATA_IMPORTER": "isabl_cli.data.LocalReferenceDataImporter",
     "REFERENCE_GENOME_IMPORTER": "isabl_cli.data.LocalReferenceGenomeImporter",
     "DATA_IMPORTER": "isabl_cli.data.LocalDataImporter",
+    "YAML_DATA_IMPORTER": "isabl_cli.data.LocalYamlDataImporter",
     "BED_IMPORTER": "isabl_cli.data.LocalBedImporter",
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
     "FASTQ_READ_SUFFIX": "",
@@ -69,6 +71,7 @@ _IMPORT_STRINGS = {
     "BED_IMPORTER",
     "CUSTOM_COMMANDS",
     "DATA_IMPORTER",
+    "YAML_DATA_IMPORTER",
     "INSTALLED_APPLICATIONS",
     "MAKE_STORAGE_DIRECTORY",
     "ON_DATA_IMPORT",
@@ -286,6 +289,9 @@ def get_application_settings(defaults, settings, reference_data, import_strings)
 
     return settings
 
+
+# load analytics token
+analytics.write_key = "y1bj5g2hqjZJXEA2berZ7WIick8IDSdc"
 
 # pylint: disable=C0103
 system_settings = SystemSettings(_DEFAULTS, _IMPORT_STRINGS, _PATH_STRINGS)

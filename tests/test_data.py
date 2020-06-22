@@ -162,14 +162,14 @@ def test_import_bedfiles(tmpdir):
 def test_local_data_import(tmpdir):
     dirs = [tmpdir.strpath]
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
-    experiments = [factories.ExperimentFactory(projects=projects) for i in range(4)]
+    experiments = [factories.ExperimentFactory(projects=projects) for i in range(5)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     keys = [i["pk"] for i in experiments]
 
     importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=dirs, pk__in=keys)
     obtained = len(summary.rsplit("no files matched"))
-    assert obtained == 4 + 1
+    assert obtained == 5 + 1
 
     # test can't determine type of fastq
     with pytest.raises(click.UsageError) as error:
@@ -280,6 +280,18 @@ def test_local_data_import(tmpdir):
     result = runner.invoke(command, args)
     assert "invalid type for identifier" in result.output
 
+    # test import data using files without read permissions
+    path_1 = tmpdir.join(f'{experiments[4]["system_id"]}_1.fastq')
+    path_2 = tmpdir.join(f'{experiments[4]["system_id"]}_2.fastq')
+    path_1.write("foo")
+    path_2.write("foo")
+    os.chmod(path_1.strpath, 0o000)
+    args = ["-di", tmpdir.strpath, "-id", "system_id", "-fi", "pk__in", keys]
+    result = runner.invoke(command, args)
+    assert "The following files are not readable by current user:" in result.output
+    assert path_1.strpath in result.output
+    assert path_2.strpath not in result.output
+
 
 def test_get_dst():
     importer = data.LocalDataImporter()
@@ -325,3 +337,52 @@ def test_get_dst():
                         data.raw_data_inspector(test.format(index) + fastq + gzipped)
                         == f"FASTQ_{fq_type}{index}"
                     )
+
+
+def test_yaml_data_import(tmpdir):
+    # create test data
+    projects = [api.create_instance("projects", **factories.ProjectFactory())]
+    experiment = factories.ExperimentFactory(projects=projects)
+    experiment = api.create_instance("experiments", **experiment)
+    data_files_yaml_path = os.path.join(tmpdir, "files_data.yaml")
+    file1_path = os.path.join(tmpdir, "test_file_1.fastq.gz")
+    file2_path = os.path.join(tmpdir, "test_file_2.fastq.gz")
+    data_files_yaml = {
+        file1_path: {"key1": "value1", "key2": "value2"},
+        file2_path: {"key3": "value3", "key4": "value4"},
+    }
+    open(file1_path, "w").close()
+    open(file2_path, "w").close()
+    with open(data_files_yaml_path, "w") as outfile:
+        yaml.dump(data_files_yaml, outfile, default_flow_style=False)
+
+    # test import from command line
+    command = data.LocalYamlDataImporter.as_cli_command()
+    runner = CliRunner()
+    args = [
+        "-fi",
+        "system_id",
+        experiment.system_id,
+        "--files-data",
+        data_files_yaml_path,
+        "--commit",
+    ]
+    runner.invoke(command, args, catch_exceptions=False)
+
+    # reload experiment to get raw_data
+    experiment = api.get_instance("experiments", experiment.identifier)
+
+    # verify imported as expected
+    assert experiment.raw_data is not None
+    assert len(experiment.raw_data) == 2
+    assert os.path.basename(file1_path) in experiment.raw_data[0].file_url
+    assert experiment.raw_data[0].file_data["key1"] == "value1"
+    assert experiment.raw_data[0].file_data["key2"] == "value2"
+    assert experiment.raw_data[0].file_type == "FASTQ_R1"
+    assert os.path.basename(file2_path) in experiment.raw_data[1].file_url
+    assert experiment.raw_data[1].file_data["key3"] == "value3"
+    assert experiment.raw_data[1].file_data["key4"] == "value4"
+    assert experiment.raw_data[1].file_type == "FASTQ_R2"
+
+    # clean up
+    os.remove(data_files_yaml_path)
