@@ -983,12 +983,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             status = "SUCCEEDED"
 
         # build and write command
+        tmpdir = os.getenv("TMP", "/tmp")
+        tmpdir = " && ".join(f"export {i}={tmpdir}" for i in ["TMP", "TMPDIR", "TMP_DIR"])
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
         command = (
-            f"umask g+wrx && date && cd {outdir} && "
-            f"{started} && {command} && {finished}"
+            f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+            f"{started} && {command} && {finished} && date"
         )
 
         with open(self.get_command_script_path(analysis), "w") as f:
