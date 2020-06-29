@@ -720,6 +720,25 @@ def test_validate_same_technique():
     assert "Expected one technique, got:" in str(error.value)
 
 
+def test_validate_same_platform():
+    application = AbstractApplication()
+    targets = [{"system_id": 1, "platform": {"slug": "1"}}]
+    references = [{"system_id": 2, "platform": {"slug": "1"}}]
+    application.validate_same_platform(targets, references)
+
+    with pytest.raises(AssertionError) as error:
+        targets = [{"system_id": 1, "platform": {"slug": "2"}}]
+        application.validate_same_platform(targets, references)
+
+    assert "Same platforms required" in str(error.value)
+
+    with pytest.raises(AssertionError) as error:
+        references.append({"system_id": 3, "platform": {"slug": "2"}})
+        application.validate_same_platform(targets, references)
+
+    assert "Expected one platform, got:" in str(error.value)
+
+
 def test_get_experiments_from_default_cli_options(tmpdir):
     app = ExperimentsFromDefaulCLIApplication()
     experiments = [
