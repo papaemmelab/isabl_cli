@@ -4,6 +4,7 @@ import os
 from click import progressbar
 
 from isabl_cli import api
+from isabl_cli import utils
 
 
 def submit_local(app, command_tuples):
@@ -20,7 +21,7 @@ def submit_local(app, command_tuples):
             err = app.get_command_err_path(i)
             api.patch_analysis_status(i, "STARTED")
             oldmask = os.umask(0o22)
-            status = "SUCCEEDED"
+            status = app._get_after_completion_status(i)
 
             with open(log, "w") as stdout, open(err, "w") as stderr:
                 try:

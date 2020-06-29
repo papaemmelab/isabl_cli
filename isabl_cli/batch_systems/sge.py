@@ -31,12 +31,14 @@ sigusr2()
 
 # catch -USR2 signal
 trap sigusr2 USR2
+trap sigusr2 USR1
 
 # run the command
 {command}
 
 # reset to be elegant
 trap - USR2
+trap - USR1
 """
 
 
@@ -133,6 +135,7 @@ def submit_sge_array(
     jobname = slugify(jobname)
     total = len(commands)
     index = 0
+    base_args = f"-V -b n -terse -wd {root}"
 
     with click.progressbar(commands, label="preparing submission...") as bar:
         for command, exit_command in bar:
@@ -162,8 +165,8 @@ def submit_sge_array(
         f.write(f"rm -rf {root}")
 
     cmd = (
-        f"qsub {requirements} {extra_args} -tc {throttle_by} -t 1-{total} "
-        f'-N "ISABL-{jobname}" -notify -terse -wd {root} '
+        f"qsub {base_args} {requirements} {extra_args} -t 1-{total} "
+        f'-N "ISABL-{jobname}" -notify -tc {throttle_by} '
         f"-o 'log.$TASK_ID' -e 'err.$TASK_ID' {root}/in.sh"
     )
 
@@ -171,7 +174,7 @@ def submit_sge_array(
     jobid = jobid.strip().split(".")[0]
 
     cmd = (
-        f'qsub -N "CLEAN-{jobname}" -hold_jid {jobid} {wait} -terse '
+        f'qsub {base_args} -N "CLEAN-{jobname}" -hold_jid {jobid} {wait} '
         f"-o /dev/null -e /dev/null {root}/clean.sh"
     )
 

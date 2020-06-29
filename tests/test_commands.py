@@ -284,8 +284,7 @@ def test_run_web_signals():
         result_key="analysis_result_key",
         application_name=str(MockApplication),
     )
-
-
+    
 def test_run_failed_analyses(tmpdir):
     runner = CliRunner()
     application = MockApplication().application
@@ -307,3 +306,4 @@ def test_run_failed_analyses(tmpdir):
     result = runner.invoke(commands.run_failed_analyses, args, catch_exceptions=False)
     assert str(analysis.pk) in result.output
     assert "SUCCEEDED" in result.output
+
