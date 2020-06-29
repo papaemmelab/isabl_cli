@@ -1680,6 +1680,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         assert len(ttec) == 1, f"Expected one technique, got: {ttec}"
         assert rtec == ttec, f"Same techniques required: {ttec}, {rtec}."
 
+    def validate_same_platform(self, targets, references):
+        """Validate targets and references are sequenced on the same platform."""
+        tpla = {i["platform"]["slug"] for i in targets}
+        rpla = {i["platform"]["slug"] for i in references}
+        assert len(rpla) == 1, f"Expected one platform, got: {rpla}"
+        assert len(tpla) == 1, f"Expected one platform, got: {tpla}"
+        assert rpla == tpla, f"Same platforms required: {tpla}, {rpla}."
+
     def validate_species(self, experiments):
         """Validate experiments's species is same as application's setting."""
         msg = []
