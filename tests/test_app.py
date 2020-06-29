@@ -720,7 +720,7 @@ def test_validate_same_technique():
     assert "Expected one technique, got:" in str(error.value)
 
 
-def test_validate_same_technique():
+def test_validate_same_platform():
     application = AbstractApplication()
     targets = [{"system_id": 1, "platform": {"slug": "1"}}]
     references = [{"system_id": 2, "platform": {"slug": "1"}}]
