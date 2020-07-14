@@ -1037,19 +1037,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # check status, if not run by admin will be marked as succeeded later
         outdir = analysis["storage_url"]
         utils.makedirs(outdir)
-        status = self.get_after_completion_status(analysis)
-        assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
-
-        if system_settings.is_admin_user and status == "FINISHED":
-            status = "SUCCEEDED"
+        status = self._get_after_completion_status(analysis)
 
         # build and write command
+        tmpdir = os.getenv("TMP", "/tmp")
+        tmpdir = " && ".join(f"export {i}={tmpdir}" for i in ["TMP", "TMPDIR", "TMP_DIR"])
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
         command = (
-            f"umask g+wrx && date && cd {outdir} && "
-            f"{started} && {command} && {finished}"
+            f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+            f"{started} && {command} && {finished} && date"
         )
 
         with open(self.get_command_script_path(analysis), "w") as f:
@@ -1059,6 +1057,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def get_patch_status_command(key, status):
         """Return a command to patch the `status` of a given analysis `key`."""
         return f"isabl patch-status --key {key} --status {status}"
+
+    def _get_after_completion_status(self, analysis):
+        status = self.get_after_completion_status(analysis)
+        assert status in {"IN_PROGRESS", "FINISHED"}, "Status not supported"
+
+        if system_settings.is_admin_user and status == "FINISHED":
+            status = "SUCCEEDED"
+
+        return status
 
     def _get_dependencies(self, targets, references):
         missing = []
@@ -1679,6 +1686,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         assert len(rtec) == 1, f"Expected one technique, got: {rtec}"
         assert len(ttec) == 1, f"Expected one technique, got: {ttec}"
         assert rtec == ttec, f"Same techniques required: {ttec}, {rtec}."
+
+    def validate_same_platform(self, targets, references):
+        """Validate targets and references are sequenced on the same platform."""
+        tpla = {i["platform"]["slug"] for i in targets}
+        rpla = {i["platform"]["slug"] for i in references}
+        assert len(rpla) == 1, f"Expected one platform, got: {rpla}"
+        assert len(tpla) == 1, f"Expected one platform, got: {tpla}"
+        assert rpla == tpla, f"Same platforms required: {tpla}, {rpla}."
 
     def validate_species(self, experiments):
         """Validate experiments's species is same as application's setting."""
