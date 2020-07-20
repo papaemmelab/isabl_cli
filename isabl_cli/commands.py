@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 
+from requests.exceptions import HTTPError
 import click
 
 from isabl_cli import api
