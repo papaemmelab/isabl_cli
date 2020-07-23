@@ -91,7 +91,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     # All cli_options will be passed to get_experiments_from_cli_options however
     # only options defined here will be stored in settings.run_args. Please note that
-    # values must be JSON serializable and will be saved in the analysis data field.
+    # values must be JSON serializable and will be saved in the analysis outdir.
     # The difference between application_run_args and application_inputs is that inputs
     # are retrieved from existing analyses whilst run_args are determined at runtime.
     # Each argument set to NotImplemented is considered required and must be provided.
