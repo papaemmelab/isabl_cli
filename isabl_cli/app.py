@@ -941,13 +941,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         with progressbar(analyses, label="Building commands...\t\t") as bar:
             for i in bar:
-                # if not protect results we need to change the status to staged
                 if (
                     not self.application_protect_results
                     and commit
                     and i.status == "SUCCEEDED"
                 ):
-                    set_to_staged.append(i)
+                    # if not protect results we need to change the status to STAGED
+                    # because bulk update won't work for SUCCEEDED analyses
+                    api.patch_analysis_status(i, "STAGED")
 
                 # trash analysis and create outdir again
                 elif force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
