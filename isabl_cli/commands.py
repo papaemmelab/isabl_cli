@@ -1,5 +1,6 @@
 """commands logic."""
 
+from collections import defaultdict
 from collections import OrderedDict
 from glob import glob
 from os.path import join
@@ -104,6 +105,7 @@ def patch_results(filters, force):
     """Update the results field of many analyses."""
     utils.check_admin()
     skipped = []
+    payload = []
 
     with click.progressbar(
         api.get_instances("analyses", verbose=True, **filters),
@@ -112,9 +114,12 @@ def patch_results(filters, force):
         for i in bar:
             if force or not i.results:
                 results = api._get_analysis_results(i, raise_error=False)
-                api.patch_instance("analyses", i.pk, results=results)
+                payload.append({"pk": i.pk, "results": results})
             else:  # pragma: no cover
                 skipped.append(i)
+
+    if payload:
+        api.bulk_update_analyses(payload)
 
     if skipped:  # pragma: no cover
         click.echo(f"{len(skipped)} analyses had results, use --force to update...")
@@ -440,3 +445,40 @@ def run_signals(endpoint, filters, signals):
 
     for i in api.get_instances(endpoint, **filters):
         api._run_signals(endpoint, i, signals, raise_error=True, create_record=False)
+
+
+@click.command()
+@options.FAILED_ANALYSES
+@options.FORCE
+@options.RESTART
+def run_failed_analyses(failed_analyses, force, restart):
+    """Command to run failed analyses in batch."""
+    # group analyses per application
+    analyses = defaultdict(list)
+
+    for i in failed_analyses:
+        try:
+            with open(i.results.run_args) as f:
+                run_args = json.load(f)
+        except (AttributeError, KeyError, FileNotFoundError):
+            run_args = {}
+
+        # prioritize class stored in analysis.data...
+        app_class = i.data.get("application_class", i.application.application_class)
+        app = import_from_string(app_class)
+        analyses[app].append(((i.targets, i.references), run_args))
+
+    for app, app_analyses in analyses.items():
+        # separate tuples with run_args and those without...
+        without_run_args = [([i for i, j in app_analyses if not j], {})]
+        with_run_args = [([i], j) for i, j in app_analyses if j]
+
+        for tuples, run_args in without_run_args + with_run_args:
+            print(run_args, "carlos")
+            app().run(
+                tuples=tuples,
+                commit=False,
+                restart=restart,
+                force=force,
+                run_args=run_args,
+            )

@@ -645,6 +645,42 @@ def patch_analysis_status(analysis, status):
     return patch_instance("analyses", analysis["pk"], **data)
 
 
+def bulk_update_analyses(analyses):
+    """
+    Bulk update analyses.
+
+    WARNING: limited functionality.
+
+    To see currently supported fields do an OPTIONS call to /analyses/bulk_update/.
+    If no supported fields are defined (in the case of previous versions of the API),
+    then the analyses will be updated one by one using patch_instance.
+
+    Arguments:
+        analyses (list): list of dicts with analyses including only supported fields.
+
+    Raises:
+        AssertionError: if one ore more passed fields are not supported.
+    """
+    options = api_request("options", url="/analyses/bulk_update/").json()
+    passed = {j for i in analyses for j in i}
+    supported = set(options.get("supported_fields", {}))
+
+    # if bulk update has supported fields, assert the fields are valid
+    assert not supported or all(i in supported for i in passed if i != "pk"), (
+        f"One or more of the passed fields ({passed}) "
+        f"are not supported ({supported})"
+    )
+
+    if supported:
+        api_request("patch", url="/analyses/bulk_update/", json=analyses)
+    else:  # support backwards compatibility
+        with click.progressbar(
+            analyses, label=f"Patching {len(analyses)} analyses..."
+        ) as bar:
+            for i in bar:
+                patch_instance("analyses", i.pop("pk"), **i)
+
+
 def _set_analysis_permissions(analysis):
     protect_results = analysis.status == "SUCCEEDED"
     unique_analysis_per_individual = False

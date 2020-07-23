@@ -8,6 +8,7 @@ from isabl_cli import data
 from isabl_cli import factories
 
 from .test_app import MockApplication
+from .test_app import get_experiments_for_mock_app
 from isabl_cli.test import utils
 
 
@@ -284,3 +285,34 @@ def test_run_web_signals():
         result_key="analysis_result_key",
         application_name=str(MockApplication),
     )
+
+
+def test_run_failed_analyses(tmpdir):
+    runner = CliRunner()
+    original_run_args = MockApplication.application_run_args
+    application = MockApplication()
+
+    # test with both run_args and without
+    for i in [{}, original_run_args]:
+        application.application_run_args = i
+        [experiment], project = get_experiments_for_mock_app(1)
+
+        # the mock application is design to fail if the target identifier is `1`
+        # but work if the restart argument is passed, which works great for this test
+        experiment = api.patch_instance("experiments", experiment.pk, identifier="1")
+        tuples = [([experiment], [])]
+        analyses, _, _ = application.run(tuples=tuples, commit=True)
+        analysis = analyses[0][0]
+        command = commands.run_failed_analyses
+
+        args = ["-fi", "pk", analysis.pk]
+        result = runner.invoke(command, args, catch_exceptions=False)
+        assert str(analysis.pk) in result.output
+        assert "FAILED" in result.output
+
+        args = ["-fi", "pk", analysis.pk, "--restart"]
+        result = runner.invoke(command, args, catch_exceptions=False)
+        assert str(analysis.pk) in result.output
+        assert "SUCCEEDED" in result.output
+
+    MockApplication.application_run_args = original_run_args

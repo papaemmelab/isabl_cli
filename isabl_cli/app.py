@@ -8,6 +8,7 @@ from os.path import isdir
 from os.path import isfile
 from os.path import join
 import abc
+import json
 import os
 import sys
 import traceback
@@ -21,8 +22,8 @@ import click
 from isabl_cli import api
 from isabl_cli import data
 from isabl_cli import exceptions
-from isabl_cli import utils
 from isabl_cli import options
+from isabl_cli import utils
 from isabl_cli.batch_systems import submit_local
 from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
@@ -88,6 +89,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # to NotImplemented is considered required and must be resolved at get_dependencies
     application_inputs = dict()
 
+    # All cli_options will be passed to get_experiments_from_cli_options however
+    # only options defined here will be stored in settings.run_args. Please note that
+    # values must be JSON serializable and will be saved in the analysis data field.
+    # The difference between application_run_args and application_inputs is that inputs
+    # are retrieved from existing analyses whilst run_args are determined at runtime.
+    # Each argument set to NotImplemented is considered required and must be provided.
+    application_run_args = dict()
+
     # It is possible to create applications that are unique at the individual level.
     # A good example of a unique per individual application could be a patient centric
     # report that aggregates results across all samples. Applications that require a
@@ -132,6 +141,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             "description": "Analysis standard error.",
             "verbose_name": "Standard Error",
         },
+    }
+
+    # run args is only saved as a result when application_run_args is defined
+    _run_args_key = "run_args"
+    _run_args_result = {
+        _run_args_key: {
+            "frontend_type": "json",
+            "description": "Analysis arguments defined at runtime by the user.",
+            "verbose_name": "Runtime Arguments",
+        }
     }
 
     # -----------------------------
@@ -370,7 +389,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             return
 
         if not analysis.storage_url:
-            self._patch_analysis(analysis)
+            self.bulk_update_analyses([analysis])
 
         try:
             # raise error if can't write in directory
@@ -390,7 +409,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
             with redirect_stdout(out), redirect_stderr(err):
                 try:
-                    # TODO: setting to submitted here temporarily, will fix later
+                    # TODO: setting to SUBMITTED here temporarily, this has been
+                    # fixed in the API and can be safely removed in the future
                     api.patch_analysis_status(analysis, "SUBMITTED")
                     api.patch_analysis_status(analysis, "STARTED")
                     merge_analyses(analysis, analyses)
@@ -403,7 +423,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     error = e
                     print(error_msg)
 
-        api.patch_instance("analyses", analysis.pk, data=analysis.data)
+        # TODO: this line seems useless, commenting out on 07/23/20.
+        # I actually reviewed the entire git blame and it has never been useful.
+        # But you know... https://www.reddit.com/r/ProgrammerHumor/comments/9hzl1q/
+        # api.patch_instance("analyses", analysis.pk, data=analysis.data)
+
         os.umask(oldmask)
         if error is not None:
             raise Exception(
@@ -643,6 +667,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     def _application_results(self):
         ret = self.application_results
         ret.update(self._base_results)
+        ret.update(self._run_args_result if self.application_run_args else {})
         return ret
 
     @property
@@ -761,7 +786,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 verbose=not quiet,
                 restart=restart,
                 local=local,
-                run_args=cli_options,
+                run_args={
+                    i: j
+                    for i, j in cli_options.items()
+                    if i in cls.application_run_args
+                },
             )
 
             if not (commit or force or restart):
@@ -867,7 +896,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         self.settings.force = force
 
         # update run arguments attribute
-        self.settings.run_args = api.isablfy(run_args or {})
+        self.settings.run_args = self._validate_run_args(run_args)
 
         # run extra settings validation
         self.validate_settings(self.settings)
@@ -875,10 +904,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # create analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
 
-        # make sure outdir is set
-        for i in analyses:
-            if not i.storage_url:  # pragma: no cover
-                self._patch_analysis(i)
+        # make sure outdir and base results are set and saved
+        self.bulk_update_analyses(analyses)
 
         # run analyses
         run_tuples, skipped_tuples = self.run_analyses(
@@ -905,6 +932,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         skipped_tuples = []
         command_tuples = []
+        set_to_staged = []
         submit_analyses = (
             submit_local
             if local
@@ -919,12 +947,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     and commit
                     and i.status == "SUCCEEDED"
                 ):
-                    api.patch_analysis_status(i, "STAGED")
+                    set_to_staged.append(i)
 
                 # trash analysis and create outdir again
                 elif force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
                     utils.makedirs(i["storage_url"])
+                    set_to_staged.append(i)
 
                 # only restart failed analyses
                 elif (
@@ -957,6 +986,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         )
 
         if commit:
+            api.patch_analyses_status(set_to_staged, set_to_staged)
             click.echo(f"Running analyses with {submit_analyses.__name__}...")
             run_tuples = submit_analyses(self, command_tuples)
         else:
@@ -1009,15 +1039,19 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_command_script_path(self, analysis):
         """Get path to analysis command script."""
-        return join(analysis["storage_url"], "head_job.sh")
+        return join(analysis.storage_url, "head_job.sh")
 
     def get_command_log_path(self, analysis):
         """Get path to analysis log file."""
-        return join(analysis["storage_url"], "head_job.log")
+        return join(analysis.storage_url, "head_job.log")
 
     def get_command_err_path(self, analysis):
         """Get path to analysis err file."""
-        return join(analysis["storage_url"], "head_job.err")
+        return join(analysis.storage_url, "head_job.err")
+
+    def get_run_args_path(self, analysis):
+        """Get path to analysis run_args file."""
+        return join(analysis.storage_url, "run_args.json")
 
     def write_command_script(self, analysis, command):
         """
@@ -1032,9 +1066,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         utils.makedirs(outdir)
         status = self._get_after_completion_status(analysis)
 
-        # build and write command
+        # export tmp dir right inside the command
         tmpdir = os.getenv("TMP", "/tmp")
-        tmpdir = " && ".join(f"export {i}={tmpdir}" for i in ["TMP", "TMPDIR", "TMP_DIR"])
+        tmpdir = " && ".join(
+            f"export {i}={tmpdir}" for i in ["TMP", "TMPDIR", "TMP_DIR"]
+        )
+
+        # build and write command
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
@@ -1045,6 +1083,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         with open(self.get_command_script_path(analysis), "w") as f:
             f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")
+
+        if self.application_run_args:
+            with open(self.get_run_args_path(analysis), "w") as f:
+                f.write(json.dumps(self.settings.run_args))
 
     @staticmethod
     def get_patch_status_command(key, status):
@@ -1061,6 +1103,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return status
 
     def _get_dependencies(self, targets, references):
+        # validate experiments before trying to get dependencies
+        self.validate_experiments(targets, references)
+
         missing = []
         analyses, inputs = self.get_dependencies(targets, references, self.settings)
 
@@ -1087,6 +1132,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             self._command_script_key: self.get_command_script_path(analysis),
         }
 
+        if self.application_run_args:
+            results[self._run_args_key] = self.get_run_args_path(analysis)
+
         if created:
             return results
 
@@ -1106,6 +1154,31 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assert i in results, f"Missing expected result {i} in: {results}"
 
         return results
+
+    def _validate_run_args(self, run_args):
+        try:
+            run_args = get_application_settings(
+                defaults=self.application_run_args,
+                settings=run_args,
+                reference_data={},
+                import_strings=self.application_import_strings,
+            )
+        except exceptions.ConfigurationError:
+            raise click.UsageError(
+                f"The setting `application_run_args` was defined "
+                f"({self.application_run_args}), but one or more "
+                f"of the expected arguments were not provided: {run_args}."
+            )
+
+        # validate run_args is passed and is JSON serializable
+        try:
+            json.dumps(run_args or {})
+        except TypeError:
+            raise click.UsageError(
+                f"The parameter `run_args` must be JSON serializable: {run_args}"
+            )
+
+        return api.isablfy(run_args)
 
     # -----------------
     # APPLICATION UTILS
@@ -1399,16 +1472,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 try:
                     targets, references, analyses, inputs, individual = i
                     self.validate_species(targets + references)
-                    self.validate_experiments(targets, references)
-                    analysis = self._patch_analysis(
-                        api.create_instance(
-                            endpoint="analyses",
-                            application=self.application,
-                            targets=targets,
-                            references=references,
-                            analyses=analyses,
-                            individual_level_analysis=individual,
-                        )
+                    analysis = api.create_instance(
+                        endpoint="analyses",
+                        application=self.application,
+                        targets=targets,
+                        references=references,
+                        analyses=analyses,
+                        individual_level_analysis=individual,
                     )
 
                     analysis["application_inputs"] = inputs
@@ -1506,17 +1576,36 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return list(existing.values()), [i for i in tuples if i[-1].pk not in existing]
 
-    def _patch_analysis(self, analysis):
-        analysis["storage_url"] = data.get_storage_url(
-            endpoint="analyses", identifier=analysis["pk"], use_hash=True
-        )
+    def bulk_update_analyses(self, analyses):
+        """Set base results, application_class, and storage_url for many analyses."""
+        click.secho("Bulk updating analyses output directories...")
+        payload = []
 
-        return api.patch_instance(
-            "analyses",
-            analysis["pk"],
-            results=self._get_analysis_results(analysis, created=True),
-            storage_url=analysis["storage_url"],
-        )
+        for i in analyses:
+            # store the application class in the analysis also
+            i.data = {
+                **(i.data or {}),
+                "application_class": f"{self.__module__}.{self.__class__.__name__}",
+            }
+            # update storage URL if not set
+            i.storage_url = i.storage_url or data.get_storage_url(
+                endpoint="analyses", identifier=i.pk, use_hash=True
+            )
+            # update base results if not set
+            i.results = {
+                **(i.results or {}),
+                **self._get_analysis_results(i, created=True),
+            }
+            payload.append(
+                {
+                    "pk": i.pk,
+                    "results": i.results,
+                    "data": i.data,
+                    "storage_url": i.storage_url,
+                }
+            )
+
+        api.bulk_update_analyses(payload)
 
     def _get_individual_from_tuple(self, targets, references):
         individual = {

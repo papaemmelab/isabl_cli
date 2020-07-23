@@ -148,6 +148,18 @@ ANALYSES = click.option(
     required=True,
 )
 
+FAILED_ANALYSES = click.option(
+    "--failed-analyses-filters",
+    "-fi",
+    "failed_analyses",
+    multiple=True,
+    help="API filters for failed analyses instances",
+    show_default=True,
+    type=(str, str),
+    callback=lambda _, __, i: api.get_instances("analyses", status="FAILED", **dict(i)),
+    required=True,
+)
+
 NORMAL_TARGETS = click.option(
     "--normal-targets-filters",
     "-fi",

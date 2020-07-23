@@ -1,5 +1,6 @@
 from os.path import isfile
 from os.path import join
+import json
 import os
 import uuid
 
@@ -38,7 +39,7 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     ]
 
     def validate_experiments(self, targets, refereces):
-        assert "raise validation error" not in targets.notes
+        assert "raise validation error" not in targets[0].notes
 
     def get_command(**_):
         return ""
@@ -46,14 +47,13 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
 
 class MockApplication(AbstractApplication):
 
-    pass
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
     SPECIES = "HUMAN"
 
     cli_help = "This is a test application"
-    cli_options = [options.TARGETS]
+    cli_options = [options.TARGETS, click.option("--foo")]
     application_url = "http://www.fake-test-app.org"
     application_settings = {
         "foo": "bar",
@@ -61,6 +61,7 @@ class MockApplication(AbstractApplication):
         "from_system_settings": None,
     }
     application_inputs = {"bar": None}
+    application_run_args = {"foo": "yoda"}
     application_results = {
         "analysis_result_key": {
             "frontend_type": "number",
@@ -318,7 +319,7 @@ def test_application_settings(tmpdir):
     assert "Missing required setting: 'needs_to_be_implemented'" in str(error.value)
 
 
-def test_unique_analysis_per_individual_app(tmpdir):
+def get_experiments_for_mock_app(total_experiments=4):
     individual = factories.IndividualFactory(species="HUMAN")
     sample = factories.SampleFactory(individual=individual)
     project = api.create_instance("projects", **factories.ProjectFactory())
@@ -326,10 +327,15 @@ def test_unique_analysis_per_individual_app(tmpdir):
         factories.ExperimentFactory(
             identifier=str(i), sample=sample, projects=[project]
         )
-        for i in range(4)
+        for i in range(total_experiments)
     ]
 
     experiments = [api.create_instance("experiments", **i) for i in experiments]
+    return experiments, project
+
+
+def test_unique_analysis_per_individual_app(tmpdir):
+    experiments, project = get_experiments_for_mock_app()
     tuples = [(experiments, [])]
     application = UniquePerIndividualApplication()
     ran_analyses, _, __ = application.run(tuples, commit=True)
@@ -376,24 +382,11 @@ def test_unique_analysis_per_individual_app(tmpdir):
 
 def test_engine(tmpdir):
     _DEFAULTS["DEFAULT_LINUX_GROUP"] = "not_a_group"
-
-    individual = factories.IndividualFactory(species="HUMAN")
-    sample = factories.SampleFactory(individual=individual)
-    project = api.create_instance("projects", **factories.ProjectFactory())
-
-    experiments = [
-        factories.ExperimentFactory(
-            identifier=str(i), sample=sample, projects=[project]
-        )
-        for i in range(4)
-    ]
-
-    experiments = [api.create_instance("experiments", **i) for i in experiments]
+    experiments, project = get_experiments_for_mock_app()
     tuples = [([i], []) for i in experiments]
-
     command = MockApplication.as_cli_command()
     application = MockApplication()
-    ran_analyses, _, __ = application.run(tuples, commit=True)
+    ran_analyses, _, __ = application.run(tuples, commit=True, run_args={"foo": "c3po"})
     target = api.Experiment(ran_analyses[1][0].targets[0].pk)
 
     assert "analysis_result_key" in ran_analyses[1][0]["results"].keys()
@@ -481,6 +474,7 @@ def test_engine(tmpdir):
         assert f.read().strip() == "2"
 
     # check individual level results
+    individual = experiments[0].sample.individual
     analysis = application.get_individual_level_auto_merge_analysis(individual)
     merged = join(analysis["storage_url"], "test.merge")
     assert analysis["status"] == "SUCCEEDED", f"Individual Analysis failed {analysis}"
@@ -503,12 +497,21 @@ def test_engine(tmpdir):
     result = runner.invoke(command, args)
     assert "trashing:" in result.output
 
-    args = ["-fi", "pk__in", pks, "--restart", "--quiet"]
+    # test restart and run_args
+    args = ["-fi", "pk__in", pks, "--restart", "--quiet", "--foo", "anakin"]
     result = runner.invoke(command, args)
     assert "FAILED" not in result.output
 
     with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
         assert "successfully restarted" in f.read()
+
+    # test run_args is saved for each analysis
+    run_args = set()
+    for i in ran_analyses:
+        with open(i[0].results.run_args) as f:
+            for j in json.load(f).values():
+                run_args.add(j)
+    assert run_args == {"anakin", "c3po"}
 
     MockApplication.cli_allow_force = False
     MockApplication.cli_allow_restart = False
