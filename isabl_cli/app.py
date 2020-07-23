@@ -986,7 +986,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         )
 
         if commit:
-            api.patch_analyses_status(set_to_staged, set_to_staged)
+            api.patch_analyses_status(set_to_staged, "STAGED")
             click.echo(f"Running analyses with {submit_analyses.__name__}...")
             run_tuples = submit_analyses(self, command_tuples)
         else:
