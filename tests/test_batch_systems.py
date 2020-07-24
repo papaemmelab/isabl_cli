@@ -97,34 +97,48 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
                 assert not content
 
 
+class SlurmTestApplication(MockApplication):
+    NAME = "slurm-test-application"
+
+
+@pytest.mark.skipif(not shutil.which("sbatch"), reason="sbatch not found")
 def test_slurm_restart_on_node_fail():
     [experiment], project = get_experiments_for_mock_app(1)
-    application = MockApplication()
-    application.application_settings[
-        "submit_analyses"
-    ] = "isabl_cli.batch_systems.submit_slurm"
+    application = SlurmTestApplication()
+    application.application_settings["submit_analyses"] = "isabl_cli.batch_systems.submit_slurm"
+    
+    from isabl_cli.settings import _DEFAULTS
+    client_id = "client-for-isabl-cli-slurm-tests"
+    client = ii.create_instance("clients", slug=client_id, settings={"BASE_STORAGE_DIRECTORY": _DEFAULTS["BASE_STORAGE_DIRECTORY"]})
+
+    # must update in database for the restart job to pick it up
+    ii.patch_instance(
+        "applications",
+        application.application.pk,
+        settings={**application.application.settings,
+           client.pk: {"submit_analyses": "isabl_cli.batch_systems.submit_slurm"}}
+    )
 
     # the mock application is design to fail if the target identifier is `1`
     # but work if the restart argument is passed, which works great for this test
-    experiment = api.patch_instance("experiments", experiment.pk, identifier="1")
+    experiment = ii.patch_instance("experiments", experiment.pk, identifier="1")
     tuples = [([experiment], [])]
 
     # temporarily set restart on failed
+    python_path = os.path.join(os.path.dirname(__file__), "..")
     os.environ["ISABL_SLURM_RESTART_ON_REGEX_PATTERN"] = "FAILED"
+    os.environ["ISABL_SLURM_RESTART_ENV"] = f"export ISABL_CLIENT_ID={client_id};export PYTHONPATH={python_path};"
     analyses, _, _ = application.run(tuples=tuples, commit=True)
     analysis = analyses[0][0]
     successful_test = False
 
-    import ipdb
-
-    ipdb.set_trace()
-
     for i in range(9):
         time.sleep(2 ** i)
 
-        if ii.Analysis(analysis.pk).status == "SUCEEDED":
+        if ii.Analysis(analysis.pk).status == "SUCCEEDED":
             # check if the analysis was restarted
-            with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
+            with open(join(analysis.storage_url, "head_job.log")) as f:
                 successful_test = "successfully restarted" in f.read()
+            break
 
     assert successful_test

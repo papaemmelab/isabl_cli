@@ -22,12 +22,14 @@ from isabl_cli.settings import perform_import
 def build_exit_cmd(app, analysis):
     """Check if node fail and submit restart else change status to FAILED."""
     restart_on = os.getenv("ISABL_SLURM_RESTART_ON_REGEX_PATTERN", "NODE_FAIL")
+    restart_env = os.getenv("ISABL_SLURM_RESTART_ENV", "")
     dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
     fail = app.get_patch_status_command(analysis.pk, "FAILED")
     restart = f"isabl run-failed-analyses -fi pk {analysis.pk} "
     restart += "--restart" if app.cli_allow_restart else "--force"
 
     return (
+        f"{restart_env} "
         f"sacct -j {dependency} -o state -S 1970-01-01 -P -n | "
         f"grep -q {restart_on} && ({fail} && {restart}) || {fail}"
     )
@@ -173,4 +175,4 @@ def submit_slurm_array(
         f"-o /dev/null -e /dev/null --dependency=afterany:{jobid} {root}/clean.sh"
     )
 
-    return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+    # return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
