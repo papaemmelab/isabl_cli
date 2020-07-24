@@ -474,7 +474,6 @@ def run_failed_analyses(failed_analyses, force, restart):
         with_run_args = [([i], j) for i, j in app_analyses if j]
 
         for tuples, run_args in without_run_args + with_run_args:
-            print(run_args, "carlos")
             app().run(
                 tuples=tuples,
                 commit=False,
