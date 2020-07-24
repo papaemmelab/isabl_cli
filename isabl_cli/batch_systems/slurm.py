@@ -19,6 +19,20 @@ from isabl_cli.settings import system_settings
 from isabl_cli.settings import perform_import
 
 
+def build_exit_cmd(app, analysis):
+    """Check if node fail and submit restart else change status to FAILED."""
+    restart_on = os.getenv("ISABL_SLURM_RESTART_ON_REGEX_PATTERN", "NODE_FAIL")
+    dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+    fail = app.get_patch_status_command(analysis.pk, "FAILED")
+    restart = f"isabl run-failed-analyses -fi pk {analysis.pk} "
+    restart += "--restart" if app.cli_allow_restart else "--force"
+
+    return (
+        f"sacct -j {dependency} -o state -S 1970-01-01 -P -n | "
+        f"grep -q {restart_on} && ({fail} && {restart}) || {fail}"
+    )
+
+
 def submit_slurm(app, command_tuples):  # pragma: no cover
     """Submit applications as arrays grouped by the target methods."""
     groups = defaultdict(list)
@@ -38,7 +52,7 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
         # ignore command in tuple and use script instead
         for i, _ in cmd_tuples:
             analyses.append(i)
-            exit_cmd = app.get_patch_status_command(i["pk"], "FAILED")
+            exit_cmd = build_exit_cmd(app, i)
             commands.append((app.get_command_script_path(i), exit_cmd))
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
@@ -121,9 +135,9 @@ def submit_slurm_array(
             with open(join(root, "in.%s" % index), "w") as f:
                 # submit a dependency job on failure
                 # important when the scheduler kills the head job
-                dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+                dependency = "afternotok:${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 afternotok = (
-                    f"sbatch --dependency=afternotok:{dependency} --kill-on-invalid-dep yes "
+                    f"sbatch --dependency={dependency} --kill-on-invalid-dep yes "
                     f'-o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
@@ -155,8 +169,8 @@ def submit_slurm_array(
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
     cmd = (
-        f"sbatch -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
-        f"-o /dev/null -e /dev/null --dependency=afterany:{jobid} --parsable {root}/clean.sh"
+        f"sbatch -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes --parsable "
+        f"-o /dev/null -e /dev/null --dependency=afterany:{jobid} {root}/clean.sh"
     )
 
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()

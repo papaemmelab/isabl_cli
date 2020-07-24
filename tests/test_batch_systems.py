@@ -2,17 +2,22 @@
 
 from os import path
 from os.path import join
-import time
-import os
-import tempfile
-import subprocess
 import copy
+import os
 import shutil
+import subprocess
+import tempfile
+import time
+
 import pytest
 
 from isabl_cli.batch_systems import lsf
 from isabl_cli.batch_systems import sge
 from isabl_cli.batch_systems import slurm
+import isabl_cli as ii
+
+from .test_app import MockApplication
+from .test_app import get_experiments_for_mock_app
 
 
 @pytest.mark.skipif(not shutil.which("bsub"), reason="bsub not found")
@@ -90,3 +95,36 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
 
             if i % 2 != 0:
                 assert not content
+
+
+def test_slurm_restart_on_node_fail():
+    [experiment], project = get_experiments_for_mock_app(1)
+    application = MockApplication()
+    application.application_settings[
+        "submit_analyses"
+    ] = "isabl_cli.batch_systems.submit_slurm"
+
+    # the mock application is design to fail if the target identifier is `1`
+    # but work if the restart argument is passed, which works great for this test
+    experiment = api.patch_instance("experiments", experiment.pk, identifier="1")
+    tuples = [([experiment], [])]
+
+    # temporarily set restart on failed
+    os.environ["ISABL_SLURM_RESTART_ON_REGEX_PATTERN"] = "FAILED"
+    analyses, _, _ = application.run(tuples=tuples, commit=True)
+    analysis = analyses[0][0]
+    successful_test = False
+
+    import ipdb
+
+    ipdb.set_trace()
+
+    for i in range(9):
+        time.sleep(2 ** i)
+
+        if ii.Analysis(analysis.pk).status == "SUCEEDED":
+            # check if the analysis was restarted
+            with open(join(ran_analyses[0][0].storage_url, "head_job.log")) as f:
+                successful_test = "successfully restarted" in f.read()
+
+    assert successful_test
