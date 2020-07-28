@@ -196,7 +196,7 @@ def get_api_url(url):
 
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
-    for i in [0.2, 1, 5, 10, 60, 90, 120, 300, 900]:  # attempt some retries
+    for i in range(11):  # attempt some retries
         try:
             error = None
             response = getattr(requests, method)(verify=False, **kwargs)
@@ -207,9 +207,13 @@ def retry_request(method, **kwargs):
         if response is not None and not str(response.status_code).startswith("50"):
             break
         else:  # pragma: no cover
-            msg = f"Request failed with error: {error}, retrying in {i}s..."
-            click.secho(msg, fg="yellow", err=True)
-            time.sleep(i)
+            click.secho(
+                f"Request failed with status code {response.status_code} "
+                f"and error message '{error or ''}', retrying in {i ** 2}s...",
+                fg="yellow",
+                err=True,
+            )
+            time.sleep(i ** 2)
 
     return response
 

@@ -14,10 +14,15 @@ import pytest
 from isabl_cli.batch_systems import lsf
 from isabl_cli.batch_systems import sge
 from isabl_cli.batch_systems import slurm
+from isabl_cli.settings import _DEFAULTS
 import isabl_cli as ii
 
 from .test_app import MockApplication
 from .test_app import get_experiments_for_mock_app
+
+
+class SlurmTestApplication(MockApplication):
+    NAME = "slurm-test-application"
 
 
 @pytest.mark.skipif(not shutil.which("bsub"), reason="bsub not found")
@@ -97,29 +102,33 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
                 assert not content
 
 
-class SlurmTestApplication(MockApplication):
-    NAME = "slurm-test-application"
-
-
 @pytest.mark.skipif(not shutil.which("sbatch"), reason="sbatch not found")
 def test_slurm_restart_on_node_fail():
     [experiment], project = get_experiments_for_mock_app(1)
     application = SlurmTestApplication()
-    application.application_settings["submit_analyses"] = "isabl_cli.batch_systems.submit_slurm"
-    
-    from isabl_cli.settings import _DEFAULTS
+    application.application_settings[
+        "submit_analyses"
+    ] = "isabl_cli.batch_systems.submit_slurm"
+
+    # use current testing BASE_STORAGE_DIRECTORY
     client_id = "client-for-isabl-cli-slurm-tests"
-    client = ii.create_instance("clients", slug=client_id, settings={"BASE_STORAGE_DIRECTORY": _DEFAULTS["BASE_STORAGE_DIRECTORY"]})
+    client = ii.create_instance(
+        "clients",
+        slug=client_id,
+        settings={"BASE_STORAGE_DIRECTORY": _DEFAULTS["BASE_STORAGE_DIRECTORY"]},
+    )
 
     # must update in database for the restart job to pick it up
     ii.patch_instance(
         "applications",
         application.application.pk,
-        settings={**application.application.settings,
-           client.pk: {"submit_analyses": "isabl_cli.batch_systems.submit_slurm"}}
+        settings={
+            **application.application.settings,
+            client.pk: {"submit_analyses": "isabl_cli.batch_systems.submit_slurm"},
+        },
     )
 
-    # the mock application is design to fail if the target identifier is `1`
+    # the mock application is designed to fail if the target identifier is `1`
     # but work if the restart argument is passed, which works great for this test
     experiment = ii.patch_instance("experiments", experiment.pk, identifier="1")
     tuples = [([experiment], [])]
@@ -127,7 +136,14 @@ def test_slurm_restart_on_node_fail():
     # temporarily set restart on failed
     python_path = os.path.join(os.path.dirname(__file__), "..")
     os.environ["ISABL_SLURM_RESTART_ON_REGEX_PATTERN"] = "FAILED"
-    os.environ["ISABL_SLURM_RESTART_ENV"] = f"export ISABL_CLIENT_ID={client_id};export PYTHONPATH={python_path};"
+
+    # we need to provide these environment variables so that the restart job
+    # can pick up the test configuration
+    os.environ[
+        "ISABL_SLURM_RESTART_ENV"
+    ] = f"export ISABL_CLIENT_ID={client_id};export PYTHONPATH={python_path};"
+
+    # do an exponential retry to check if the test was successful
     analyses, _, _ = application.run(tuples=tuples, commit=True)
     analysis = analyses[0][0]
     successful_test = False
