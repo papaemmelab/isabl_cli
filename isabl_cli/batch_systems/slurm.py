@@ -182,4 +182,4 @@ def submit_slurm_array(
         f"-o /dev/null -e /dev/null --dependency=afterany:{jobid} {root}/clean.sh"
     )
 
-    # return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+    return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
