@@ -1583,11 +1583,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         payload = []
 
         for i in analyses:
-            # store the application class in the analysis also
-            i.data = {
-                **(i.data or {}),
-                "application_class": f"{self.__module__}.{self.__class__.__name__}",
-            }
+            # update the application class if the analysis has not completed, it's
+            # possible to use multiple classes to run different stages of an analysis
+            if (
+                i.status not in {"SUCCEEDED", "FINISHED"}
+                or "application_class" not in i.data
+            ):
+                i.data.application_class = (
+                    f"{self.__module__}.{self.__class__.__name__}"
+                )
+
             # update storage URL if not set
             i.storage_url = i.storage_url or data.get_storage_url(
                 endpoint="analyses", identifier=i.pk, use_hash=True

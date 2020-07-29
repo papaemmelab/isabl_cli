@@ -207,8 +207,9 @@ def retry_request(method, **kwargs):
         if response is not None and not str(response.status_code).startswith("50"):
             break
         else:  # pragma: no cover
+            status_code = getattr(response, "status_code", "Unknown")
             click.secho(
-                f"Request failed with status code {response.status_code} "
+                f"Request failed with status code {status_code} "
                 f"and error message '{error or ''}', retrying in {i ** 2}s...",
                 fg="yellow",
                 err=True,
