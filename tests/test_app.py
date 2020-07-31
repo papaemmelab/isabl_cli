@@ -792,3 +792,29 @@ def test_get_experiments_from_default_cli_options(tmpdir):
 
     # just get coverage for get_job_name
     assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)
+
+
+def test_validate_individuals():
+    application = AbstractApplication()
+
+    # Test matched analyis
+    application_name = 'TEST'
+    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1}}}]
+    references = [{"system_id": 2, "sample": {"individual": {"pk": 1}}}]
+    application.validate_individuals(targets, references, application_name)
+
+    with pytest.raises(AssertionError) as error:
+        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2}}}]
+        application.validate_individuals(targets, references, application_name)
+    assert "Same individual required:" in str(error.value)
+
+    # Test unmatched analysis
+    application_name = 'TEST_UNMATCHED'
+    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1}}}]
+    references = [{"system_id": 2, "sample": {"individual": {"pk": 2}}}]
+    application.validate_individuals(targets, references, application_name)
+
+    with pytest.raises(AssertionError) as error:
+        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2}}}]
+        application.validate_individuals(targets, references, application_name)
+    assert "Different individuals required:" in str(error.value)

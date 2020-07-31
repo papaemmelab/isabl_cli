@@ -1703,3 +1703,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for i in experiments:
             msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
             assert i.sample.category == "NORMAL", msg
+
+    def validate_individuals(self, targets, references, application_name):
+        """Validate pairs are of the same individual."""
+        for target, reference in zip(targets, references):
+            tind = target["sample"]["individual"]["pk"]
+            rind = reference["sample"]["individual"]["pk"]
+
+            if "UNMATCHED" in application_name:
+                assert tind != rind, (
+                    "Different individuals required: "
+                    f"{target} and {reference} are of the same individual."
+                )
+            else: # application is designed for matched analyses
+                assert tind == rind, (
+                    "Same individual required: " 
+                    f"{target} and {reference} are of different individuals."
+                )
+
