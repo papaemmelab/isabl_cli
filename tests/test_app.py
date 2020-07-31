@@ -795,26 +795,27 @@ def test_get_experiments_from_default_cli_options(tmpdir):
 
 
 def test_validate_individuals():
-    application = AbstractApplication()
-
     # Test matched analyis
-    application_name = 'TEST'
+    matched_application = AbstractApplication()
+
     targets = [{"system_id": 1, "sample": {"individual": {"pk": 1}}}]
     references = [{"system_id": 2, "sample": {"individual": {"pk": 1}}}]
-    application.validate_individuals(targets, references, application_name)
+    matched_application.validate_individuals(targets, references)
 
     with pytest.raises(AssertionError) as error:
         targets = [{"system_id": 1, "sample": {"individual": {"pk": 2}}}]
-        application.validate_individuals(targets, references, application_name)
+        matched_application.validate_individuals(targets, references)
     assert "Same individual required:" in str(error.value)
 
     # Test unmatched analysis
-    application_name = 'TEST_UNMATCHED'
+    unmatched_application = AbstractApplication()
+    unmatched_application.IS_UNMATCHED = True
+
     targets = [{"system_id": 1, "sample": {"individual": {"pk": 1}}}]
     references = [{"system_id": 2, "sample": {"individual": {"pk": 2}}}]
-    application.validate_individuals(targets, references, application_name)
+    unmatched_application.validate_individuals(targets, references)
 
     with pytest.raises(AssertionError) as error:
         targets = [{"system_id": 1, "sample": {"individual": {"pk": 2}}}]
-        application.validate_individuals(targets, references, application_name)
+        unmatched_application.validate_individuals(targets, references)
     assert "Different individuals required:" in str(error.value)
