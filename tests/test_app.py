@@ -792,3 +792,30 @@ def test_get_experiments_from_default_cli_options(tmpdir):
 
     # just get coverage for get_job_name
     assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)
+
+
+def test_validate_individuals():
+    # Test matched analyis
+    matched_application = AbstractApplication()
+
+    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}]
+    references = [{"system_id": 2, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}]
+    matched_application.validate_individuals(targets, references)
+
+    with pytest.raises(AssertionError) as error:
+        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+        matched_application.validate_individuals(targets, references)
+    assert "Same individual required:" in str(error.value)
+
+    # Test unmatched analysis
+    unmatched_application = AbstractApplication()
+    unmatched_application.IS_UNMATCHED = True
+
+    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}]
+    references = [{"system_id": 2, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+    unmatched_application.validate_individuals(targets, references)
+
+    with pytest.raises(AssertionError) as error:
+        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+        unmatched_application.validate_individuals(targets, references)
+    assert "Different individuals required:" in str(error.value)
