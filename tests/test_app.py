@@ -798,12 +798,30 @@ def test_validate_individuals():
     # Test matched analyis
     matched_application = AbstractApplication()
 
-    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}, "technique": {"method": "WG"}}]
-    references = [{"system_id": 2, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}, "technique": {"method": "WG"}}]
+    targets = [
+        {
+            "system_id": 1,
+            "sample": {"individual": {"pk": 1, "system_id": "ind1"}},
+            "technique": {"method": "WG"}
+        }
+    ]
+    references = [
+        {
+            "system_id": 2,
+            "sample": {"individual": {"pk": 1, "system_id": "ind1"}},
+            "technique": {"method": "WG"}
+        }
+    ]
     matched_application.validate_individuals(targets, references)
 
     with pytest.raises(AssertionError) as error:
-        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+        targets = [
+            {
+                "system_id": 1,
+                "sample": {"individual": {"pk": 2, "system_id": "ind2"}},
+                "technique": {"method": "WG"}
+            }
+        ]
         matched_application.validate_individuals(targets, references)
     assert "Same individual required:" in str(error.value)
 
@@ -811,16 +829,46 @@ def test_validate_individuals():
     unmatched_application = AbstractApplication()
     unmatched_application.IS_UNMATCHED = True
 
-    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}, "technique": {"method": "WG"}}]
-    references = [{"system_id": 2, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}, "technique": {"method": "WG"}}]
+    targets = [
+        {
+            "system_id": 1,
+            "sample": {"individual": {"pk": 1, "system_id": "ind1"}},
+            "technique": {"method": "WG"}
+        }
+    ]
+    references = [
+        {
+            "system_id": 2,
+            "sample": {"individual": {"pk": 2, "system_id": "ind2"}},
+            "technique": {"method": "WG"}
+        }
+    ]
     unmatched_application.validate_individuals(targets, references)
 
     with pytest.raises(AssertionError) as error:
-        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+        targets = [
+            {
+                "system_id": 1,
+                "sample": {"individual": {"pk": 2, "system_id": "ind2"}},
+                "technique": {"method": "WG"}
+            }
+        ]
         unmatched_application.validate_individuals(targets, references)
     assert "Different individuals required:" in str(error.value)
 
     # Test validator on TD experiments
-    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}, "technique": {"method": "TD"}}]
-    references = [{"system_id": 2, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}, "technique": {"method": "TD"}}]
+    targets = [
+        {
+            "system_id": 1,
+            "sample": {"individual": {"pk": 1, "system_id": "ind1"}},
+            "technique": {"method": "TD"}
+        }
+    ]
+    references = [
+        {
+            "system_id": 2,
+            "sample": {"individual": {"pk": 2, "system_id": "ind2"}},
+            "technique": {"method": "TD"}
+        }
+    ]
     matched_application.validate_individuals(targets, references)
