@@ -1711,7 +1711,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Validate pairs are of the same individual if the pipeline is matched;
         Validate pairs are of the different individuals if the pipeline is unmatched.
         """
-        if targets[0].technique.method == 'WG':
+        if targets[0]["technique"]["method"] == 'WG':
             if references:
                 targets_set = list(
                     {v["sample"]["individual"]["pk"]:v for v in targets}.values()
