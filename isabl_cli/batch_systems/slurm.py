@@ -154,7 +154,7 @@ def submit_slurm_array(
                 # use random sleep to avoid parallel API hits
                 f.write(
                     f"#!/bin/sh\nsleep {random.uniform(0, 10):.3} && "
-                    f"({afternotok}) && bash {command}"
+                    f"({afternotok}) && unbuffer bash {command}"
                 )
 
             for j in "log", "err", "exit":
