@@ -87,6 +87,7 @@ def assert_run(
     application,
     tuples,
     commit,
+    run_args=None,
     results=None,
     project_results=None,
     individual_results=None,
@@ -96,7 +97,7 @@ def assert_run(
 ):
     """Run application, check results, and return analyses."""
     ret = []
-    valid, skipped, invalid = application.run(tuples, commit=commit)
+    valid, skipped, invalid = application.run(tuples, commit=commit, run_args=run_args)
 
     if assert_valid:
         assert valid, "No valid RAN analyses."

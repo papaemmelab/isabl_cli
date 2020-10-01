@@ -1798,3 +1798,36 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for i in experiments:
             msg = f"Experiment Sample {i.sample.system_id} is not NORMAL."
             assert i.sample.category == "NORMAL", msg
+
+    def validate_individuals(self, targets, references):
+        """
+        Validate pairs are of the same individual if the pipeline is matched;
+        Validate pairs are of the different individuals if the pipeline is unmatched.
+        """
+        if references:
+            targets_set = list(
+                {v["sample"]["individual"]["pk"]:v for v in targets}.values()
+            )
+            references_set = list(
+                {v["sample"]["individual"]["pk"]:v for v in references}.values()
+            )
+
+            assert len(targets_set) == 1, "One unique target individual is supported."
+            assert len(references_set) == 1, "One unique reference individual is supported."
+
+            tind = targets_set[0]["sample"]["individual"]
+            rind = references_set[0]["sample"]["individual"]
+
+            if hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED:
+                assert tind["pk"] != rind["pk"], (
+                    "Different individuals required: "
+                    f"{tind['system_id']} and {rind['system_id']} "
+                    "are of the same individual."
+                )
+            else: # application is designed for matched analyses
+                assert tind["pk"] == rind["pk"], (
+                    "Same individual required: " 
+                    f"{tind['system_id']} and {rind['system_id']} "
+                    "are of different individuals."
+                )
+
