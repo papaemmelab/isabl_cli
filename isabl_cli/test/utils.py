@@ -94,7 +94,6 @@ def assert_run(
     assert_valid=True,
     assert_skipped=False,
     assert_invalid=False,
-    run_args=None,
 ):
     """Run application, check results, and return analyses."""
     ret = []
