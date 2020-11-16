@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections import OrderedDict
 from glob import glob
 from os.path import join
+from requests.exceptions import HTTPError
 import json
 import os
 import shutil
@@ -378,9 +379,9 @@ def rerun_signals(filters):
         "signals", pk__gt=0, data__failure_traceback__isnull=False, **filters
     ):
         click.secho(f"Rerunning signal: {i.slug}", fg="yellow")
-        instance = api.get_instance(i.target_endpoint, i.target_id)
 
         try:
+            instance = api.get_instance(i.target_endpoint, i.target_id)
             api._run_signals(
                 endpoint=i.target_endpoint,
                 instance=instance,

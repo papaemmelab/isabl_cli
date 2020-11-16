@@ -87,6 +87,7 @@ def assert_run(
     application,
     tuples,
     commit,
+    run_args=None,
     results=None,
     project_results=None,
     individual_results=None,
