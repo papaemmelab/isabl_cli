@@ -110,6 +110,36 @@ def import_from_string(val, setting_name=None):
         )
 
 
+def _send_user_analytics(username):
+    """Send analytics about the identity and group of the user."""
+    from isabl_cli import __version__
+    from isabl_cli.api import get_api_url
+    from urllib.parse import urlparse
+    import analytics
+
+    api_url = get_api_url("/")
+
+    if "localhost" in api_url or "0.0.0.0" in api_url:
+        domain = urlparse(api_url).netloc
+        subdomain = ""
+        group_id = "DEV"
+    else:
+        subdomain, domain, *_, = urlparse(api_url).netloc.split(".")
+        group_id = f"{subdomain.upper()} {domain.upper()}"
+
+    analytics.identify(username, {"username": username})
+    analytics.group(
+        username,
+        group_id,
+        {
+            "subdomain": subdomain,
+            "domain": domain,
+            "component": "cli",
+            "version": __version__,
+        },
+    )
+
+
 class UserSettings:
 
     """A class used to manage user specific configurations."""
@@ -198,7 +228,15 @@ class SystemSettings(BaseSettings):
         """Get current username from database."""
         from isabl_cli.api import api_request
 
-        return api_request("get", url="/rest-auth/user/").json()["username"]
+        # cache the current username in the settings json to prevent additional queries
+        user_settings.username = (
+            user_settings.username
+            or api_request("get", url="/rest-auth/user/").json()["username"]
+        )
+
+        # send analytics only once
+        _send_user_analytics(user_settings.username)
+        return user_settings.username
 
     @cached_property
     def client(self):
@@ -214,7 +252,7 @@ class SystemSettings(BaseSettings):
             )
 
             return {}
-        return get_instance("clients", self.client_id)
+        return get_instance("clients", self.client_id, fields="settings")
 
     @cached_property
     def _settings(self):

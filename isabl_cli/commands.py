@@ -54,9 +54,7 @@ def _filters_or_identifiers(endpoint, identifiers, filters, fields=None):
 @click.command()
 def login():  # pragma: no cover
     """Login with isabl credentials."""
-    user_settings.api_token = None
-    api.get_token_headers.cache_clear()
-    api.get_token_headers()
+    api.set_api_token(force=True)
 
 
 @click.command()

@@ -1,13 +1,10 @@
 """Logic to interact with API."""
 
-from functools import lru_cache
 from itertools import islice
 from os import environ
 from os.path import basename
 from urllib.parse import urljoin
-from urllib.parse import urlparse
 import collections
-import json
 import shutil
 import subprocess
 import sys
@@ -17,7 +14,6 @@ import traceback
 from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from six import iteritems
-import analytics
 import click
 import requests
 
@@ -196,13 +192,14 @@ def get_api_url(url):
 
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
+    response = None
+
     for i in range(11):  # attempt some retries
         try:
             error = None
-            response = getattr(requests, method)(verify=False, **kwargs)
+            response = getattr(user_settings.session, method)(verify=False, **kwargs)
         except requests.exceptions.RequestException as request_error:  # pragma: no cover
             error = request_error
-            response = None
 
         if response is not None and not str(response.status_code).startswith("50"):
             break
@@ -219,90 +216,47 @@ def retry_request(method, **kwargs):
     return response
 
 
-@lru_cache(None)
-def get_token_headers():
+def set_api_token(force=False):
     """Get an API token and store it in user's home directory."""
-    headers = {"Authorization": f"Token {user_settings.api_token}"}
-    auth_url = get_api_url("/rest-auth/user/")
-    response = retry_request("get", url=auth_url, headers=headers)
+    if user_settings.api_token and not force:
+        return
 
-    try:
-        assert "username" in response.json()
-    except (json.JSONDecodeError, AssertionError):
-        testing = (
-            basename(sys.argv[0]) in ("pytest", "py.test")
-        ) or "pytest" in sys.modules
+    testing = basename(sys.argv[0]) in ("pytest", "py.test") or "pytest" in sys.modules
+
+    while True:
+        username, password = (
+            "admin" if testing else click.prompt("username"),
+            "admin" if testing else click.prompt("password", hide_input=True),
+        )
 
         response = retry_request(
             "post",
             url=get_api_url("/rest-auth/login/"),
-            data={
-                "username": click.prompt("username", type=str, hide_input=False)
-                if not testing
-                else "admin",
-                "password": click.prompt("password", type=str, hide_input=True)
-                if not testing
-                else "admin",
-            },
+            data={"username": username, "password": password},
         )
 
         if (
             not response.ok and "non_field_errors" in response.text and not testing
         ):  # pragma: no cover
             click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
-            get_token_headers.cache_clear()
-            return get_token_headers()
+            continue
         elif not response.ok:  # pragma: no cover
             click.secho(f"Request Error: {response.url}", fg="red")
             response.raise_for_status()
 
-        user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
-        headers = {"Authorization": f"Token {user_settings.api_token}"}
+        result = response.json()
+        user_settings.api_token = result.pop("key")  # pylint: disable=invalid-name
+        user_settings.username = username
         click.secho("Successful authorization! Token stored.", fg="green")
-
-    # Authenticate user for analytics
-    send_analytics(user=response.json())
-
-    return headers
+        break
 
 
-def send_analytics(user):
-    """Send analytics about the identity and group of the user."""
-    from isabl_cli import __version__
-
-    if user.get("username"):
-        username = user["username"]
-        api_url = get_api_url("/")
-        if "localhost" in api_url or "0.0.0.0" in api_url:
-            domain = urlparse(api_url).netloc
-            subdomain = ""
-            group_id = "DEV"
-        else:
-            subdomain, domain, *_, = urlparse(api_url).netloc.split(".")
-            group_id = f"{subdomain.upper()} {domain.upper()}"
-
-        analytics.identify(username, user)
-        analytics.group(
-            username,
-            group_id,
-            {
-                "subdomain": subdomain,
-                "domain": domain,
-                "component": "cli",
-                "version": __version__,
-            },
-        )
-
-
-def api_request(method, url, authenticate=True, **kwargs):
+def api_request(method, url, **kwargs):
     """Perform any request operation using a naive retry implementation."""
     kwargs["params"] = kwargs.get("params", {})
     kwargs["params"]["format"] = "json"
     kwargs["url"] = get_api_url(url)
-
-    if authenticate:
-        kwargs["headers"] = get_token_headers()
-
+    kwargs["headers"] = {"Authorization": f"Token {user_settings.api_token}"}
     response = retry_request(method, **kwargs)
 
     if not response.ok:
@@ -310,6 +264,10 @@ def api_request(method, url, authenticate=True, **kwargs):
             msg = click.style(str(response.json()), fg="red")
         except Exception:  # pylint: disable=broad-except
             msg = ""
+
+        if "Invalid token." in msg:
+            set_api_token(force=True)
+            return api_request(method, **kwargs)
 
         click.echo(f"Request Error: {response.url}\n{msg}")
         response.raise_for_status()
