@@ -16,6 +16,7 @@ import analytics
 import click
 import pytz
 import six
+import requests
 
 from isabl_cli import exceptions
 
@@ -177,6 +178,11 @@ class UserSettings:
 
         os.chmod(self.settings_path, 0o600)
         return data
+
+    @cached_property
+    def session(self):
+        """Cache a requests session to avoid TLS handshakes."""
+        return requests.session()
 
 
 class BaseSettings:
