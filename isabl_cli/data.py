@@ -723,7 +723,9 @@ class LocalDataImporter(BaseImporter):
 
             # explore dirs
             for directory in set(directories):
-                with click.progressbar(os.walk(directory), label=label) as bar:
+                with click.progressbar(
+                    os.walk(directory, followlinks=True), label=label
+                ) as bar:
                     for root, _, files in bar:
                         if not root.startswith(data_storage_dir):
                             for i in files:
