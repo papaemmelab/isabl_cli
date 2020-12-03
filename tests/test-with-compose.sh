@@ -5,7 +5,7 @@ else
    TEST_DIR="$( cd "$(dirname "$BASH_SOURCE")" ; pwd -P )";
 fi
 
-# # set directories
+# set directories
 CLI_DIR=${TEST_DIR}/..
 API_DIR=${CLI_DIR}/api
 echo "API directory set to: $API_DIR"
