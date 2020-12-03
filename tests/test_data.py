@@ -162,7 +162,7 @@ def test_import_bedfiles(tmpdir):
 def test_local_data_import(tmpdir):
     dirs = [tmpdir.strpath]
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
-    experiments = [factories.ExperimentFactory(projects=projects) for i in range(6)]
+    experiments = [factories.ExperimentFactory(projects=projects) for i in range(7)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     keys = [i["pk"] for i in experiments]
 
@@ -302,6 +302,19 @@ def test_local_data_import(tmpdir):
     _, summary = importer.import_data(directories=[fs2], pk__in=keys)
     assert "FASTQ_R1" in str(summary)
     assert "FASTQ_R2" in str(summary)
+
+    # test copying data
+    path_1 = tmpdir.join(f'{experiments[6]["system_id"]}_R1_foo.fastq')
+    path_2 = tmpdir.join(f'{experiments[6]["system_id"]}_R2_foo.fastq')
+    path_1.write("foo")
+    path_2.write("foo")
+    _, summary = importer.import_data(
+        directories=dirs, pk=experiments[6]["pk"], commit=True, copy=True
+    )
+    assert "samples matched: 1" in summary
+    assert api.Experiment(experiments[6].pk).get_fastq()
+    assert path_1.exists()
+    assert path_2.exists()
 
 
 def test_get_dst():

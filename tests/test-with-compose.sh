@@ -5,7 +5,7 @@ else
    TEST_DIR="$( cd "$(dirname "$BASH_SOURCE")" ; pwd -P )";
 fi
 
-# set directories
+# # set directories
 CLI_DIR=${TEST_DIR}/..
 API_DIR=${CLI_DIR}/api
 echo "API directory set to: $API_DIR"
@@ -25,4 +25,3 @@ sleep 30 && cd $CLI_DIR && pytest -vs tests/ --cov=isabl_cli || (
    # print django logs if tests fail
    cd $API_DIR && docker-compose logs django && exit 1
 )
-
