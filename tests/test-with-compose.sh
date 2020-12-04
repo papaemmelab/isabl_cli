@@ -25,4 +25,3 @@ sleep 30 && cd $CLI_DIR && pytest -vs tests/ --cov=isabl_cli || (
    # print django logs if tests fail
    cd $API_DIR && docker-compose logs django && exit 1
 )
-

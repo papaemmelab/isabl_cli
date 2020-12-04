@@ -272,12 +272,17 @@ class BaseImporter:
     @staticmethod
     def symlink(src, dst):
         """Create symlink from `src` to `dst`."""
-        return utils.force_symlink(os.path.realpath(src), dst)
+        utils.force_symlink(os.path.realpath(src), dst)
 
     @staticmethod
     def move(src, dst):
         """Rename `src` to `dst`."""
-        return os.rename(os.path.realpath(src), dst)
+        os.rename(os.path.realpath(src), dst)
+
+    @staticmethod
+    def copy(src, dst):
+        """Copy files from `src` to `dst`."""
+        shutil.copy(src, dst)
 
 
 class LocalReferenceDataImporter(BaseImporter):
@@ -627,6 +632,7 @@ class LocalDataImporter(BaseImporter):
         dtypes=None,
         iexact=False,
         ignore_ownership=False,
+        copy=False,
         **filters,
     ):
         """
@@ -637,6 +643,7 @@ class LocalDataImporter(BaseImporter):
 
         Arguments:
             directories (list): list of directories to be recursively explored.
+            copy (bool): if True files are copied intead of moved.
             symlink (bool): if True symlink instead of moving.
             commit (bool): if True perform import operation.
             key (function): given a experiment dict returns id to match.
@@ -723,7 +730,9 @@ class LocalDataImporter(BaseImporter):
 
             # explore dirs
             for directory in set(directories):
-                with click.progressbar(os.walk(directory), label=label) as bar:
+                with click.progressbar(
+                    os.walk(directory, followlinks=True), label=label
+                ) as bar:
                     for root, _, files in bar:
                         if not root.startswith(data_storage_dir):
                             for i in files:
@@ -740,7 +749,7 @@ class LocalDataImporter(BaseImporter):
                                     cache[match.pop("index")]["files"].append(match)
 
             # check ownership if needed
-            if not ignore_ownership and not symlink:
+            if not ignore_ownership and not symlink and not copy:
                 self.check_ownership(cache)
 
             # check files are readable
@@ -757,6 +766,7 @@ class LocalDataImporter(BaseImporter):
                                 instance=i["instance"],
                                 files=i["files"],
                                 symlink=symlink,
+                                copy=copy,
                                 files_data=files_data,
                             )
                         )
@@ -838,13 +848,14 @@ class LocalDataImporter(BaseImporter):
         except (StopIteration, AssertionError):  # pragma: no cover
             return None
 
-    def import_files(self, instance, files, files_data, symlink):
+    def import_files(self, instance, files, files_data, symlink, copy):
         """
         Move/link files into instance's `storage_url` and update database.
 
         Arguments:
             instance (dict): experiment instance.
             files (dict): list of files to be imported.
+            copy (bool): if True files are copied intead of moved.
             symlink (dict): whether to symlink or move the data.
             files_data (dict): keys are files basenames and values are
                 dicts with extra annotations such as PL, LB, or any other.
@@ -896,15 +907,17 @@ class LocalDataImporter(BaseImporter):
                 )
 
         for src, dst in src_dst:
-            if symlink:
+            if copy:
+                self.copy(src, dst)
+            elif symlink:
                 self.symlink(src, dst)
             else:
                 self.move(src, dst)
 
-                try:
-                    subprocess.check_call(["chmod", "a-w", dst])
-                except subprocess.CalledProcessError:
-                    pass
+            try:
+                subprocess.check_call(["chmod", "a-w", dst])
+            except subprocess.CalledProcessError:
+                pass
 
         return api.patch_instance(
             endpoint="experiments",
@@ -983,12 +996,14 @@ class LocalDataImporter(BaseImporter):
             "--iexact", help="Case insensitive match of identifiers.", is_flag=True
         )
         @click.option("--ignore-ownership", help="Don't check ownership.", is_flag=True)
+        @click.option("--copy", help="Copy files instead of moving them.", is_flag=True)
         def cmd(
             identifier,
             commit,
             filters,
             directories,
             symlink,
+            copy,
             files_data,
             dtypes,
             iexact,
@@ -1034,12 +1049,16 @@ class LocalDataImporter(BaseImporter):
             else:
                 files_data = {}
 
+            if symlink and copy:
+                raise click.UsageError(f"Use either --copy or --symlink.")
+
             if symlink and ignore_ownership:
                 click.secho("--ignore-ownership isnt used when --symlink.", fg="yellow")
 
             matched, summary = cls().import_data(
                 directories=directories,
                 symlink=symlink,
+                copy=copy,
                 commit=commit,
                 key=key,
                 files_data=files_data,
@@ -1061,6 +1080,7 @@ class LocalYamlDataImporter(LocalDataImporter):
     def import_data_from_yaml(
         self,
         symlink=False,
+        copy=False,
         commit=False,
         files_data=None,
         ignore_ownership=False,
@@ -1117,6 +1137,7 @@ class LocalYamlDataImporter(LocalDataImporter):
                     instance=experiment,
                     files=files_to_import,
                     symlink=symlink,
+                    copy=copy,
                     files_data=modified_files_data,
                 )
             )
@@ -1157,7 +1178,8 @@ class LocalYamlDataImporter(LocalDataImporter):
         @options.SYMLINK
         @options.FILES_DATA
         @click.option("--ignore-ownership", help="Don't check ownership.", is_flag=True)
-        def cmd(commit, filters, symlink, files_data, ignore_ownership):
+        @click.option("--copy", help="Copy files instead of moving them.", is_flag=True)
+        def cmd(commit, filters, symlink, copy, files_data, ignore_ownership):
             """
             Import data into an experiment by specifying a path to a
             files_data yaml file. The files_data yaml file must contain
@@ -1190,6 +1212,7 @@ class LocalYamlDataImporter(LocalDataImporter):
 
             summary = cls().import_data_from_yaml(
                 symlink=symlink,
+                copy=copy,
                 commit=commit,
                 files_data=files_data,
                 ignore_ownership=ignore_ownership,

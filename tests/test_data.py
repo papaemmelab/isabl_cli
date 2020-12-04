@@ -162,14 +162,14 @@ def test_import_bedfiles(tmpdir):
 def test_local_data_import(tmpdir):
     dirs = [tmpdir.strpath]
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
-    experiments = [factories.ExperimentFactory(projects=projects) for i in range(5)]
+    experiments = [factories.ExperimentFactory(projects=projects) for i in range(7)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]
     keys = [i["pk"] for i in experiments]
 
     importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=dirs, pk__in=keys)
     obtained = len(summary.rsplit("no files matched"))
-    assert obtained == 5 + 1
+    assert obtained == 7 + 1
 
     # test can't determine type of fastq
     with pytest.raises(click.UsageError) as error:
@@ -291,6 +291,34 @@ def test_local_data_import(tmpdir):
     assert "The following files are not readable by current user:" in result.output
     assert path_1.strpath in result.output
     assert path_2.strpath not in result.output
+
+    # test proper importing from dir with symlinked dir
+    fs1 = tmpdir.mkdir("fs1")
+    dir_1 = fs1.mkdir("dir_1")
+    path_1 = dir_1.join(f'{experiments[5]["system_id"]}_1.fastq')
+    path_2 = dir_1.join(f'{experiments[5]["system_id"]}_2.fastq')
+    path_1.write("foo")
+    path_2.write("foo")
+
+    fs2 = tmpdir.mkdir("fs2")
+    dir_2 = fs2.join("dir_2")
+    os.symlink(dir_1, dir_2, target_is_directory=True)
+    _, summary = importer.import_data(directories=[fs2], pk__in=keys)
+    assert "FASTQ_R1" in str(summary)
+    assert "FASTQ_R2" in str(summary)
+
+    # test copying data
+    path_1 = tmpdir.join(f'{experiments[6]["system_id"]}_R1_foo.fastq')
+    path_2 = tmpdir.join(f'{experiments[6]["system_id"]}_R2_foo.fastq')
+    path_1.write("foo")
+    path_2.write("foo")
+    _, summary = importer.import_data(
+        directories=dirs, pk=experiments[6]["pk"], commit=True, copy=True
+    )
+    assert "samples matched: 1" in summary
+    assert api.Experiment(experiments[6].pk).get_fastq()
+    assert path_1.exists()
+    assert path_2.exists()
 
 
 def test_get_dst():
