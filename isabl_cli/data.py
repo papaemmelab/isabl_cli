@@ -388,7 +388,6 @@ class LocalReferenceDataImporter(BaseImporter):
                 model=model,
                 sub_dir=sub_dir,
                 symlink=symlink,
-                copy=copy,
             )
 
         return cmd
@@ -997,20 +996,18 @@ class LocalDataImporter(BaseImporter):
             "--iexact", help="Case insensitive match of identifiers.", is_flag=True
         )
         @click.option("--ignore-ownership", help="Don't check ownership.", is_flag=True)
-        @click.option(
-            "--copy", help="Copy files, instead of moving them.", is_flag=True
-        )
+        @click.option("--copy", help="Copy files instead of moving them.", is_flag=True)
         def cmd(
             identifier,
             commit,
             filters,
             directories,
             symlink,
+            copy,
             files_data,
             dtypes,
             iexact,
             ignore_ownership,
-            copy,
         ):
             """
             Find and import experiments data from many directories.
@@ -1061,13 +1058,13 @@ class LocalDataImporter(BaseImporter):
             matched, summary = cls().import_data(
                 directories=directories,
                 symlink=symlink,
+                copy=copy,
                 commit=commit,
                 key=key,
                 files_data=files_data,
                 dtypes=dtypes,
                 iexact=iexact,
                 ignore_ownership=ignore_ownership,
-                copy=copy,
                 **filters,
             )
 
@@ -1083,6 +1080,7 @@ class LocalYamlDataImporter(LocalDataImporter):
     def import_data_from_yaml(
         self,
         symlink=False,
+        copy=False,
         commit=False,
         files_data=None,
         ignore_ownership=False,
@@ -1139,6 +1137,7 @@ class LocalYamlDataImporter(LocalDataImporter):
                     instance=experiment,
                     files=files_to_import,
                     symlink=symlink,
+                    copy=copy,
                     files_data=modified_files_data,
                 )
             )
@@ -1179,7 +1178,8 @@ class LocalYamlDataImporter(LocalDataImporter):
         @options.SYMLINK
         @options.FILES_DATA
         @click.option("--ignore-ownership", help="Don't check ownership.", is_flag=True)
-        def cmd(commit, filters, symlink, files_data, ignore_ownership):
+        @click.option("--copy", help="Copy files instead of moving them.", is_flag=True)
+        def cmd(commit, filters, symlink, copy, files_data, ignore_ownership):
             """
             Import data into an experiment by specifying a path to a
             files_data yaml file. The files_data yaml file must contain
@@ -1212,6 +1212,7 @@ class LocalYamlDataImporter(LocalDataImporter):
 
             summary = cls().import_data_from_yaml(
                 symlink=symlink,
+                copy=copy,
                 commit=commit,
                 files_data=files_data,
                 ignore_ownership=ignore_ownership,

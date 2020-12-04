@@ -167,6 +167,10 @@ def test_local_data_import(tmpdir):
     keys = [i["pk"] for i in experiments]
 
     importer = data.LocalDataImporter()
+    _, summary = importer.import_data(directories=dirs, pk__in=keys)
+    obtained = len(summary.rsplit("no files matched"))
+    assert obtained == 7 + 1
+
     # test can't determine type of fastq
     with pytest.raises(click.UsageError) as error:
         path_1 = tmpdir.join(f'{experiments[0]["system_id"]}.fastq')
