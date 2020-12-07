@@ -908,6 +908,7 @@ class LocalDataImporter(BaseImporter):
 
         for src, dst in src_dst:
             if copy:
+                click.secho(f'\nCopying raw data files...', fg="blue")
                 self.copy(src, dst)
             elif symlink:
                 self.symlink(src, dst)
