@@ -18,17 +18,16 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 
 Isabl was created at [Elli Papaemmanuil's lab].
 
-[`Isabl`]: https://isabl.io
+[`isabl`]: https://isabl.io
 [documentation]: https://docs.isabl.io
 [contributing guidelines]: https://docs.isabl.io/contributing-guide
-[Elli Papaemmanuil's lab]: https://www.mskcc.org/research-areas/labs/elli-papaemmanuil
-
+[elli papaemmanuil's lab]: https://www.mskcc.org/research-areas/labs/elli-papaemmanuil
 [black_badge]: https://img.shields.io/badge/code%20style-black-000000.svg
 [black_base]: https://github.com/ambv/black
-[codecov_badge]: https://codecov.io/github/isabl-io/cli/coverage.svg?branch=master&token=PSypdR9o4P
-[codecov_base]: https://codecov.io/gh/isabl-io/cli
-[travis_badge]: https://travis-ci.com/isabl-io/cli.svg?token=VymT5apURZYCYw4zJX7v&branch=master
-[travis_base]: https://travis-ci.com/isabl-io/cli
+[codecov_badge]: https://codecov.io/github/papaemmelab/isabl_cli/coverage.svg?branch=master&token=PSypdR9o4P
+[codecov_base]: https://codecov.io/gh/papaemmelab/isabl_cli
+[travis_badge]: https://travis-ci.com/papaemmelab/isabl_cli.svg?token=VymT5apURZYCYw4zJX7v&branch=master
+[travis_base]: https://travis-ci.com/papaemmelab/isabl_cli
 
 <!--
 [![pypi badge][pypi_badge]][pypi_base]
