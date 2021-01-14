@@ -26,7 +26,7 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [black_base]: https://github.com/ambv/black
 [codecov_badge]: https://codecov.io/github/papaemmelab/isabl_cli/coverage.svg?branch=master&token=PSypdR9o4P
 [codecov_base]: https://codecov.io/gh/papaemmelab/isabl_cli
-[travis_badge]: https://travis-ci.com/papaemmelab/isabl_cli.svg?token=VymT5apURZYCYw4zJX7v&branch=master
+[travis_badge]: https://travis-ci.com/papaemmelab/isabl_cli.svg?token=P6GGbmdLPwysz69FFv2X&branch=master
 [travis_base]: https://travis-ci.com/papaemmelab/isabl_cli
 
 <!--
