@@ -1034,7 +1034,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         # build and write command
         tmpdir = os.getenv("TMP", "/tmp")
-        tmpdir = " && ".join(f"export {i}={tmpdir}" for i in ["TMP", "TMPDIR", "TMP_DIR"])
+        tmpdir = " && ".join(
+            f"export {i}={tmpdir}" for i in ["TMP", "TMPDIR", "TMP_DIR"]
+        )
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
@@ -1390,6 +1392,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 fg="yellow",
             )
 
+        # validate existing analyses
+        with click.progressbar(
+            existing_analyses,
+            file=sys.stderr,
+            label=f"Validating tuples of the {len(existing_analyses)} existing analyses...\t\t",
+        ) as bar:
+            for i in bar:
+                try:
+                    self.validate_experiments(i["targets"], i["references"])
+                    created_analyses.append(i)
+                except (
+                    exceptions.ValidationError,
+                    AssertionError,
+                ) as error:  # pragma: no cover
+                    invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
+
+        # create new analyses and validate
         with click.progressbar(
             valid_tuples,
             file=sys.stderr,
@@ -1416,7 +1435,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 except (exceptions.ValidationError, AssertionError) as error:
                     invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
 
-        return existing_analyses + created_analyses, invalid_tuples
+        return created_analyses, invalid_tuples
 
     def get_existing_analyses(self, tuples):
         """
@@ -1711,14 +1730,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         if references:
             targets_set = list(
-                {v["sample"]["individual"]["pk"]:v for v in targets}.values()
+                {v["sample"]["individual"]["pk"]: v for v in targets}.values()
             )
             references_set = list(
-                {v["sample"]["individual"]["pk"]:v for v in references}.values()
+                {v["sample"]["individual"]["pk"]: v for v in references}.values()
             )
 
             assert len(targets_set) == 1, "One unique target individual is supported."
-            assert len(references_set) == 1, "One unique reference individual is supported."
+            assert (
+                len(references_set) == 1
+            ), "One unique reference individual is supported."
 
             tind = targets_set[0]["sample"]["individual"]
             rind = references_set[0]["sample"]["individual"]
@@ -1729,9 +1750,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     f"{tind['system_id']} and {rind['system_id']} "
                     "are of the same individual."
                 )
-            else: # application is designed for matched analyses
+            else:  # application is designed for matched analyses
                 assert tind["pk"] == rind["pk"], (
-                    "Same individual required: " 
+                    "Same individual required: "
                     f"{tind['system_id']} and {rind['system_id']} "
                     "are of different individuals."
                 )

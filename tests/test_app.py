@@ -28,6 +28,9 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
 
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
+    ASSEMBLY = "GRCh4000"
+    SPECIES = "HUMAN"
+
     cli_options = [
         options.TARGETS,
         options.ANALYSES,
@@ -38,15 +41,14 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     ]
 
     def validate_experiments(self, targets, refereces):
-        assert "raise validation error" not in targets.notes
+        assert not any("raise validation error" in target.notes for target in targets)
 
-    def get_command(**_):
+    def get_command(*_):
         return ""
 
 
 class MockApplication(AbstractApplication):
 
-    pass
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -741,10 +743,13 @@ def test_validate_same_platform():
 
 def test_get_experiments_from_default_cli_options(tmpdir):
     app = ExperimentsFromDefaulCLIApplication()
-    experiments = [
-        api.create_instance("experiments", **factories.ExperimentFactory())
-        for i in range(4)
-    ]
+
+    experiments = []
+    for i in range(4):
+        experiment_factory = factories.ExperimentFactory()
+        experiment_factory["sample"]["individual"]["species"] = "HUMAN"
+        experiments.append(api.create_instance("experiments", **experiment_factory))
+
     analysis = api.create_instance(
         "analyses",
         **{
@@ -757,38 +762,42 @@ def test_get_experiments_from_default_cli_options(tmpdir):
     pairs_file = tmpdir.join("pairs.txt")
     pairs_file.write(experiments[1].system_id + "\t" + experiments[0].system_id + "\n")
 
+    command = ExperimentsFromDefaulCLIApplication.as_cli_command()
+    runner = CliRunner()
+
+    args = [
+        "--pair",
+        experiments[0].system_id,
+        experiments[1].system_id,
+        "--pairs",
+        experiments[2].system_id,
+        experiments[3].system_id,
+        "--targets-filters",
+        "pk",
+        experiments[3].pk,
+        "--references-filters",
+        "pk",
+        experiments[2].pk,
+        "--analyses-filters",
+        "pk",
+        analysis.pk,
+        "--pairs-from-file",
+        str(pairs_file),
+    ]
+
     # get coverage for invalid experiments
     api.patch_instance(
         "experiments", experiments[0].system_id, notes="raise validation error"
     )
-
-    command = ExperimentsFromDefaulCLIApplication.as_cli_command()
-    runner = CliRunner()
-    result = runner.invoke(
-        command,
-        [
-            "--pair",
-            experiments[0].system_id,
-            experiments[1].system_id,
-            "--pairs",
-            experiments[2].system_id,
-            experiments[3].system_id,
-            "--targets-filters",
-            "pk",
-            experiments[3].pk,
-            "--references-filters",
-            "pk",
-            experiments[2].pk,
-            "--analyses-filters",
-            "pk",
-            analysis.pk,
-            "--pairs-from-file",
-            str(pairs_file),
-        ],
-        catch_exceptions=False,
-    )
+    result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "INVALID" in result.output
+    assert "RAN 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
+
+    # revalidate experiment on existing analysis
+    api.patch_instance("experiments", experiments[0].system_id, notes="")
+    result = runner.invoke(command, args, catch_exceptions=False)
+    assert experiments[0].system_id in result.output
+    assert "RAN 5 | SKIPPED 0 | INVALID 0" in result.output
 
     # just get coverage for get_job_name
     assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)
@@ -798,12 +807,18 @@ def test_validate_individuals():
     # Test matched analyis
     matched_application = AbstractApplication()
 
-    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}]
-    references = [{"system_id": 2, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}]
+    targets = [
+        {"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}
+    ]
+    references = [
+        {"system_id": 2, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}
+    ]
     matched_application.validate_individuals(targets, references)
 
     with pytest.raises(AssertionError) as error:
-        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+        targets = [
+            {"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}
+        ]
         matched_application.validate_individuals(targets, references)
     assert "Same individual required:" in str(error.value)
 
@@ -811,11 +826,17 @@ def test_validate_individuals():
     unmatched_application = AbstractApplication()
     unmatched_application.IS_UNMATCHED = True
 
-    targets = [{"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}]
-    references = [{"system_id": 2, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+    targets = [
+        {"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}
+    ]
+    references = [
+        {"system_id": 2, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}
+    ]
     unmatched_application.validate_individuals(targets, references)
 
     with pytest.raises(AssertionError) as error:
-        targets = [{"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}]
+        targets = [
+            {"system_id": 1, "sample": {"individual": {"pk": 2, "system_id": "ind2"}}}
+        ]
         unmatched_application.validate_individuals(targets, references)
     assert "Different individuals required:" in str(error.value)
