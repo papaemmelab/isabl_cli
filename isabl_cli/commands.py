@@ -93,7 +93,10 @@ def process_finished(filters):
 
         if i.status == "FINISHED" and tag not in {j.name for j in i.tags}:
             api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
-            api.patch_analysis_status(i, "SUCCEEDED")
+            try:
+                api.patch_analysis_status(i, "SUCCEEDED")
+            except Exception:  # pylint: disable=broad-except
+                pass
             api.patch_instance("analyses", i.pk, tags=i.tags)
 
 
