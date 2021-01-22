@@ -1400,9 +1400,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         ) as bar:
             for i in bar:
                 try:
-                    self.validate_experiments(i['targets'], i['references'])
+                    self.validate_experiments(i["targets"], i["references"])
                     created_analyses.append(i)
-                except (exceptions.ValidationError, AssertionError) as error:
+                except (
+                    exceptions.ValidationError,
+                    AssertionError,
+                ) as error:  # pragma: no cover
                     invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
 
         # create new analyses and validate
