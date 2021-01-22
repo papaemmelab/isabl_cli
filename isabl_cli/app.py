@@ -1390,6 +1390,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 fg="yellow",
             )
 
+        # validate existing analyses
+        with click.progressbar(
+            existing_analyses,
+            file=sys.stderr,
+            label=f"Validating tuples of the {len(existing_analyses)} existing analyses...\t\t",
+        ) as bar:
+            for i in bar:
+                try:
+                    self.validate_experiments(i['targets'], i['references'])
+                    created_analyses.append(i)
+                except (exceptions.ValidationError, AssertionError) as error:
+                    invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
+
+        # create new analyses and validate
         with click.progressbar(
             valid_tuples,
             file=sys.stderr,
@@ -1416,7 +1430,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 except (exceptions.ValidationError, AssertionError) as error:
                     invalid_tuples.append((i, exceptions.ValidationError(*error.args)))
 
-        return existing_analyses + created_analyses, invalid_tuples
+
+        return created_analyses, invalid_tuples
 
     def get_existing_analyses(self, tuples):
         """
@@ -1731,7 +1746,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 )
             else: # application is designed for matched analyses
                 assert tind["pk"] == rind["pk"], (
-                    "Same individual required: " 
+                    "Same individual required: "
                     f"{tind['system_id']} and {rind['system_id']} "
                     "are of different individuals."
                 )
