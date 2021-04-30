@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from getpass import getuser
 from glob import glob
+from hashlib import md5
 from os.path import basename
 from os.path import dirname
 from os.path import getsize
@@ -281,8 +282,24 @@ class BaseImporter:
 
     @staticmethod
     def copy(src, dst):
-        """Copy files from `src` to `dst`."""
+        """Copy files from `src` to `dst`. Checking data integrity"""
+        
+        def md5sum(filename, chunk_size=8192):
+            """Use md5 to hash file content by chunks."""
+            with open(filename, "rb") as f:
+                file_hash = md5()
+                chunk = f.read(chunk_size)
+                while chunk:
+                    file_hash.update(chunk)
+                    chunk = f.read(chunk_size)
+
+            return file_hash.hexdigest()
+        
+        src_hash = md5sum(src)
         shutil.copy(src, dst)
+        dst_hash =  md5sum(dst)
+        click.secho(f'{src_hash} {src}\n{dst_hash} {dst}.', fg="green")
+        assert src_hash == dst_hash, 'Copy failed. Checksums differ'
 
 
 class LocalReferenceDataImporter(BaseImporter):
