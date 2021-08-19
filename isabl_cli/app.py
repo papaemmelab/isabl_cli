@@ -125,12 +125,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         _command_log_key: {
             "frontend_type": "ansi",
             "description": "Analysis standard output.",
-            "verbose_name": "Standard Output",
+            "verbose_name": "Analysis Logs",
         },
         _command_err_key: {
             "frontend_type": "ansi",
             "description": "Analysis standard error.",
-            "verbose_name": "Standard Error",
+            "verbose_name": "Analysis Errors",
         },
     }
 
@@ -1756,4 +1756,3 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     f"{tind['system_id']} and {rind['system_id']} "
                     "are of different individuals."
                 )
-
