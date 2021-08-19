@@ -121,7 +121,7 @@ def submit_lsf_array(
 
             with open(join(root, "in.%s" % index), "w") as f:
                 # use random sleep to avoid parallel API hits
-                f.write(f"sleep {random.uniform(0, 10):.3} && bash {command}")
+                f.write(f"sleep {random.uniform(0, 10):.3} && unbuffer bash {command}")
 
             with open(join(root, "exit_cmd.%s" % index), "w") as f:
                 f.write(exit_command)

@@ -123,12 +123,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             "verbose_name": "Analysis Script",
         },
         _command_log_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Analysis standard output.",
             "verbose_name": "Standard Output",
         },
         _command_err_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Analysis standard error.",
             "verbose_name": "Standard Error",
         },
