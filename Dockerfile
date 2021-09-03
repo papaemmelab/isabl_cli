@@ -1,4 +1,4 @@
-FROM leukgen/docker-pcapcore:v0.1.1
+FROM papaemmelab/docker-pcapcore:v0.1.3
 
 # set mantainers
 LABEL maintainers="github.com/jsmedmar, github.com/juanesarango"
