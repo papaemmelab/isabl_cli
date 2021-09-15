@@ -12,6 +12,7 @@ from isabl_cli import api
 from isabl_cli import commands
 from isabl_cli import data
 from isabl_cli import factories
+from isabl_cli.settings import _DEFAULTS
 
 
 def test_trash_analysis_storage():
@@ -321,9 +322,26 @@ def test_local_data_import(tmpdir):
     assert path_2.exists()
 
 
-def test_get_dst():
-    importer = data.LocalDataImporter()
+def test_local_data_import_with_extra(tmpdir):
+    dirs = [tmpdir.strpath]
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(projects=[project])
+    experiment = api.create_instance("experiments", **experiment)
 
+    importer = data.LocalDataImporter()
+    _, summary = importer.import_data(directories=dirs, pk=experiment.pk, commit=True)
+
+    # test imports fastq
+    path = tmpdir.join(f"{experiment.system_id}.fkf")
+    path.write("foo")
+    _, summary = importer.import_data(
+        directories=dirs, pk__in=experiment.pk, commit=True
+    )
+    print(summary)
+    assert "samples matched: 1" in summary
+
+
+def test_get_dst():
     for i, j in [
         # sequencing
         ("sample.bam", "BAM"),
@@ -365,6 +383,20 @@ def test_get_dst():
                         data.raw_data_inspector(test.format(index) + fastq + gzipped)
                         == f"FASTQ_{fq_type}{index}"
                     )
+
+
+def test_extra_raw_data_formats():
+    # Add extra raw format + file validator
+    _DEFAULTS["EXTRA_RAW_DATA_FORMATS"] = [
+        (r"\.fkf(\.gz)?$", "FAKEFORMAT"),
+    ]
+    for i, j in [
+        ("sample.fkf", "FAKEFORMAT"),
+        ("sample.fkf.gz", "FAKEFORMAT"),
+        ("sample.fkf.gz", "FAKEFORMAT"),
+    ]:
+        assert data.raw_data_inspector(i) == j
+        assert not data.raw_data_inspector(i + "not raw data")
 
 
 def test_yaml_data_import(tmpdir):
