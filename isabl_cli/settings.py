@@ -185,8 +185,10 @@ class BaseSettings:
 
 
 class SystemSettings(BaseSettings):
-
-    client_id = os.environ.get("ISABL_CLIENT_ID")
+    @cached_property
+    def client_id(self):
+        """Return current session client id."""
+        return os.environ.get("ISABL_CLIENT_ID")
 
     @cached_property
     def is_admin_user(self):

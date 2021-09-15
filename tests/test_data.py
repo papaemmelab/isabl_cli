@@ -1,5 +1,4 @@
 import os
-import re
 import shutil
 import uuid
 
@@ -12,7 +11,6 @@ from isabl_cli import api
 from isabl_cli import commands
 from isabl_cli import data
 from isabl_cli import factories
-from isabl_cli.settings import _DEFAULTS
 
 
 def test_trash_analysis_storage():
@@ -385,11 +383,8 @@ def test_get_dst():
                     )
 
 
-def test_extra_raw_data_formats():
-    # Add extra raw format + file validator
-    _DEFAULTS["EXTRA_RAW_DATA_FORMATS"] = [
-        (r"\.fkf(\.gz)?$", "FAKEFORMAT"),
-    ]
+def test_extra_raw_data_formats(use_test_client):
+    assert use_test_client == os.environ["ISABL_CLIENT_ID"]
     for i, j in [
         ("sample.fkf", "FAKEFORMAT"),
         ("sample.fkf.gz", "FAKEFORMAT"),
