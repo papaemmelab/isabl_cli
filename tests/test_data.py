@@ -333,8 +333,8 @@ def test_local_data_import_with_extra(tmpdir, use_test_client):
     importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=dirs, pk=experiment.pk, commit=True)
 
-    # test imports fastq
-    path = tmpdir.join(f"{experiment.system_id}.fkf")
+    # test imports files with the TEST_FORMAT .tf
+    path = tmpdir.join(f"{experiment.system_id}.tf")
     path.write("foo")
     _, summary = importer.import_data(
         directories=dirs, pk__in=experiment.pk, commit=True
@@ -393,9 +393,9 @@ def test_extra_raw_data_formats(use_test_client):
     ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
 
     for i, j in [
-        ("sample.fkf", "FAKEFORMAT"),
-        ("sample.fkf.gz", "FAKEFORMAT"),
-        ("sample.fkf.gz", "FAKEFORMAT"),
+        ("sample.tf", "TEST_FORMAT"),
+        ("sample.tf.gz", "TEST_FORMAT"),
+        ("sample.tf.gz", "TEST_FORMAT"),
     ]:
         assert data.raw_data_inspector(i) == j
         assert not data.raw_data_inspector(i + "not raw data")

@@ -10,13 +10,13 @@ def set_data_dir(tmpdir_factory):
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = tmpdir_factory.mktemp("data").strpath
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def use_test_client():
     """Configure cli and backend clients with extra settings."""
     client_cli_id = "test-cli-client"
     client_api_id = "default-backend-settings"
-    new_settings_cli = {"EXTRA_RAW_DATA_FORMATS": [(r"\.fkf(\.gz)?$", "FAKEFORMAT")]}
-    new_settings_api = {"EXTRA_RAW_DATA_FORMATS": [("FAKEFORMAT", "FAKEFORMAT")]}
+    new_settings_cli = {"EXTRA_RAW_DATA_FORMATS": [(r"\.tf(\.gz)?$", "TEST_FORMAT")]}
+    new_settings_api = {"EXTRA_RAW_DATA_FORMATS": [("TEST_FORMAT", "TEST_FORMAT")]}
 
     # Get or create the test cli client and patch its settings
     client_cli = create_instance("clients", slug=client_cli_id)
