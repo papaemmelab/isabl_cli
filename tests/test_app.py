@@ -427,11 +427,14 @@ def test_engine(tmpdir):
     assert f"{experiments[0].system_id} has no registered bedfile" in str(error.value)
 
     # test that get results work as expected
-    assert application.get_results(
-        result_key="analysis_result_key",
-        experiment=target,
-        application_key=application.primary_key,
-    ) == [(1, ran_analyses[1][0].pk)]
+    assert (
+        application.get_results(
+            result_key="analysis_result_key",
+            experiment=target,
+            application_key=application.primary_key,
+        )
+        == [(1, ran_analyses[1][0].pk)]
+    )
 
     # check assertion error is raised when an invalid result is searched for
     with pytest.raises(AssertionError) as error:
