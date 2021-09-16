@@ -645,6 +645,36 @@ def patch_analysis_status(analysis, status):
     return patch_instance("analyses", analysis["pk"], **data)
 
 
+def send_error_email(recipients, subject, message):
+    """
+    Sends an error message to recipients.
+
+    Arguments:
+        recipients (list): email recipients.
+        subject (str): email subject.
+        message (str): error message.
+
+    Returns:
+        requests.models.Response: api request response.
+    """
+    html_content = """
+        <h2 style="color: red;">Isabl Error Message</h2>
+    """
+    html_content += f"""
+        <h4>{subject}</h4>
+        <p>{message}</p>
+    """
+    kwargs = {
+        "data": {
+            "recipients": recipients,
+            "subject": subject,
+            "content": message,
+            "html_content": html_content,
+        }
+    }
+    return api_request("post", url=f"/send_email", **kwargs)
+
+
 def _set_analysis_permissions(analysis):
     protect_results = analysis.status == "SUCCEEDED"
     unique_analysis_per_individual = False

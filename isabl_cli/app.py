@@ -1757,3 +1757,21 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     "are of different individuals."
                 )
 
+    # -------------------------
+    # NOTIFICATION UTILS
+    # -------------------------
+
+    def notify_project_analyst(self, analysis, subject, message):
+        """
+        Send email notification to analysts of projects associated with specified analysis.
+        """
+        projects = []
+        for target in analysis.targets:
+            projects.extend(target.projects)
+        analysts = set([project.analyst for project in projects])
+        analysts = ",".join(analysts)
+        kwargs = {
+            "data": {"recipients": analysts, "subject": subject, "content": message}
+        }
+
+        return api.api_request("post", url=f"/send_email", **kwargs)
