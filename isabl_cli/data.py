@@ -1046,7 +1046,7 @@ class LocalDataImporter(BaseImporter):
 
             if files_data:
                 with open(files_data) as f:
-                    files_data = yaml.load(f.read())
+                    files_data = yaml.load(f.read(), Loader=yaml.FullLoader)
             else:
                 files_data = {}
 
