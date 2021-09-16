@@ -21,16 +21,6 @@ script:
 after_success:
   - codecov
 
-# deploy:
-#   provider: pypi
-#   distributions: sdist bdist_wheel
-#   user: papaemmelab
-#   on:
-#     tags: true
-#     repo: papaemmelab/isabl_cli
-#     python: 3.6
-#     branch: master
-
 env:
   global:
     - secure: Hk3Wl6Q7C3TCqVb3VcNpr6iedDM9o6LDaqX4z8E6hejWX5lYJlJgfvsKT5t39UT2bfUrnV3tCfeDy2JJHg4qaqePLcYMDm6jT5Ky5CElau4IXlGsaUlWsk+sNZxQJqZo3ojbUGvxpWJJ4Ohg9ILcGrLti6RCZNGJkFxZfdhPL9Ey/zZkP66eYm/Jek1IV4BMCmTEQrEWrVQh4V8sUSTnyFg0eaBvP5lidllb0D1+10b4D6g79N9plQoZcBHK2SBPmUoAjWwswfqndZfP4nA8jxlIOIol9jHCV451cuuRLyL/bOXKjPJ4Y+2kIc0poOHX2pM0sL2A8f7u+IuNn+z46FIoOmO4VJhuSLJCZKoDW3mnvNHSZZKygKL1t6vZMKoKLv/ZPxf2RCtTPC1E0S1Sxor3XU9xzx7vnIjkKprXCiZoYcNvYnejIPG95kNZUKW9LKSTPnt49htLLsN22AgZCxXavr5rS1YYM1qaaqDd/jsMT0wPnD3juCo2fTqe4SyQibt7kxT8JfdEly41gHaplSuVMzH9YKUxYG6jII709dwqD/GgvHnRNimM8g6Q47tTCRp/L0kMqYvFMDcLDJtQzQCm2UVPTn9UGsTq6XyUdj/wz+olvDGkN9mxSKHol94AKZjmlXqUUOr9d5C6IcAj9C/7Cyp/F775J60tsdZUyOM=

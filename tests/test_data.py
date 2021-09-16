@@ -321,7 +321,9 @@ def test_local_data_import(tmpdir):
 
 
 def test_local_data_import_with_extra(tmpdir, use_test_client):
-    assert use_test_client == os.environ["ISABL_CLIENT_ID"]
+    assert use_test_client == os.environ.get(
+        "ISABL_CLIENT_ID"
+    ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
 
     dirs = [tmpdir.strpath]
     project = api.create_instance("projects", **factories.ProjectFactory())
@@ -386,7 +388,10 @@ def test_get_dst():
 
 
 def test_extra_raw_data_formats(use_test_client):
-    assert use_test_client == os.environ["ISABL_CLIENT_ID"]
+    assert use_test_client == os.environ.get(
+        "ISABL_CLIENT_ID"
+    ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
+
     for i, j in [
         ("sample.fkf", "FAKEFORMAT"),
         ("sample.fkf.gz", "FAKEFORMAT"),

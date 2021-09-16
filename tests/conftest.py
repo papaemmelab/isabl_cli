@@ -10,17 +10,8 @@ def set_data_dir(tmpdir_factory):
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = tmpdir_factory.mktemp("data").strpath
 
 
-@pytest.fixture(scope="session", autouse=True)
-def monkeypatch_session():
-    from _pytest.monkeypatch import MonkeyPatch
-
-    m = MonkeyPatch()
-    yield m
-    m.undo()
-
-
-@pytest.fixture
-def use_test_client(monkeypatch_session):
+@pytest.fixture(scope="session")
+def use_test_client():
     """Configure cli and backend clients with extra settings."""
     client_cli_id = "test-cli-client"
     client_api_id = "default-backend-settings"
@@ -30,7 +21,6 @@ def use_test_client(monkeypatch_session):
     # Get or create the test cli client and patch its settings
     client_cli = create_instance("clients", slug=client_cli_id)
     client_cli = patch_instance("clients", client_cli.pk, settings=new_settings_cli)
-    monkeypatch_session.setenv("ISABL_CLIENT_ID", client_cli_id)
 
     # Get or create the test backend client and patch its settings
     client_api = get_instance("clients", client_api_id)
