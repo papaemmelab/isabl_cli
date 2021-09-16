@@ -840,3 +840,23 @@ def test_validate_individuals():
         ]
         unmatched_application.validate_individuals(targets, references)
     assert "Different individuals required:" in str(error.value)
+
+
+def test_notify_project_analyst():
+    # Test notification for project analysts
+    application = MockApplication()
+
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    project["analyst"]
+    experiments = [factories.ExperimentFactory(projects=[project]) for i in range(4)]
+    experiments = [api.create_instance("experiments", **i) for i in experiments]
+    analysis = api.create_instance(
+        "analyses",
+        **{
+            **factories.AnalysisFactory(),
+            "targets": experiments,
+            "references": experiments,
+        },
+    )
+
+    assert application.notify_project_analyst(analysis, "test", "test").ok
