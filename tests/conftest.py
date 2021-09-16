@@ -1,6 +1,6 @@
 import pytest
 
-from isabl_cli.api import create_instance, patch_instance
+from isabl_cli.api import create_instance, patch_instance, get_instance
 from isabl_cli.settings import _DEFAULTS
 
 
@@ -12,16 +12,19 @@ def set_data_dir(tmpdir_factory):
 
 @pytest.fixture
 def use_test_client(monkeypatch):
-    """Create client settings for testing."""
-    client_id = "test-client"
+    """Configure cli and backend clients with extra settings."""
+    client_cli_id = "test-cli-client"
+    client_api_id = "default-backend-settings"
+    new_settings_cli = {"EXTRA_RAW_DATA_FORMATS": [(r"\.fkf(\.gz)?$", "FAKEFORMAT")]}
+    new_settings_api = {"EXTRA_RAW_DATA_FORMATS": [("FAKEFORMAT", "FAKEFORMAT")]}
 
-    # Get or create the test client and patch its settings
-    client = create_instance("clients", slug=client_id)
-    client = patch_instance(
-        "clients",
-        client.pk,
-        settings={"EXTRA_RAW_DATA_FORMATS": [(r"\.fkf(\.gz)?$", "FAKEFORMAT")]},
-    )
-    # Set the test environment variable
-    monkeypatch.setenv("ISABL_CLIENT_ID", client_id)
-    return client_id
+    # Get or create the test cli client and patch its settings
+    client_cli = create_instance("clients", slug=client_cli_id)
+    client_cli = patch_instance("clients", client_cli.pk, settings=new_settings_cli)
+    monkeypatch.setenv("ISABL_CLIENT_ID", client_cli_id)
+
+    # Get or create the test backend client and patch its settings
+    client_api = get_instance("clients", client_api_id)
+    client_api = patch_instance("clients", client_api.pk, settings=new_settings_api)
+
+    return client_cli_id
