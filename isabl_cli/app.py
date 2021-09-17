@@ -1769,7 +1769,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for target in analysis.targets:
             projects.extend(target.projects)
         analysts = set([project.analyst for project in projects])
-        analysts = ",".join(analysts)
         kwargs = {
             "data": {"recipients": analysts, "subject": subject, "content": message}
         }
