@@ -657,19 +657,12 @@ def send_error_email(recipients, subject, message):
     Returns:
         requests.models.Response: api request response.
     """
-    html_content = """
-        <h2 style="color: red;">Isabl Error Message</h2>
-    """
-    html_content += f"""
-        <h4>{subject}</h4>
-        <p>{message}</p>
-    """
     kwargs = {
         "data": {
             "recipients": recipients,
             "subject": subject,
             "content": message,
-            "html_content": html_content,
+            "html_template": "error",
         }
     }
     return api_request("post", url=f"/send_email", **kwargs)
