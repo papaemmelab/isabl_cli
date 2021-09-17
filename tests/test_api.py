@@ -120,4 +120,5 @@ def test_get_instances():
 
 def test_send_error_email():
     # Test notification for errors
-    assert api.send_error_email("test@test.com", "test", "test").ok
+    assert api.send_error_email(["test@test.com"], "test", "test").ok
+    assert api.send_error_email(["test1@test.com","test2@test.com"], "test", "test").ok
