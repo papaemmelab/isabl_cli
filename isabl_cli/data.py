@@ -46,7 +46,7 @@ def raw_data_inspector(path):
         (r"\.html$", "HTML"),
         (r"\.md5$", "MD5"),
         (r"\.y[a]?ml$", "YAML"),
-    ]:
+    ] + system_settings.EXTRA_RAW_DATA_FORMATS:
         if re.search(i, path):
             return j
 
@@ -908,7 +908,7 @@ class LocalDataImporter(BaseImporter):
 
         for src, dst in src_dst:
             if copy:
-                click.secho(f'\nCopying raw data files...', fg="blue")
+                click.secho(f"\nCopying raw data files...", fg="blue")
                 self.copy(src, dst)
             elif symlink:
                 self.symlink(src, dst)
@@ -1046,7 +1046,7 @@ class LocalDataImporter(BaseImporter):
 
             if files_data:
                 with open(files_data) as f:
-                    files_data = yaml.load(f.read())
+                    files_data = yaml.load(f.read(), Loader=yaml.FullLoader)
             else:
                 files_data = {}
 

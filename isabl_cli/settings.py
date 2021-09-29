@@ -63,6 +63,7 @@ _DEFAULTS = {
         "isabl_cli.commands.run_web_signals",
         "isabl_cli.commands.run_signals",
     ],
+    "EXTRA_RAW_DATA_FORMATS": [],
 }
 
 _IMPORT_STRINGS = {

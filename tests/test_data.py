@@ -1,5 +1,4 @@
 import os
-import re
 import shutil
 import uuid
 
@@ -321,9 +320,30 @@ def test_local_data_import(tmpdir):
     assert path_2.exists()
 
 
-def test_get_dst():
-    importer = data.LocalDataImporter()
+def test_local_data_import_with_extra(tmpdir, use_test_client):
+    assert use_test_client == os.environ.get(
+        "ISABL_CLIENT_ID"
+    ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
 
+    dirs = [tmpdir.strpath]
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(projects=[project])
+    experiment = api.create_instance("experiments", **experiment)
+
+    importer = data.LocalDataImporter()
+    _, summary = importer.import_data(directories=dirs, pk=experiment.pk, commit=True)
+
+    # test imports files with the TEST_FORMAT .tf
+    path = tmpdir.join(f"{experiment.system_id}.tf")
+    path.write("foo")
+    _, summary = importer.import_data(
+        directories=dirs, pk__in=experiment.pk, commit=True
+    )
+    print(summary)
+    assert "samples matched: 1" in summary
+
+
+def test_get_dst():
     for i, j in [
         # sequencing
         ("sample.bam", "BAM"),
@@ -365,6 +385,20 @@ def test_get_dst():
                         data.raw_data_inspector(test.format(index) + fastq + gzipped)
                         == f"FASTQ_{fq_type}{index}"
                     )
+
+
+def test_extra_raw_data_formats(use_test_client):
+    assert use_test_client == os.environ.get(
+        "ISABL_CLIENT_ID"
+    ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
+
+    for i, j in [
+        ("sample.tf", "TEST_FORMAT"),
+        ("sample.tf.gz", "TEST_FORMAT"),
+        ("sample.tf.gz", "TEST_FORMAT"),
+    ]:
+        assert data.raw_data_inspector(i) == j
+        assert not data.raw_data_inspector(i + "not raw data")
 
 
 def test_yaml_data_import(tmpdir):
