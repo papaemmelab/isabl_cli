@@ -53,7 +53,7 @@ def raw_data_inspector(path):
         if re.search(i, path):
             return j
 
-    for i in [1, 2]:
+    for i in [1, 2, 3]:
         for pattern, fq_type in (
             (r"(([_.]R{0}[_.].+)|([_.]R{0}\.)|(_{0}\.))f(ast)?q(\.gz)?$", "R"),
             # fastq files from 10X specifically files consist of triples {R1, R2, I1} with,
