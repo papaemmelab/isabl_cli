@@ -284,3 +284,26 @@ def test_run_web_signals():
         result_key="analysis_result_key",
         application_name=str(MockApplication),
     )
+
+
+def test_run_failed_analyses(tmpdir):
+    runner = CliRunner()
+    application = MockApplication().application
+    analysis = api.create_instance(
+        "analyses",
+        **factories.AnalysisFactory(
+            targets=[factories.ExperimentFactory()],
+            application=application,
+            status="FAILED",
+        ),
+    )
+
+    args = ["-fi", "pk", analysis.pk]
+    result = runner.invoke(commands.run_failed_analyses, args, catch_exceptions=False)
+    assert str(analysis.pk) in result.output
+    assert "FAILED" in result.output
+
+    args = ["-fi", "pk", analysis.pk, "--force"]
+    result = runner.invoke(commands.run_failed_analyses, args, catch_exceptions=False)
+    assert str(analysis.pk) in result.output
+    assert "SUCCEEDED" in result.output
