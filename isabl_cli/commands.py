@@ -4,6 +4,7 @@ from collections import OrderedDict
 from glob import glob
 from os.path import join
 from requests.exceptions import HTTPError
+from subprocess import CalledProcessError
 import json
 import os
 import shutil
@@ -90,11 +91,20 @@ def process_finished(filters):
     # refetch analysis to avoid race conditions
     for i in api.get_instances("analyses", verbose=True, **filters):
         i = api.Analysis(i.pk)
-
+        
         if i.status == "FINISHED" and tag not in {j.name for j in i.tags}:
             api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
-            api.patch_analysis_status(i, "SUCCEEDED")
+
+            try:
+                api.patch_analysis_status(i, "SUCCEEDED")
+                patch_error = None
+            except (PermissionError, AssertionError, CalledProcessError) as error:
+                patch_error = error
+
             api.patch_instance("analyses", i.pk, tags=i.tags)
+
+            if patch_error:
+                raise Exception(patch_error)
 
 
 @click.command()
