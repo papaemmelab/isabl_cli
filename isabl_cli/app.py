@@ -944,12 +944,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
 
-                    # Store run_args in analysis data
-                    api.patch_instance(
-                        "analyses",
-                        i.pk,
-                        data={**i.data, "run_args": self.settings.run_args},
-                    )
+                    # # Store run_args in analysis data
+                    # api.patch_instance(
+                    #     "analyses",
+                    #     i.pk,
+                    #     data={**i.data, "run_args": self.settings.run_args},
+                    # )
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
