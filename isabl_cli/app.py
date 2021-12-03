@@ -94,6 +94,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # unique analysis per individual don't support individual level auto-merge.
     unique_analysis_per_individual = False
 
+    # Same for project, it is possible to create applications that are unique at the
+    # project level. For example, a QC project report that runs accross all project's
+    # samples batch. Applications that require a unique analysis per project don't
+    # support project level auto-merge.
+    unique_analysis_per_project = False
+
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
@@ -437,6 +443,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Arguments:
             project (dict): project instance.
         """
+        assert not self.unique_analysis_per_project, (
+            "Applications that require a unique analysis per project "
+            "don't support individual level auto-merge."
+        )
         self._run_analyses_merge(
             project,
             api.get_instances(
@@ -457,6 +467,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Returns:
             dict: analysis instance.
         """
+        assert not self.unique_analysis_per_project, (
+            "Applications that require a unique analysis per project "
+            "don't support project level auto-merge."
+        )
         return api.create_instance(
             endpoint="analyses",
             project_level_analysis=project,
