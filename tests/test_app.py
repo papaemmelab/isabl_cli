@@ -175,6 +175,42 @@ class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
     application_protect_results = False
 
 
+class UniquePerProjectApplication(AbstractApplication):
+
+    NAME = "UNIQUE_PER_PROJECT"
+    VERSION = "STILL_TESTING"
+    ASSEMBLY = "GRCh4000"
+    SPECIES = "HUMAN"
+
+    cli_options = [options.TARGETS]
+    unique_analysis_per_project = True
+    application_results = {
+        "analysis_result_key": {
+            "frontend_type": "string",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
+
+    def validate_experiments(self, targets, references):
+        return True
+
+    def get_experiments_from_cli_options(self, targets):
+        return [([i], []) for i in targets]
+
+    def get_command(self, analysis, inputs, settings):
+        return f"echo {analysis.project_level_analysis.pk}"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": analysis.project_level_analysis.pk}
+
+
+class UniquePerProjectProtectResultsFalse(UniquePerProjectApplication):
+
+    NAME = "UNIQUE_PER_PROJECT_NO_PROTECT"
+    application_protect_results = False
+
+
 def submit_merge(instance, application, command):
     assert "merge-individual-analyses" in command
     assert isinstance(application, MockApplication)
@@ -376,6 +412,59 @@ def test_unique_analysis_per_individual_app(tmpdir):
     assert experiments[0].system_id in result.output
 
 
+def test_unique_analysis_per_project_app(tmpdir):
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiments = [
+        factories.ExperimentFactory(
+            identifier=str(i), sample=sample, projects=[project]
+        )
+        for i in range(4)
+    ]
+
+    experiments = [api.create_instance("experiments", **i) for i in experiments]
+    tuples = [(experiments, [])]
+    application = UniquePerProjectApplication()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 4
+    assert ran_analyses[0][0]["results"].analysis_result_key == project.pk
+
+    application = UniquePerProjectProtectResultsFalse()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 4
+
+    # test application_protect_results false
+    tuples = [(experiments[:2], [])]
+    application = UniquePerProjectProtectResultsFalse()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 2
+
+    # test application_protect_results reduce add more samples - dont remove this test
+    tuples = [(experiments, [])]
+    application = UniquePerProjectProtectResultsFalse()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    assert len(ran_analyses) == 1
+    assert "analysis_result_key" in ran_analyses[0][0]["results"]
+    assert len(ran_analyses[0][0].targets) == 4
+
+    runner = CliRunner()
+    command = UniquePerProjectApplication.as_cli_command()
+    result = runner.invoke(
+        command, ["-fi", "system_id", experiments[0].system_id], catch_exceptions=False
+    )
+    assert experiments[0].system_id in result.output
+
+
 def test_engine(tmpdir):
     _DEFAULTS["DEFAULT_LINUX_GROUP"] = "not_a_group"
 
@@ -427,14 +516,11 @@ def test_engine(tmpdir):
     assert f"{experiments[0].system_id} has no registered bedfile" in str(error.value)
 
     # test that get results work as expected
-    assert (
-        application.get_results(
-            result_key="analysis_result_key",
-            experiment=target,
-            application_key=application.primary_key,
-        )
-        == [(1, ran_analyses[1][0].pk)]
-    )
+    assert application.get_results(
+        result_key="analysis_result_key",
+        experiment=target,
+        application_key=application.primary_key,
+    ) == [(1, ran_analyses[1][0].pk)]
 
     # check assertion error is raised when an invalid result is searched for
     with pytest.raises(AssertionError) as error:
