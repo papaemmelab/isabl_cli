@@ -1768,9 +1768,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         projects = []
         for target in analysis.targets:
             projects.extend(target.projects)
-        analysts = set([project.analyst for project in projects])
+        analysts = set([project.analyst for project in projects if project.analyst])
+        if not analysts:
+            click.secho(
+                "Skipping notification as projects have no registered analysts",
+                fg="red"
+            )
+            return
         kwargs = {
             "data": {"recipients": analysts, "subject": subject, "content": message}
         }
-
         return api.api_request("post", url=f"/send_email", **kwargs)
