@@ -736,9 +736,9 @@ class LocalDataImporter(BaseImporter):
                     for root, _, files in bar:
                         if not root.startswith(data_storage_dir):
                             for i in files:
-                                if len(patterns) > 500:  # pragma: no cover
+                                if len(patterns) > 800:  # pragma: no cover
                                     click.echo(
-                                        f"Matching {i} against "
+                                        f"\nMatching {i} against "
                                         f"{len(patterns)} experiments..."
                                     )
 
