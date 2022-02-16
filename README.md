@@ -1,3 +1,5 @@
+-- **_Terms of Use: Academic Research_** --
+
 # Isabl CLI
 
 [![travis badge][travis_badge]][travis_base]
