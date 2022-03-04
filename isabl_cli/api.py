@@ -332,7 +332,7 @@ def process_api_filters(**filters):
             if key == "fields" and "pk" not in value:  # pk is required
                 value = ",".join(value.split(",") + ["pk"])
             filters_dict[key] = value
-        elif isinstance(value, collections.Iterable):
+        elif isinstance(value, collections.abc.Iterable):
             is_in = key.endswith("__in") or key.endswith("__in!")
             value = list(map(str, value))
             filters_dict[key] = [",".join(value)] if is_in else value
