@@ -21,6 +21,7 @@ cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker-compose build && d
 
 # give some time to API to start and test Isabl CLI
 echo "Giving 30 seconds to API to get started..."
+export ISABL_CLIENT_ID=test-cli-client 
 sleep 30 && cd $CLI_DIR && pytest -vs tests/ --cov=isabl_cli || (
    # print django logs if tests fail
    cd $API_DIR && docker-compose logs django && exit 1
