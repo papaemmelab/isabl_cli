@@ -88,6 +88,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # to NotImplemented is considered required and must be resolved at get_dependencies
     application_inputs = dict()
 
+    dependencies_results = []
+
     # It is possible to create applications that are unique at the individual level.
     # A good example of a unique per individual application could be a patient centric
     # report that aggregates results across all samples. Applications that require a
@@ -118,7 +120,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     _command_err_key = "command_err"
     _base_results = {
         _command_script_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Script used to execute the analysis.",
             "verbose_name": "Analysis Script",
         },
@@ -128,7 +130,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             "verbose_name": "Standard Output",
         },
         _command_err_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Analysis standard error.",
             "verbose_name": "Standard Error",
         },
@@ -1064,7 +1066,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def _get_dependencies(self, targets, references):
         missing = []
-        analyses, inputs = self.get_dependencies(targets, references, self.settings)
+
+        if self.dependencies_results:
+            analyses, inputs = self._get_dependencies_results(targets, references)
+        else:
+            analyses, inputs = self.get_dependencies(targets, references, self.settings)
 
         for i, j in self.application_inputs.items():  # pragma: no cover
             if i not in inputs:
@@ -1078,6 +1084,49 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             raise exceptions.ConfigurationError(
                 f"Required inputs missing from `get_dependencies`: {missing}"
             )
+
+        return analyses, inputs
+
+    def _get_dependencies_results(self, targets, references):
+        """
+        Get dependencies' results from a defined application version.
+
+        It's called when `self.dependencies_results` is an array containing an object:
+            {
+                result (str): Result key `Application.results.result_key`.
+                app (obj): `Application` instance.
+                app_name (str): `Application.name`.
+                app_version (str): `Application.version`. If not defined, use
+                    any available. Use `any` if you want to use the latest available.
+                linked (bool): if False, the analysis is not linked as a dependencie of
+                    the analysis. As adding new dependencies to an analysis forces isabl
+                    to not recognize existing ones (Default: True).
+            }
+        """
+        inputs = {}
+        analyses = []
+        for dependency in self.dependencies_results:
+            args = {
+                "result_key": dependency["result"],
+                "targets": targets,
+                "references": references,
+            }
+            # Match app by name, and optionally by version
+            if dependency.get("app_name"):
+                args["application_name"] = dependency.get("app_name")
+                if "version" in dependency:
+                    args["application_version"] = dependency.get("app_version")
+            else:
+                # Match app by primary key
+                args["application_key"] = dependency.get("app").primary_key
+                args["application_name"] = dependency.get("app").NAME
+
+            input_name = dependency.get("result")
+            inputs[input_name], key = self.get_result(targets[0], **args)
+
+            if not "linked" in dependency["linked"] or dependency["linked"]:
+                # Avoid linking the analysis as dependency to avoid creating new runs.
+                analyses.append(key)
 
         return analyses, inputs
 
@@ -1772,7 +1821,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not analysts:
             click.secho(
                 "Skipping notification as projects have no registered analysts",
-                fg="red"
+                fg="red",
             )
             return
         kwargs = {

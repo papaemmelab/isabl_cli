@@ -25,8 +25,10 @@ def makedirs(path, exist_ok=True, mode=0o777):
 
 def get_results(
     experiment,
-    application_key,
     result_key,
+    application_key=None,
+    application_name=None,
+    application_version=None,
     targets=None,
     references=None,
     analyses=None,
@@ -36,14 +38,17 @@ def get_results(
     Match results from a experiment object.
 
     If targets, references or analyses are provided the analysis result must
-    match these list of samples and dependencies.
+    match these list of samples and dependencies. Match can be done by app pk, by app
+    name, or by app name and cversion.
 
     Pass `result_key='storage_url'` to get the output directory.
 
     Arguments:
         experiment (dict): experiment object for which result will be retrieved.
-        application_key (int): key of the application that generated the result.
         result_key (dict): name of the result.
+        application_key (int): key of the application that generated the result.
+        application_name (str): name of the application that generated the result.
+        application_version (str): version of the application that generated the result.
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
@@ -57,37 +62,58 @@ def get_results(
     references = {i.pk for i in references or []}
     analyses = {i.pk for i in analyses or []}
 
+    # Filter candidates by same pk or name and/ version
+    experiment_results = []
     for i in experiment.results:
-        if i.application.pk == application_key:
-            if targets and {j.pk for j in i.targets}.difference(
-                targets
-            ):  # pragma: no cover
-                continue
+        if application_key:
+            if i.application.pk == application_key:
+                experiment_results.append(i)
+        elif application_name:
+            if application_version:
+                if (
+                    i.application.name == application_name
+                    and i.application.version == application_version
+                ):
+                    experiment_results.append(i)
+            else:
+                if i.application.name == application_name:
+                    experiment_results.append(i)
 
-            if references and {j.pk for j in i.references}.difference(
-                references
-            ):  # pragma: no cover
-                continue
+    # Filter candidates by same targets/references/analyses
+    for i in experiment_results:
+        if targets and {j.pk for j in i.targets}.difference(
+            targets
+        ):  # pragma: no cover
+            continue
 
-            if analyses and not analyses.issubset(
-                {j.pk for j in i.analyses}
-            ):  # pragma: no cover
-                continue
+        if references and {j.pk for j in i.references}.difference(
+            references
+        ):  # pragma: no cover
+            continue
 
-            results_dict = i if result_key == "storage_url" else i.results
-            result = results_dict.get(result_key)
-            results.append((result, i.pk))
+        if analyses and not analyses.issubset(
+            {j.pk for j in i.analyses}
+        ):  # pragma: no cover
+            continue
 
-            assert result_key in results_dict, (
-                f"Result '{result_key}' not found for analysis {i.pk}"
-                f"({i.application.name} {i.application.version}) "
-                f"with status: {i.status}"
-            )
+        results_dict = i if result_key == "storage_url" else i.results
+        result = results_dict.get(result_key)
+        results.append((result, i.pk))
 
-            assert i.status == status if status else True, (
-                f"Expected status '{status}' for result '{result_key}' did not match: "
-                f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
-            )
+        assert result_key in results_dict, (
+            f"Result '{result_key}' not found for analysis {i.pk}"
+            f"({i.application.name} {i.application.version}) "
+            f"with status: {i.status}"
+        )
+
+        assert i.status == status if status else True, (
+            f"Expected status '{status}' for result '{result_key}' did not match: "
+            f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
+        )
+
+    # If more than 1 result and version is `any``, use latest.
+    if len(results) > 2 and application_version == "any":
+        results = sorted(results, key=lambda x: x[1], reverse=True)[:1]
 
     return results
 
