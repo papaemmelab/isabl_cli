@@ -1793,7 +1793,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             tind = targets_set[0]["sample"]["individual"]
             rind = references_set[0]["sample"]["individual"]
 
-            if hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED:
+            if (
+                hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED
+            ):  # pylint: disable=no-member
                 assert tind["pk"] != rind["pk"], (
                     "Different individuals required: "
                     f"{tind['system_id']} and {rind['system_id']} "
