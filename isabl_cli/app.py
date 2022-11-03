@@ -1066,7 +1066,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def _get_dependencies(self, targets, references):
         missing = []
-
         if self.dependencies_results:
             analyses, inputs = self._get_dependencies_results(targets, references)
         else:
@@ -1094,6 +1093,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         It's called when `self.dependencies_results` is an array containing an object:
             {
                 result (str): Result key `Application.results.result_key`.
+                name (str): Name the result will have in the inputs objects.
                 app (obj): `Application` instance.
                 app_name (str): `Application.name`.
                 app_version (str): `Application.version`. If not defined, use
@@ -1106,25 +1106,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         inputs = {}
         analyses = []
         for dependency in self.dependencies_results:
-            args = {
+            result_args = {
                 "result_key": dependency["result"],
                 "targets": targets,
                 "references": references,
             }
             # Match app by name, and optionally by version
             if dependency.get("app_name"):
-                args["application_name"] = dependency.get("app_name")
+                result_args["application_name"] = dependency.get("app_name")
                 if "version" in dependency:
-                    args["application_version"] = dependency.get("app_version")
+                    result_args["application_version"] = dependency.get("app_version")
             else:
                 # Match app by primary key
-                args["application_key"] = dependency.get("app").primary_key
-                args["application_name"] = dependency.get("app").NAME
+                result_args["application_key"] = dependency.get("app").primary_key
+                result_args["application_name"] = dependency.get("app").NAME
 
-            input_name = dependency.get("result")
-            inputs[input_name], key = self.get_result(targets[0], **args)
+            input_name = dependency.get("name")
+            inputs[input_name], key = self.get_result(targets[0], **result_args)
 
-            if not "linked" in dependency["linked"] or dependency["linked"]:
+            if not "linked" in dependency or dependency["linked"]:
                 # Avoid linking the analysis as dependency to avoid creating new runs.
                 analyses.append(key)
 
