@@ -112,7 +112,7 @@ def get_results(
         )
 
     # If more than 1 result and version is `any`, use latest.
-    if len(results) > 2 and application_version == "any":
+    if len(results) > 2 and application_version == "last":
         results = sorted(results, key=lambda x: x[1], reverse=True)[:1]
 
     return results
