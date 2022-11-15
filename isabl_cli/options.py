@@ -369,7 +369,7 @@ def get_analyses_filters_option(application_classes=None, **defaults):
         callback=lambda _, __, i: callback(i),
     )
 
-def get_analyses_from_deps(dependencies_results):
+def get_dependency_analyses_option(dependencies_results):
     return [
         *[
             get_analyses_filters_option(
@@ -386,7 +386,7 @@ def get_analyses_from_deps(dependencies_results):
             if i.get("app_name")
             and (
                 not i.get("app_version")
-                or i.get("app_version") == "last"
+                or i.get("app_version") == "any"
             )
         ],
         *[
@@ -397,6 +397,6 @@ def get_analyses_from_deps(dependencies_results):
             for i in dependencies_results
             if i.get("app_name")
             and i.get("app_version")
-            and i.get("app_version") != "last"
+            and i.get("app_version") != "any"
         ]
     ]
