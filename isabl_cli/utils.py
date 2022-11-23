@@ -111,14 +111,14 @@ def get_results(
             f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
         )
 
-    # If more than 1 result and version is `any`, use latest.
+    # If more than 1 result and version is `any``, use latest.
     if len(results) > 2 and application_version == "any":
         results = sorted(results, key=lambda x: x[1], reverse=True)[:1]
 
     return results
 
 
-def get_result(*args, **kwargs):
+def get_result(*args, application_name=None, **kwargs):
     """
     See get_results for full signature.
 
@@ -130,7 +130,7 @@ def get_result(*args, **kwargs):
     Returns:
         tuple: result value, analysis pk that produced the result
     """
-    app_name = kwargs.get("application_name") or kwargs.get("application_key")
+    app_name = application_name or kwargs.get("application_key")
     results = get_results(*args, **kwargs)
     assert results, f"No results found for application: {app_name}"
     assert len(results) == 1, f"Multiple results returned {results}"
