@@ -88,6 +88,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # to NotImplemented is considered required and must be resolved at get_dependencies
     application_inputs = dict()
 
+    dependencies_results = []
+
     # It is possible to create applications that are unique at the individual level.
     # A good example of a unique per individual application could be a patient centric
     # report that aggregates results across all samples. Applications that require a
@@ -118,7 +120,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     _command_err_key = "command_err"
     _base_results = {
         _command_script_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Script used to execute the analysis.",
             "verbose_name": "Analysis Script",
         },
@@ -128,7 +130,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             "verbose_name": "Standard Output",
         },
         _command_err_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Analysis standard error.",
             "verbose_name": "Standard Error",
         },
@@ -1064,7 +1066,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def _get_dependencies(self, targets, references):
         missing = []
-        analyses, inputs = self.get_dependencies(targets, references, self.settings)
+        if self.dependencies_results:
+            analyses, inputs = self._get_dependencies_results(targets, references)
+        else:
+            analyses, inputs = self.get_dependencies(targets, references, self.settings)
 
         for i, j in self.application_inputs.items():  # pragma: no cover
             if i not in inputs:
@@ -1078,6 +1083,50 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             raise exceptions.ConfigurationError(
                 f"Required inputs missing from `get_dependencies`: {missing}"
             )
+
+        return analyses, inputs
+
+    def _get_dependencies_results(self, targets, references):
+        """
+        Get dependencies' results from a defined application version.
+
+        It's called when `self.dependencies_results` is an array containing an object:
+            {
+                result (str): Result key `Application.results.result_key`.
+                name (str): Name the result will have in the inputs objects.
+                app (obj): `Application` instance.
+                app_name (str): `Application.name`.
+                app_version (str): `Application.version`. If not defined, use
+                    any available. Use `any` if you want to use the latest available.
+                linked (bool): if False, the analysis is not linked as a dependencie of
+                    the analysis. As adding new dependencies to an analysis forces isabl
+                    to not recognize existing ones (Default: True).
+            }
+        """
+        inputs = {}
+        analyses = []
+        for dependency in self.dependencies_results:
+            result_args = {
+                "result_key": dependency["result"],
+                "targets": targets,
+                "references": references,
+            }
+            # Match app by name, and optionally by version
+            if dependency.get("app_name"):
+                result_args["application_name"] = dependency.get("app_name")
+                if "version" in dependency:
+                    result_args["application_version"] = dependency.get("app_version")
+            else:
+                # Match app by primary key
+                result_args["application_key"] = dependency.get("app").primary_key
+                result_args["application_name"] = dependency.get("app").NAME
+
+            input_name = dependency.get("name")
+            inputs[input_name], key = self.get_result(targets[0], **result_args)
+
+            if not "linked" in dependency or dependency["linked"]:
+                # Avoid linking the analysis as dependency to avoid creating new runs.
+                analyses.append(key)
 
         return analyses, inputs
 
@@ -1417,7 +1466,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             for i in bar:
                 try:
                     targets, references, analyses, inputs, individual = i
-                    self.validate_species(targets + references)
+                    # self.validate_species(targets + references)
                     self.validate_experiments(targets, references)
                     analysis = self._patch_analysis(
                         api.create_instance(
@@ -1497,31 +1546,32 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         tuples = [i + (self._get_individual_from_tuple(*i[:2]),) for i in tuples]
         tuples_map = {i[-1].pk: i for i in tuples}
         existing = {}
+        
+        if tuples_map:
+            for i in api.get_analyses(
+                application=self.application.pk,
+                individual_level_analysis__pk__in=",".join(map(str, tuples_map)),
+            ):
+                individual = i.individual_level_analysis
+                current_tuple = tuples_map[individual.pk]
 
-        for i in api.get_analyses(
-            application=self.application.pk,
-            individual_level_analysis__pk__in=",".join(map(str, tuples_map)),
-        ):
-            individual = i.individual_level_analysis
-            current_tuple = tuples_map[individual.pk]
+                # make sure we only have one analysis per individual
+                assert individual.pk not in existing, f"Multiple analyses for {individual}"
+                existing[individual.pk] = i
 
-            # make sure we only have one analysis per individual
-            assert individual.pk not in existing, f"Multiple analyses for {individual}"
-            existing[individual.pk] = i
-
-            # patch analysis if tuples differ
-            for ix, key in enumerate(["targets", "references", "analyses"]):
-                if {getattr(j, "pk", j) for j in i[key]} != {
-                    getattr(j, "pk", j) for j in current_tuple[ix]
-                }:
-                    existing[individual.pk] = api.patch_instance(
-                        "analyses",
-                        i.pk,
-                        targets=current_tuple[0],
-                        references=current_tuple[1],
-                        analyses=current_tuple[2],
-                    )
-                    break
+                # patch analysis if tuples differ
+                for ix, key in enumerate(["targets", "references", "analyses"]):
+                    if {getattr(j, "pk", j) for j in i[key]} != {
+                        getattr(j, "pk", j) for j in current_tuple[ix]
+                    }:
+                        existing[individual.pk] = api.patch_instance(
+                            "analyses",
+                            i.pk,
+                            targets=current_tuple[0],
+                            references=current_tuple[1],
+                            analyses=current_tuple[2],
+                        )
+                        break
 
         return list(existing.values()), [i for i in tuples if i[-1].pk not in existing]
 
@@ -1744,7 +1794,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             tind = targets_set[0]["sample"]["individual"]
             rind = references_set[0]["sample"]["individual"]
 
-            if hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED:
+            if (
+                hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED
+            ):  # pylint: disable=no-member
                 assert tind["pk"] != rind["pk"], (
                     "Different individuals required: "
                     f"{tind['system_id']} and {rind['system_id']} "
@@ -1772,7 +1824,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not analysts:
             click.secho(
                 "Skipping notification as projects have no registered analysts",
-                fg="red"
+                fg="red",
             )
             return
         kwargs = {

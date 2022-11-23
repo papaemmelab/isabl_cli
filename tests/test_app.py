@@ -1,10 +1,9 @@
 from os.path import isfile
 from os.path import join
-import os
 import uuid
 
+from cached_property import cached_property
 from click.testing import CliRunner
-import click
 import pytest
 
 from isabl_cli import AbstractApplication
@@ -12,10 +11,8 @@ from isabl_cli import api
 from isabl_cli import exceptions
 from isabl_cli import factories
 from isabl_cli import options
-from isabl_cli import utils
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import get_application_settings
-from isabl_cli.settings import system_settings
 
 
 class NonSequencingApplication(AbstractApplication):
@@ -40,10 +37,10 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
         options.NULLABLE_REFERENCES,
     ]
 
-    def validate_experiments(self, targets, refereces):
+    def validate_experiments(self, targets, references):
         assert not any("raise validation error" in target.notes for target in targets)
 
-    def get_command(*_):
+    def get_command(*_): # pylint: disable=no-method-argument
         return ""
 
 
@@ -863,3 +860,139 @@ def test_notify_project_analyst():
     )
 
     assert application.notify_project_analyst(analysis, "test", "test").ok
+
+
+######## Test App Dependencies ###########
+
+
+class MockFirstVersion(MockApplication):
+    NAME = "PRE-PROCESSING"
+    VERSION = "v1"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 1}
+
+
+class MockSecondVersion(MockApplication):
+    NAME = "PRE-PROCESSING"
+    VERSION = "v2"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 2}
+
+
+class PostMockApp(MockApplication):
+    application_inputs = {"dependency_key": NotImplemented}
+
+    def get_command(self, analysis, inputs, settings):
+        assert inputs["dependency_key"] == 1
+        return f"echo {analysis['targets'][0]['system_id']}"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 3}
+
+
+class PostMockAppWithFirstFixedDependency(PostMockApp):
+    NAME = "POST-PROCESSING FIXED"
+    VERSION = "DEPENDS ON PRE-PROCESSING v1"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app": MockFirstVersion(),
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class PostMockAppWithSecondFixedDependency(PostMockApp):
+    NAME = "POST-PROCESSING FIXED"
+    VERSION = "DEPENDS ON PRE-PROCESSING v2"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app": MockSecondVersion(),
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class PostMockAppWithFlexibleDependency(PostMockApp):
+    NAME = "POST-PROCESSING FLEXIBLE"
+    VERSION = "DEPENDS ON PRE-PROCESSING, ANY VERSION"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app_name": "PRE-PROCESSING",
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class PostMockAppWithFlexibleDependencyNoLinked(PostMockAppWithFlexibleDependency):
+    VERSION = "DEPENDS ON PRE-PROCESSING, ANY VERSION. NO LINK"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app_name": "PRE-PROCESSING",
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+                "linked": False,
+            }
+        ]
+
+
+def test_get_dependencies():
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(
+        identifier="test-experiment", sample=sample, projects=[project]
+    )
+    experiment = api.create_instance("experiments", **experiment)
+    tuples = [([experiment], [])]
+
+    # Run dependency first
+    application = MockFirstVersion()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    preprocess_analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+
+    experiment = api.get_instance("experiments", experiment.system_id)
+    tuples = [([experiment], [])]
+
+    # A) App with fixed dependency succeeds
+    application = PostMockAppWithFirstFixedDependency()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    _, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+
+    # B) App with newer version dependency invalid, because version is strict
+    application = PostMockAppWithSecondFixedDependency()
+    _, _, invalid_analyses = application.run(tuples, commit=True)
+    _, validation_error = invalid_analyses[0]
+    assert "No results found for application" in validation_error.message
+
+    # C) App with newer version dependency succeeds, because version is flexible
+    application = PostMockAppWithFlexibleDependency()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+    assert analysis.analyses[0] == preprocess_analysis.pk
+
+    # New analysis doesn't link the previous analyses to it's run
+    application = PostMockAppWithFlexibleDependencyNoLinked()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+    assert not analysis.analyses

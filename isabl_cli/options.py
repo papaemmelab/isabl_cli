@@ -346,6 +346,17 @@ def get_analyses_filters_option(application_classes=None, **defaults):
                     "analyses", **{**dict(tuples), **defaults}
                 )
             return analyses
+        if defaults.get("application__name"):
+            app_name = defaults['application__name']
+            app_version = defaults.get('application__version')
+            if app_version:
+                click.secho(
+                    f"Getting completed analyses for {app_name} {app_version}:", fg="cyan"
+                )
+            else:
+                click.secho(
+                    f"Getting completed analyses for {app_name}:", fg="cyan"
+                )
         return api.get_instances("analyses", **{**dict(tuples), **defaults})
 
     return click.option(
@@ -357,3 +368,35 @@ def get_analyses_filters_option(application_classes=None, **defaults):
         type=(str, str),
         callback=lambda _, __, i: callback(i),
     )
+
+def get_dependency_analyses_option(dependencies_results):
+    return [
+        *[
+            get_analyses_filters_option(
+                application__classes=i["app"]
+            )
+            for i in dependencies_results
+            if i.get("app")
+        ],
+        *[
+            get_analyses_filters_option(
+                application__name=i["app_name"]
+            )
+            for i in dependencies_results
+            if i.get("app_name")
+            and (
+                not i.get("app_version")
+                or i.get("app_version") == "any"
+            )
+        ],
+        *[
+            get_analyses_filters_option(
+                application__name=i["app_name"],
+                application__version=i["app_version"],
+            )
+            for i in dependencies_results
+            if i.get("app_name")
+            and i.get("app_version")
+            and i.get("app_version") != "any"
+        ]
+    ]
