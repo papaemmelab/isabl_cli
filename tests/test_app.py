@@ -1,9 +1,11 @@
 from os.path import isfile
 from os.path import join
+import os
 import uuid
 
 from cached_property import cached_property
 from click.testing import CliRunner
+import click
 import pytest
 
 from isabl_cli import AbstractApplication
@@ -11,8 +13,10 @@ from isabl_cli import api
 from isabl_cli import exceptions
 from isabl_cli import factories
 from isabl_cli import options
+from isabl_cli import utils
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import get_application_settings
+from isabl_cli.settings import system_settings
 
 
 class NonSequencingApplication(AbstractApplication):
@@ -40,7 +44,7 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     def validate_experiments(self, targets, references):
         assert not any("raise validation error" in target.notes for target in targets)
 
-    def get_command(*_): # pylint: disable=no-method-argument
+    def get_command(*_):
         return ""
 
 
