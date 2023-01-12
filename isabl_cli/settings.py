@@ -88,12 +88,24 @@ _IMPORT_STRINGS = {
 _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
 
 
+def import_valid_applications(val, setting_name):
+    if setting_name == "INSTALLED_APPLICATIONS":
+        apps = []
+        for item in val:
+            try:
+                apps.append(import_from_string(item, setting_name))
+            except ImportError as error:
+                click.secho(f"Failed to import applications: {error}", fg="red")
+        return apps
+    return [import_from_string(item, setting_name) for item in val]
+
+
 def perform_import(val, setting_name):
     """Perform the necessary import or imports."""
     if isinstance(val, six.string_types):
         return import_from_string(val, setting_name)
     elif isinstance(val, (list, tuple)):
-        return [import_from_string(item, setting_name) for item in val]
+        return import_valid_applications(val, setting_name)
     return val  # pragma: no cover
 
 
