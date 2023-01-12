@@ -66,7 +66,7 @@ for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
 try:
-    add_apps_groups(system_settings.INSTALLED_APPLICATIONS) # pragma: no cover
+    add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
 except ImportError as error:
     click.secho(f"Failed to import applications: {error}", fg="red")
 
