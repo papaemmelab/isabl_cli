@@ -1002,7 +1002,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             system_settings.api_username,
             "Ran app",
             {
-                "analyses": analyses,
+                "analyses": analyses[:200],
+                "total": len(analyses),
                 "submitter": submitter,
                 "valid": len(command_tuples),
                 "invalid": len(skipped_tuples),
@@ -1546,7 +1547,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         tuples = [i + (self._get_individual_from_tuple(*i[:2]),) for i in tuples]
         tuples_map = {i[-1].pk: i for i in tuples}
         existing = {}
-        
+
         if tuples_map:
             for i in api.get_analyses(
                 application=self.application.pk,
