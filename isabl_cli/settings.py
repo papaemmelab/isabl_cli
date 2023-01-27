@@ -44,6 +44,7 @@ _DEFAULTS = {
     "ADMIN_COMMANDS": [
         "isabl_cli.commands.process_finished",
         "isabl_cli.commands.patch_results",
+        "isabl_cli.commands.run_failed_analyses",
     ],
     "SYSTEM_COMMANDS": [
         "isabl_cli.commands.get_bams",
