@@ -96,7 +96,7 @@ def process_finished(filters):
         i = api.Analysis(i.pk)
 
         if i.status == "FINISHED":
-            if force or if tag in {j.name for j in i.tags}:
+            if force or tag in {j.name for j in i.tags}:
                 n_not_patched += 1
             else:
                 api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
@@ -113,8 +113,9 @@ def process_finished(filters):
                     raise Exception(patch_error)
     if n_not_patched:
         click.echo(
-            f"Successfully processed {n_patched} analyses, but skipped " +
-            f"{n_not_patched} analyses in use by other processes")
+            f"Successfully processed {n_patched} analyses, but skipped "
+            + f"{n_not_patched} analyses in use by other processes"
+        )
 
 
 @click.command()
