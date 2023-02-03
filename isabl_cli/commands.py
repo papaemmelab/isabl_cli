@@ -81,6 +81,7 @@ def merge_individual_analyses(individual, application):  # pragma: no cover
 
 
 @click.command()
+@click.option("--force", help="Update previously patched results.", is_flag=True)
 @options.NULLABLE_FILTERS
 def process_finished(filters):
     """Process and update finished analyses."""
@@ -89,22 +90,31 @@ def process_finished(filters):
     tag = "PROCESSING FINISHED"
 
     # refetch analysis to avoid race conditions
+    n_not_patched = 0
+    n_patched = 0
     for i in api.get_instances("analyses", verbose=True, **filters):
         i = api.Analysis(i.pk)
-        
-        if i.status == "FINISHED" and tag not in {j.name for j in i.tags}:
-            api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
 
-            try:
-                api.patch_analysis_status(i, "SUCCEEDED")
-                patch_error = None
-            except (PermissionError, AssertionError, CalledProcessError) as error:
-                patch_error = error
+        if i.status == "FINISHED":
+            if force or if tag in {j.name for j in i.tags}:
+                n_not_patched += 1
+            else:
+                api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
+                try:
+                    api.patch_analysis_status(i, "SUCCEEDED")
+                    n_patched += 1
+                    patch_error = None
+                except (PermissionError, AssertionError, CalledProcessError) as error:
+                    patch_error = error
 
-            api.patch_instance("analyses", i.pk, tags=i.tags)
+                api.patch_instance("analyses", i.pk, tags=i.tags)
 
-            if patch_error:
-                raise Exception(patch_error)
+                if patch_error:
+                    raise Exception(patch_error)
+    if n_not_patched:
+        click.echo(
+            f"Successfully processed {n_patched} analyses, but skipped " +
+            f"{n_not_patched} analyses in use by other processes")
 
 
 @click.command()
