@@ -83,7 +83,7 @@ def merge_individual_analyses(individual, application):  # pragma: no cover
 @click.command()
 @click.option("--force", help="Update previously patched results.", is_flag=True)
 @options.NULLABLE_FILTERS
-def process_finished(filters):
+def process_finished(filters, force):
     """Process and update finished analyses."""
     utils.check_admin()
     filters.update(status="FINISHED", fields="pk")
