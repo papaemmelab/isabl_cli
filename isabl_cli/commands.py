@@ -141,7 +141,7 @@ def patch_status(key, status):
 
 @click.command(
     epilog="Learn more about fx: "
-    "https://github.com/antonmedv/fx/blob/master/docs.md#interactive-mode"
+    "https://github.com/antonmedv/fx/blob/master/doc/doc.md#interactive-mode"
 )
 @options.ENDPOINT
 @options.FIELDS
