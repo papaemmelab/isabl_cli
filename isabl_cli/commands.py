@@ -96,7 +96,7 @@ def process_finished(filters, force):
         i = api.Analysis(i.pk)
 
         if i.status == "FINISHED":
-            if force or tag in {j.name for j in i.tags}:
+            if not force and tag in {j.name for j in i.tags}:
                 n_not_patched += 1
             else:
                 api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
@@ -152,7 +152,7 @@ def patch_status(key, status):
 
 @click.command(
     epilog="Learn more about fx: "
-    "https://github.com/antonmedv/fx/blob/master/docs.md#interactive-mode"
+    "https://github.com/antonmedv/fx/blob/master/doc/doc.md#interactive-mode"
 )
 @options.ENDPOINT
 @options.FIELDS
