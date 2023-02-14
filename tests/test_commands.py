@@ -284,3 +284,43 @@ def test_run_web_signals():
         result_key="analysis_result_key",
         application_name=str(MockApplication),
     )
+
+
+def test_process_finished_tags(tmpdir):
+    # check that a tagged analysis does NOT get processed to FINISHED
+    analysis = api.create_instance(
+        "analyses",
+        project_level_analysis=factories.ProjectFactory(),
+        storage_url=tmpdir.strpath,
+        status="FINISHED",
+        **factories.AnalysisFactory(ran_by=None, tags=[{"name":"PROCESSING FINISHED"}]),
+    )
+    runner = CliRunner()
+    args = ["-fi", "pk", analysis["pk"]]
+    runner.invoke(commands.process_finished, args, catch_exceptions=False)
+    analysis = api.get_instance("analyses", analysis["pk"])
+    assert analysis["status"] == "FINISHED"
+
+    # strip the tags, check that is DOES get processed
+    api.patch_instance("analyses", analysis.pk,
+                       **factories.AnalysisFactory(ran_by=None, tags=[]))
+    runner.invoke(commands.process_finished, args, catch_exceptions=False)
+    analysis = api.get_instance("analyses", analysis["pk"])
+    assert analysis["status"] == "SUCCEEDED"
+
+
+def test_force_process_finished_tags(tmpdir):
+    # check that a tagged analysis does get processed to FINISHED when forced
+    analysis = api.create_instance(
+        "analyses",
+        project_level_analysis=factories.ProjectFactory(),
+        storage_url=tmpdir.strpath,
+        status="FINISHED",
+        **factories.AnalysisFactory(ran_by=None, tags=[{"name":"PROCESSING FINISHED"}]),
+    )
+    runner = CliRunner()
+    args = ["-fi", "pk", analysis["pk"], "--force"]
+    result = runner.invoke(commands.process_finished, args, catch_exceptions=True)
+    print(result.output)
+    analysis = api.get_instance("analyses", analysis["pk"])
+    assert analysis["status"] == "SUCCEEDED"
