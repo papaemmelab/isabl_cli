@@ -320,7 +320,7 @@ def test_force_process_finished_tags(tmpdir):
     )
     runner = CliRunner()
     args = ["-fi", "pk", analysis["pk"], "--force"]
-    result =  runner.invoke(commands.process_finished, args, catch_exceptions=False)
+    result = runner.invoke(commands.process_finished, args, catch_exceptions=True)
     print(result.output)
     analysis = api.get_instance("analyses", analysis["pk"])
     assert analysis["status"] == "SUCCEEDED"
