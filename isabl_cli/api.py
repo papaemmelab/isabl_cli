@@ -702,7 +702,15 @@ def _set_analysis_permissions(analysis):
             src = analysis.storage_url + "__tmp"
             shutil.move(analysis.storage_url, src)
             cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
-            subprocess.check_call(cmd, shell=True)
+            try:
+                subprocess.check_call(cmd, shell=True)
+            except subprocess.CalledProcessError:
+                try:
+                    version_stdout = subprocess.check_call(["rsync", "--version"], shell=True).split("\n")[0]
+                    utils.check_rsync_version(version_stdout)
+                except Exception as e:
+                    click.secho(f"Error running rsync and checking its version", fg="red")
+                    raise(e)
         else:
             subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
 

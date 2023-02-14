@@ -7,12 +7,14 @@ from pwd import getpwuid
 import getpass
 import json
 import os
+import re
 import sys
 import tarfile
 
 import analytics
 import click
 
+from packaging import version
 from isabl_cli.settings import system_settings
 
 
@@ -196,6 +198,13 @@ def get_rsync_command(src, dst, chmod="a-w"):
         f"find {src}/ -depth -type d -empty "
         r'-exec rmdir "{}" \;'
     )
+
+def check_rsync_version(version_stdout):
+    """check for outdated rsync lacking the --append-verify"""
+    version_string =  re.search(r'.*(?P<ver>\d\.\d\.\d).*', version_stdout).group("ver")
+    major_version = version.parse(version_string).major
+    if major_version != 3:
+        raise ValueError("Please upgrade your version of rsync!")
 
 
 def get_tree_size(path, follow_symlinks=False):
