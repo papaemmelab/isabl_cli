@@ -31,6 +31,7 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
 
     # execute analyses on a methods basis
     for methods, cmd_tuples in groups.items():
+        submit_configuration = system_settings.SUBMIT_CONFIGURATION
         click.echo(f"Submitting {len(cmd_tuples)} ({', '.join(methods)}) jobs.")
         commands, analyses, projects, extra_args_overrides = [], [], set(), []
         requirements = ""
@@ -57,12 +58,11 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
 
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
-            submit_configuration = system_settings.SUBMIT_CONFIGURATION
-            for i in api.chunks(commands, 10000):
-                submit_slurm_array(
+            for i, j in zip(api.chunks(commands, 10000),  api.chunks(extra_args_overrides, 10000)):
+                submit_sge_array(
                     commands=i,
                     requirements=requirements or "",
-                    extra_args=submit_configuration.get("extra_args", ""),
+                    extra_args=j[0],
                     throttle_by=submit_configuration.get("throttle_by", 50),
                     jobname=(
                         f"application: {app} | "

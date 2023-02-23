@@ -31,6 +31,7 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
     # execute analyses on a methods basis
     for methods, cmd_tuples in groups.items():
+        submit_configuration = system_settings.SUBMIT_CONFIGURATION
         click.echo(f"Submitting {len(cmd_tuples)} ({', '.join(methods)}) jobs.")
         commands, analyses, projects, extra_args_overrides = [], [], set(), []
         requirements = ""
@@ -41,8 +42,10 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
             exit_cmd = app.get_patch_status_command(i["pk"], "FAILED")
             commands.append((app.get_command_script_path(i), exit_cmd))
             if hasattr(app, "EXTRA_ARGS_OVERRIDE"):
+                print(app.EXTRA_ARGS_OVERRIDE)
                 extra_args_overrides.append(app.EXTRA_ARGS_OVERRIDE)
             else:
+                print("No extra args!")
                 extra_args_overrides.append(submit_configuration.get("extra_args", ""))
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
@@ -57,15 +60,13 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
-            submit_configuration = system_settings.SUBMIT_CONFIGURATION
 
             # LSF may not like arrays bigger thank 10K
-            for i in api.chunks(commands, 10000), \
-                j in api.chunks(extra_args_overrides, 10000):
+            for i, j in zip(api.chunks(commands, 10000),  api.chunks(extra_args_overrides, 10000)):
                 submit_lsf_array(
                     commands=i,
                     requirements=requirements or "",
-                    extra_args=j,
+                    extra_args=j[0],
                     throttle_by=submit_configuration.get("throttle_by", 50),
                     jobname=(
                         f"application: {app} | "
