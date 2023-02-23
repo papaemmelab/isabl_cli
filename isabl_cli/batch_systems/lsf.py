@@ -42,10 +42,8 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
             exit_cmd = app.get_patch_status_command(i["pk"], "FAILED")
             commands.append((app.get_command_script_path(i), exit_cmd))
             if hasattr(app, "EXTRA_ARGS_OVERRIDE"):
-                print(app.EXTRA_ARGS_OVERRIDE)
                 extra_args_overrides.append(app.EXTRA_ARGS_OVERRIDE)
             else:
-                print("No extra args!")
                 extra_args_overrides.append(submit_configuration.get("extra_args", ""))
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
