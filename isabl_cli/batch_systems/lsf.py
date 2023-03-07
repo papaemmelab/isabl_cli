@@ -146,7 +146,7 @@ def submit_lsf_array(
     # -ti, or immediate termination, prevents orphan jobs when -w is not valid anymore
     cmd = (
         f'bsub -W 15 -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
-        f'-w "exit({jobid})" -i "{root}/exit_cmd.%I" bash '
+        f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash '
     )
 
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
