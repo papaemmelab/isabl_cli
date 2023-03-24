@@ -21,7 +21,8 @@
     "pytz>=2018.4",
     "PyYAML>=5.3",
     "requests>=2.19.1",
-    "six>=1.11.0"
+    "six>=1.11.0",
+    "packaging>=22.0"
   ],
   "extras_require": {
     "test": [
