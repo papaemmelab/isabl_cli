@@ -161,10 +161,12 @@ def patch_status(key, status):
 @options.NULLABLE_IDENTIFIERS
 @click.option("--json", "json_", help="Print as JSON", is_flag=True)
 @click.option("--fx", "use_fx", help="Visualize json with fx", is_flag=True)
-def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_fx):
+@click.option("--pretty", "pretty", help="prettified output", is_flag=True)
+@click.option("--all", "output_all", help="include all fields in the tabular output", is_flag=True)
+def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_fx, output_all, pretty):
     """Retrieve metadata for multiple instances."""
-    if not field and not (json_ or use_fx):  # pragma: no cover
-        raise click.UsageError("Pass --field or use --json/--fx")
+    if not field and not (json_ or use_fx or output_all):  # pragma: no cover
+        raise click.UsageError("Pass --field or use --json/--fx/--all")
 
     if use_fx and not shutil.which("fx"):  # pragma: no cover
         raise click.UsageError("fx is not installed")
@@ -181,6 +183,8 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
             OrderedDict([(".".join(j), utils.traverse_dict(i, j)) for j in field])
             for i in instances
         ]
+    elif output_all:
+        field = [[i] for i in instances[0].__dict__.keys()]
 
     if json_:
         click.echo(json.dumps(instances, sort_keys=True, indent=4))
@@ -193,7 +197,10 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
     else:
         result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
         result += ["\t".join(map(str, i.values())) for i in instances]
-        click.echo("\n".join(result).expandtabs(30))
+        if pretty:
+            click.echo("\n".join(result).expandtabs(30))
+        else:
+            click.echo("\n".join(result))
 
 
 @click.command()
