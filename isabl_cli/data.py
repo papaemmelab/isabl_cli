@@ -451,7 +451,7 @@ class LocalReferenceGenomeImporter:
 
             for i in commands:
                 if dont_index:
-                    click.secho(f"Skipping indexing:\n\n\t{' '.join(i)}", fg="yellow")
+                    click.secho(f"Skipping indexing:\n\n\t{' '.join(i)}", err=True, fg="yellow")
                     continue
 
                 try:  # pragma: no cover
@@ -461,7 +461,7 @@ class LocalReferenceGenomeImporter:
                     subprocess.CalledProcessError,
                 ):  # pragma: no cover
                     click.secho(
-                        f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}", fg="red"
+                        f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}", err=True, fg="red"
                     )
 
             indexes = {
@@ -1054,7 +1054,7 @@ class LocalDataImporter(BaseImporter):
                 raise click.UsageError(f"Use either --copy or --symlink.")
 
             if symlink and ignore_ownership:
-                click.secho("--ignore-ownership isnt used when --symlink.", fg="yellow")
+                click.secho("--ignore-ownership isnt used when --symlink.", err=True, fg="yellow")
 
             matched, summary = cls().import_data(
                 directories=directories,
@@ -1209,7 +1209,7 @@ class LocalYamlDataImporter(LocalDataImporter):
             ), f"The following files_data yaml path '{files_data}' does not exist."
 
             if symlink and ignore_ownership:
-                click.secho("--ignore-ownership isnt used when --symlink.", fg="yellow")
+                click.secho("--ignore-ownership isnt used when --symlink.", err=True, fg="yellow")
 
             summary = cls().import_data_from_yaml(
                 symlink=symlink,

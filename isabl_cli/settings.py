@@ -95,7 +95,7 @@ def import_valid_applications(val, setting_name):
             try:
                 apps.append(import_from_string(item, setting_name))
             except ImportError as error:
-                click.secho(f"Failed to import applications: {error}", fg="red")
+                click.secho(f"Failed to import applications: {error}", err=True, fg="red")
         return apps
     return [import_from_string(item, setting_name) for item in val]
 
@@ -222,6 +222,7 @@ class SystemSettings(BaseSettings):
                 "Set environment variable ISABL_CLIENT_ID "
                 "to your databased client primary key or slug "
                 "to configure Isabl CLI directly from the API.",
+                err=True,
                 fg="yellow",
             )
 
