@@ -244,11 +244,11 @@ def get_token_headers():
         if (
             not response.ok and "non_field_errors" in response.text and not testing
         ):  # pragma: no cover
-            click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
+            click.secho("\n".join(response.json()["non_field_errors"]), err=True, fg="red")
             get_token_headers.cache_clear()
             return get_token_headers()
         elif not response.ok:  # pragma: no cover
-            click.secho(f"Request Error: {response.url}", fg="red")
+            click.secho(f"Request Error: {response.url}", err=True, fg="red")
             response.raise_for_status()
 
         user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
@@ -306,7 +306,7 @@ def api_request(method, url, authenticate=True, **kwargs):
         except Exception:  # pylint: disable=broad-except
             msg = ""
 
-        click.echo(f"Request Error: {response.url}\n{msg}")
+        click.echo(f"Request Error: {response.url}\n{msg}", err=True)
         response.raise_for_status()
 
     return response
@@ -709,7 +709,7 @@ def _set_analysis_permissions(analysis):
                     version_stdout = subprocess.check_call(["rsync", "--version"], shell=True).split("\n")[0]
                     utils.check_rsync_version(version_stdout)
                 except Exception as e:
-                    click.secho(f"Error running rsync and checking its version", fg="red")
+                    click.secho(f"Error running rsync and checking its version", err=True, fg="red")
                     raise(e)
         else:
             subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
@@ -736,7 +736,7 @@ def _get_analysis_results(analysis, raise_error=True):
     try:
         application = import_from_string(analysis.application.application_class)()
     except ImportError as error:
-        click.secho(f"{error_msg} cant import application class", fg="red")
+        click.secho(f"{error_msg} cant import application class", err=True, fg="red")
         return results
 
     if not analysis.storage_url:  # pragma: no cover
@@ -760,7 +760,7 @@ def _get_analysis_results(analysis, raise_error=True):
 
         results = application._get_analysis_results(analysis)
     except Exception as error:  # pragma: no cover pylint: disable=broad-except
-        click.secho(f"{error_msg} {error}", fg="red")
+        click.secho(f"{error_msg} {error}", err=True, fg="red")
         if raise_error:
             raise error
         print(traceback.format_exc())
@@ -807,7 +807,7 @@ def _run_signals(endpoint, instance, signals, raise_error=False, create_record=T
             + click.style("\n".join([f"{i}:\n\t{j}" for i, j in errors]), fg="red")
         )
 
-        click.echo(msg)
+        click.echo(msg, err=True)
 
         if raise_error:
             raise exceptions.AutomationError(msg)

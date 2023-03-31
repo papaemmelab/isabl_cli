@@ -355,7 +355,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not analyses or len(analyses) < 2:
             click.secho(
                 f"Not enough analyses for {instance} merge, "
-                f"at least 2 required but got: {len(analyses)}",
+                f"at least 2 required but got: {len(analyses)}", 
+                err=True,
                 fg="yellow",
             )
             return
@@ -1181,7 +1182,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         try:
             assert self.application.settings.get(client_id) == settings
-            click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
+            click.secho(f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow")
         except AssertionError:
             try:
                 api.patch_instance(
@@ -1202,7 +1203,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:  # pragma: no cover
-                click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
+                click.secho(f"\tPatched failed with error: {error}.\n", err=True, fg="red")
 
         # create or update project level application
         if self.has_project_auto_merge:
@@ -1824,7 +1825,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         analysts = set([project.analyst for project in projects if project.analyst])
         if not analysts:
             click.secho(
-                "Skipping notification as projects have no registered analysts",
+                "Skipping notification as projects have no registered analysts", 
+                err=True,
                 fg="red",
             )
             return
