@@ -369,18 +369,20 @@ def get_analyses_filters_option(application_classes=None, **defaults):
         callback=lambda _, __, i: callback(i),
     )
 
-def get_dependency_analyses_option(dependencies_results):
+def get_dependency_analyses_option(dependencies_results, **extra_filters):
     return [
         *[
             get_analyses_filters_option(
-                application__classes=i["app"]
+                application__classes=i["app"],
+                **extra_filters,
             )
             for i in dependencies_results
             if i.get("app")
         ],
         *[
             get_analyses_filters_option(
-                application__name=i["app_name"]
+                application__name=i["app_name"],
+                **extra_filters,
             )
             for i in dependencies_results
             if i.get("app_name")
@@ -393,6 +395,7 @@ def get_dependency_analyses_option(dependencies_results):
             get_analyses_filters_option(
                 application__name=i["app_name"],
                 application__version=i["app_version"],
+                **extra_filters,
             )
             for i in dependencies_results
             if i.get("app_name")
