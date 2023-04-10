@@ -66,7 +66,7 @@ def merge_project_analyses(project, application):  # pragma: no cover
     project = api.get_instance("projects", project)
     application = api.get_instance("applications", application)
     application = import_from_string(application["application_class"])()
-    application.run_project_merge(project)
+    application.submit_merge_analysis(project)
 
 
 @click.command()
@@ -77,7 +77,7 @@ def merge_individual_analyses(individual, application):  # pragma: no cover
     individual = api.get_instance("individuals", individual)
     application = api.get_instance("applications", application)
     application = import_from_string(application["application_class"])()
-    application.run_individual_merge(individual)
+    application.submit_merge_analysis(individual)
 
 
 @click.command()
