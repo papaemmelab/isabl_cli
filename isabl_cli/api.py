@@ -706,7 +706,9 @@ def _set_analysis_permissions(analysis):
                 subprocess.check_call(cmd, shell=True)
             except subprocess.CalledProcessError:
                 try:
-                    version_stdout = subprocess.check_call(["rsync", "--version"], shell=True).split("\n")[0]
+                    version_stdout = subprocess.run(
+                        ["rsync", "--version"], capture_output=True, text=True
+                    ).stdout.split("\n")[0]
                     utils.check_rsync_version(version_stdout)
                 except Exception as e:
                     click.secho(f"Error running rsync and checking its version", err=True, fg="red")
