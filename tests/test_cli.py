@@ -19,7 +19,7 @@ def test_main(capsys):
     # Prints error trying to import invalid app
     cli.add_apps_groups(settings.system_settings.INSTALLED_APPLICATIONS)
     captured = capsys.readouterr()
-    assert "Could not import 'tests.test_app.ImaginaryApplication'" in captured.out
+    assert "Could not import 'tests.test_app.ImaginaryApplication'" in captured.err
 
     runner = CliRunner()
     result = runner.invoke(cli.main)
