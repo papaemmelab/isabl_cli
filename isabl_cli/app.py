@@ -936,6 +936,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 ):
                     skipped_tuples.append((i, i["status"]))
                     continue
+                
+                elif restart and i.ran_by != system_settings.api_username:
+                    skipped_tuples.append((i, i["status"]))   
+                    continue
 
                 try:
                     inputs = i.pop(

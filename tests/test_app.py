@@ -996,3 +996,25 @@ def test_get_dependencies():
     analysis, status = ran_analyses[0]
     assert status == "SUCCEEDED"
     assert not analysis.analyses
+
+
+def test_ran_by_user(tmpdir):
+    user = api.create_instance("users", **factories.UserFactory())
+
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment], [])], commit=True, restart=True
+    )
+    assert len(ran_analyses) == 0
+    assert len(skipped_analyses) > 0
+    assert len(invalid_analyses) == 0
