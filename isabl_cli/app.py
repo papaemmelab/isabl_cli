@@ -355,7 +355,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not analyses or len(analyses) < 2:
             click.secho(
                 f"Not enough analyses for {instance} merge, "
-                f"at least 2 required but got: {len(analyses)}", 
+                f"at least 2 required but got: {len(analyses)}",
                 err=True,
                 fg="yellow",
             )
@@ -1292,7 +1292,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             keys = set()
             for i in targets:
                 for j in i["projects"]:  # pragma: no cover
-                    keys.add(f"{j['pk']} ({i['technique']['method']})")
+                    pk_uri = utils.print_uri(j["pk"], "project")
+                    keys.add(f"{pk_uri} ({i['technique']['method']})")
             return f"{', '.join(keys)}" if keys else "0"
 
         def _style_experiments(experiments):
@@ -1304,7 +1305,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             extra_msg = ""
 
             if isinstance(i, dict):  # if skipped, succeeded or failed
-                identifier = str(i["pk"])
+                identifier = utils.print_uri(i["pk"], "analysis")
                 targets = i["targets"]
                 references = i["references"]
                 extra_msg = " " + i["storage_url"]
@@ -1825,7 +1826,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         analysts = set([project.analyst for project in projects if project.analyst])
         if not analysts:
             click.secho(
-                "Skipping notification as projects have no registered analysts", 
+                "Skipping notification as projects have no registered analysts",
                 err=True,
                 fg="red",
             )
