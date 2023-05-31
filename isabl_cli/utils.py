@@ -16,7 +16,6 @@ import click
 
 from packaging import version
 from isabl_cli.settings import system_settings
-from isabl_cli.api import get_api_url
 
 
 def makedirs(path, exist_ok=True, mode=0o777):
@@ -306,19 +305,3 @@ def send_analytics(command):  # noqa
         )
 
     return update_wrapper(wrapper, command)
-
-
-def create_terminal_hyperlink(uri, label=None):
-    """Mask a string to be clickable as an hyperlink in the terminal."""
-    parameters = ""
-    # OSC 8 ; params ; URI ST <name> OSC 8 ;; ST
-    escape_mask = "\033]8;{};{}\033\\{}\033]8;;\033\\"
-    return escape_mask.format(parameters, uri, label or uri)
-
-
-def print_uri(message, model):
-    """Print a message with an hyperlink in the terminal."""
-    if model not in {"analysis", "bioModel", "project", "submission"}:
-        return message
-    uri = get_api_url(f"/?{model}={message}")
-    return create_terminal_hyperlink(uri, message)

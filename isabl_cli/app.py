@@ -1288,11 +1288,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
             return click.style(msg, fg=color, blink=blink)
 
+        def _style_hyperlink(message, model):
+            """
+            Mask a string to be clickable as an hyperlink in the terminal.
+
+            Credit: https://stackoverflow.com/a/71309268/3949081
+            """
+            if model not in {"analysis", "bioModel", "project", "submission"}:
+                return str(message)
+            hyperlink_mask = "\033]8;{};{}\033\\{}\033]8;;\033\\"
+            uri = api.get_api_url(f"/?{model}={message}")
+            return hyperlink_mask.format("", uri, message)
+
         def _style_projects(targets):
             keys = set()
             for i in targets:
                 for j in i["projects"]:  # pragma: no cover
-                    pk_uri = utils.print_uri(j["pk"], "project")
+                    pk_uri = _style_hyperlink(j["pk"], "project")
                     keys.add(f"{pk_uri} ({i['technique']['method']})")
             return f"{', '.join(keys)}" if keys else "0"
 
@@ -1301,11 +1313,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 return f"{len(experiments)}"
             return " ".join([i["system_id"] for i in experiments])
 
+
         for i, msg in run_tuples + skipped_tuples + invalid_tuples:
             extra_msg = ""
 
             if isinstance(i, dict):  # if skipped, succeeded or failed
-                identifier = utils.print_uri(i["pk"], "analysis")
+                identifier = _style_hyperlink(i["pk"], "analysis")
                 targets = i["targets"]
                 references = i["references"]
                 extra_msg = " " + i["storage_url"]
