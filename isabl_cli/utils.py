@@ -71,7 +71,10 @@ def get_results(
             if i.application.pk == application_key:
                 experiment_results.append(i)
         elif application_name:
-            if application_version:
+            if (
+                application_version
+                and application_version != "latest"
+            ):
                 if (
                     i.application.name == application_name
                     and i.application.version == application_version
@@ -113,8 +116,8 @@ def get_results(
             f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
         )
 
-    # If more than 1 result and version is `any`, use latest.
-    if len(results) > 2 and application_version == "any":
+    # Return latest if more than 1 result and version is `latest`.
+    if len(results) > 2 and application_version == "latest":
         results = sorted(results, key=lambda x: x[1], reverse=True)[:1]
 
     return results
@@ -135,7 +138,8 @@ def get_result(*args, **kwargs):
     app_name = kwargs.get("application_name") or kwargs.get("application_key")
     results = get_results(*args, **kwargs)
     assert results, f"No results found for application: {app_name}"
-    assert len(results) == 1, f"Multiple results returned {results}"
+    if kwargs.get("application_version") != "latest": 
+        assert len(results) == 1, f"Multiple results returned {results}"
     result, key = results[0]
     return result, key
 
