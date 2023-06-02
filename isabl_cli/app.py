@@ -884,9 +884,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 self._patch_analysis(i)
 
         # run analyses
-        run_tuples, skipped_tuples = self.run_analyses(
+        run_tuples, skipped_tuples, invalid_run_tuples = self.run_analyses(
             analyses=analyses, commit=commit, force=force, restart=restart, local=local
         )
+
+        invalid_tuples.extend(invalid_run_tuples)
 
         if verbose:
             self.echo_run_summary(run_tuples, skipped_tuples, invalid_tuples)
@@ -907,6 +909,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             list: tuple of
         """
         skipped_tuples = []
+        invalid_tuples = []
         command_tuples = []
         submit_analyses = (
             submit_local
@@ -938,7 +941,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     continue
                 
                 elif restart and i.ran_by != system_settings.api_username:
-                    skipped_tuples.append((i, i["status"]))   
+                    invalid_tuples.append((i, i["Can't --restart as it was started by different user. Consider --force"]))  
                     continue
 
                 try:
@@ -957,6 +960,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         self.send_analytics(
             command_tuples=command_tuples,
             skipped_tuples=skipped_tuples,
+            invalid_tuples=invalid_tuples,
             commit=commit,
             force=force,
             restart=restart,
@@ -969,10 +973,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             run_tuples = [(i, self._staged_message) for i, _ in command_tuples]
 
-        return run_tuples, skipped_tuples
+        return run_tuples, skipped_tuples, invalid_tuples
 
     def send_analytics(
-        self, command_tuples, skipped_tuples, commit, force, restart, submitter
+        self, command_tuples, skipped_tuples, invalid_tuples, commit, force, restart, submitter
     ):
         """Send analytics event of analyses ran from cli."""
         analyses_tuples = []
