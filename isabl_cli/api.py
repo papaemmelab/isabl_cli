@@ -268,7 +268,7 @@ def send_analytics(user):
     if user.get("username"):
         username = user["username"]
         api_url = get_api_url("/")
-        if "localhost" in api_url or "0.0.0.0" in api_url:
+        if "localhost" in api_url or  "0.0.0.0" in api_url or "isabl-api" in api_url:
             domain = urlparse(api_url).netloc
             subdomain = ""
             group_id = "DEV"
