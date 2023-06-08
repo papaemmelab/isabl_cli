@@ -355,7 +355,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not analyses or len(analyses) < 2:
             click.secho(
                 f"Not enough analyses for {instance} merge, "
-                f"at least 2 required but got: {len(analyses)}", 
+                f"at least 2 required but got: {len(analyses)}",
                 err=True,
                 fg="yellow",
             )
@@ -939,9 +939,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 ):
                     skipped_tuples.append((i, i["status"]))
                     continue
-                
+
                 elif restart and i.ran_by != system_settings.api_username:
-                    invalid_tuples.append((i, i["Can't --restart as it was started by different user. Consider --force"]))  
+                    invalid_tuples.append(
+                        (
+                            i,
+                            "Can't restart: started by different user. Consider --force",
+                        )
+                    )
                     continue
 
                 try:
@@ -976,7 +981,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return run_tuples, skipped_tuples, invalid_tuples
 
     def send_analytics(
-        self, command_tuples, skipped_tuples, invalid_tuples, commit, force, restart, submitter
+        self,
+        command_tuples,
+        skipped_tuples,
+        invalid_tuples,
+        commit,
+        force,
+        restart,
+        submitter,
     ):
         """Send analytics event of analyses ran from cli."""
         analyses_tuples = []
@@ -991,7 +1003,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 else self._staged_message
             )
             analyses_tuples.append((i, status))
-        for i, _ in skipped_tuples:
+        for i, _ in skipped_tuples + invalid_tuples:
             analyses_tuples.append((i, "INVALID"))
 
         analyses = []
@@ -1015,7 +1027,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 "total": len(analyses),
                 "submitter": submitter,
                 "valid": len(command_tuples),
-                "invalid": len(skipped_tuples),
+                "invalid": len(skipped_tuples) + len(invalid_tuples),
             },
         )
 
@@ -1190,7 +1202,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         try:
             assert self.application.settings.get(client_id) == settings
-            click.secho(f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow")
+            click.secho(
+                f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow"
+            )
         except AssertionError:
             try:
                 api.patch_instance(
@@ -1211,7 +1225,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:  # pragma: no cover
-                click.secho(f"\tPatched failed with error: {error}.\n", err=True, fg="red")
+                click.secho(
+                    f"\tPatched failed with error: {error}.\n", err=True, fg="red"
+                )
 
         # create or update project level application
         if self.has_project_auto_merge:
@@ -1566,7 +1582,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 current_tuple = tuples_map[individual.pk]
 
                 # make sure we only have one analysis per individual
-                assert individual.pk not in existing, f"Multiple analyses for {individual}"
+                assert (
+                    individual.pk not in existing
+                ), f"Multiple analyses for {individual}"
                 existing[individual.pk] = i
 
                 # patch analysis if tuples differ
@@ -1833,7 +1851,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         analysts = set([project.analyst for project in projects if project.analyst])
         if not analysts:
             click.secho(
-                "Skipping notification as projects have no registered analysts", 
+                "Skipping notification as projects have no registered analysts",
                 err=True,
                 fg="red",
             )
