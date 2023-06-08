@@ -941,12 +941,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     continue
 
                 elif restart and i.ran_by != system_settings.api_username:
-                    invalid_tuples.append(
-                        (
-                            i,
-                            "Can't restart: started by different user. Consider --force",
-                        )
-                    )
+                    invalid_tuples.append((i, "Can't restart: started by different user. Consider --force"))
                     continue
 
                 try:
@@ -1202,9 +1197,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         try:
             assert self.application.settings.get(client_id) == settings
-            click.secho(
-                f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow"
-            )
+            click.secho(f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow")
         except AssertionError:
             try:
                 api.patch_instance(
@@ -1225,9 +1218,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:  # pragma: no cover
-                click.secho(
-                    f"\tPatched failed with error: {error}.\n", err=True, fg="red"
-                )
+                click.secho(f"\tPatched failed with error: {error}.\n", err=True, fg="red")
 
         # create or update project level application
         if self.has_project_auto_merge:
@@ -1582,9 +1573,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 current_tuple = tuples_map[individual.pk]
 
                 # make sure we only have one analysis per individual
-                assert (
-                    individual.pk not in existing
-                ), f"Multiple analyses for {individual}"
+                assert individual.pk not in existing, f"Multiple analyses for {individual}"
                 existing[individual.pk] = i
 
                 # patch analysis if tuples differ
