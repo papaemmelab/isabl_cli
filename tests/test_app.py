@@ -16,13 +16,11 @@ from isabl_cli.settings import get_application_settings
 
 
 class NonSequencingApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
 
 
 class ExperimentsFromDefaulCLIApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -40,12 +38,11 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     def validate_experiments(self, targets, references):
         assert not any("raise validation error" in target.notes for target in targets)
 
-    def get_command(*_): # pylint: disable=no-method-argument
+    def get_command(*_):  # pylint: disable=no-method-argument
         return ""
 
 
 class MockApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -137,7 +134,6 @@ class MockApplication(AbstractApplication):
 
 
 class UniquePerIndividualApplication(AbstractApplication):
-
     NAME = "UNIQUE_PER_INDIVIDUAL"
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -167,7 +163,6 @@ class UniquePerIndividualApplication(AbstractApplication):
 
 
 class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
-
     NAME = "UNIQUE_PER_INDIVIDUAL_NO_PROTECT"
     application_protect_results = False
 
@@ -424,14 +419,11 @@ def test_engine(tmpdir):
     assert f"{experiments[0].system_id} has no registered bedfile" in str(error.value)
 
     # test that get results work as expected
-    assert (
-        application.get_results(
-            result_key="analysis_result_key",
-            experiment=target,
-            application_key=application.primary_key,
-        )
-        == [(1, ran_analyses[1][0].pk)]
-    )
+    assert application.get_results(
+        result_key="analysis_result_key",
+        experiment=target,
+        application_key=application.primary_key,
+    ) == [(1, ran_analyses[1][0].pk)]
 
     # check assertion error is raised when an invalid result is searched for
     with pytest.raises(AssertionError) as error:
@@ -998,7 +990,7 @@ def test_get_dependencies():
     assert not analysis.analyses
 
 
-def test_ran_by_user(tmpdir):
+def test_ran_by_user(tmpdir, capsys):
     user = api.create_instance("users", **factories.UserFactory())
 
     experiment = api.create_instance("experiments", **factories.ExperimentFactory())
@@ -1016,5 +1008,8 @@ def test_ran_by_user(tmpdir):
         [([experiment], [])], commit=True, restart=True
     )
     assert len(ran_analyses) == 0
-    assert len(skipped_analyses) > 0
-    assert len(invalid_analyses) == 0
+    assert len(skipped_analyses) == 0
+    assert len(invalid_analyses) == 1
+
+    captured = capsys.readouterr()
+    assert "Can't restart: started by different user. Consider --force" in captured.out
