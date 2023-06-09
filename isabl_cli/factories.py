@@ -11,6 +11,10 @@ class BaseFactory(factory.DictFactory):
     tags = [{"name": "tag 1"}, {"name": "tag 2"}]
 
 
+class UserFactory(BaseFactory):
+    username = fuzzy.FuzzyText(length=6, chars=string.ascii_letters)
+
+
 class ProjectFactory(BaseFactory):
     analyst = factory.Sequence(lambda n: f"analyst-{n}@test.com")
     coordinator = factory.Sequence(lambda n: f"coordinator-{n}@test.com")
