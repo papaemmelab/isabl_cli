@@ -990,7 +990,7 @@ def test_get_dependencies():
     assert not analysis.analyses
 
 
-def test_ran_by_user(tmpdir):
+def test_ran_by_user(tmpdir, capsys):
     user = api.create_instance("users", **factories.UserFactory())
 
     experiment = api.create_instance("experiments", **factories.ExperimentFactory())
@@ -1008,8 +1008,11 @@ def test_ran_by_user(tmpdir):
         [([experiment], [])], commit=True, restart=True
     )
     assert len(ran_analyses) == 0
-    assert len(skipped_analyses) > 0
-    assert len(invalid_analyses) == 0
+    assert len(skipped_analyses) == 0
+    assert len(invalid_analyses) == 1
+
+    captured = capsys.readouterr()
+    assert "Can't restart: started by different user. Consider --force" in captured.out
 
 
 def test_commit_description(tmpdir, capsys):
