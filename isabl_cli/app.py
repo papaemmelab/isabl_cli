@@ -1131,7 +1131,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             # Match app by name, and optionally by version
             if dependency.get("app_name"):
                 result_args["application_name"] = dependency.get("app_name")
-                if "version" in dependency:
+                if "app_version" in dependency:
                     result_args["application_version"] = dependency.get("app_version")
             else:
                 # Match app by primary key
