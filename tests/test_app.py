@@ -627,7 +627,7 @@ def test_validate_dna_rna_only():
 
 
 def test_validate_species():
-    application = AbstractApplication()
+    application = MockApplication()
     targets = [{"sample": {"individual": {"species": "MOUSE"}}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
