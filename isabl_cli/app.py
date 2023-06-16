@@ -919,12 +919,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 else:
                     num_failed += 1
 
-            if self.application_protect_results:
-                if num_run_on_commit == 1:
-                    click.echo(f"Add --commit to run {num_run_on_commit} analysis")
-                else:
-                    click.echo(f"Add --commit to run {num_run_on_commit} analyses")
-
             if not self.application_protect_results:
                 if num_run_on_commit == 1:
                     click.echo(f"{num_run_on_commit} analysis available to run:")
