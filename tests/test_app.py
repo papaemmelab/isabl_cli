@@ -1018,6 +1018,7 @@ def test_ran_by_user(tmpdir, capsys):
 def test_commit_description(tmpdir, capsys):
     user = api.create_instance("users", **factories.UserFactory())
 
+    # testing description on application_protect_results = False, with and without --commit
     experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
     experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
     experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
@@ -1047,10 +1048,9 @@ def test_commit_description(tmpdir, capsys):
 
     captured = capsys.readouterr()
     assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
-    assert "Add --commit to run 2 analyses:\n" in captured.out
-    assert "1 STAGED" in captured.out
-    assert "1 SUCCEEDED (Unprotected)\n" in captured.out
-    assert "1 FAILED will be skipped" in captured.out
+    assert "2 analyses available to run:" in captured.out
+    assert "\t1 STAGED" in captured.out
+    assert "\t1 SUCCEEDED (Unprotected)" in captured.out
 
     ran_analyses, skipped_analyses, invalid_analyses = application.run(
         [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
@@ -1058,7 +1058,7 @@ def test_commit_description(tmpdir, capsys):
     captured = capsys.readouterr()
     assert "RAN 2 | SKIPPED 1 | INVALID 0" in captured.out
 
-    # testing description on commit = False and application_protect_results = True
+    # testing description on application_protect_results = True, with and without --commit
     experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
     experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
     experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
@@ -1088,10 +1088,7 @@ def test_commit_description(tmpdir, capsys):
 
     captured = capsys.readouterr()
     assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
-    assert "Add --commit to run 1 analysis:\n" in captured.out
-    assert "1 STAGED\n\n" in captured.out
-    assert "1 FAILED will be skipped" in captured.out
-    assert "1 SUCCEEDED (Protected) will be skipped" in captured.out
+    assert "Add --commit to run 1 analysis" in captured.out
 
     ran_analyses, skipped_analyses, invalid_analyses = application.run(
         [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True

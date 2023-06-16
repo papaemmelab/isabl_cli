@@ -919,20 +919,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 else:
                     num_failed += 1
 
-            if num_run_on_commit == 1:
-                click.echo(f"Add --commit to run {num_run_on_commit} analysis:\n")
-            else:
-                click.echo(f"Add --commit to run {num_run_on_commit} analyses:\n")
-
-            click.echo(f"{len(run_tuples)} STAGED")
+            if self.application_protect_results:
+                if num_run_on_commit == 1:
+                    click.echo(f"Add --commit to run {num_run_on_commit} analysis")
+                else:
+                    click.echo(f"Add --commit to run {num_run_on_commit} analyses")
 
             if not self.application_protect_results:
-                click.echo(f"{num_succeeded} SUCCEEDED (Unprotected)")
+                if num_run_on_commit == 1:
+                    click.echo(f"{num_run_on_commit} analysis available to run:")
+                else:
+                    click.echo(f"{num_run_on_commit} analyses available to run:")
 
-            click.echo(f"\n{num_failed} FAILED will be skipped")
-
-            if self.application_protect_results:
-                click.echo(f"{num_succeeded} SUCCEEDED (Protected) will be skipped")
+                click.echo(f"\t{len(run_tuples)} STAGED")
+                click.echo(f"\t{num_succeeded} SUCCEEDED (Unprotected)")
 
         return run_tuples, skipped_tuples, invalid_tuples
 
@@ -976,7 +976,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     continue
 
                 elif restart and i.ran_by != system_settings.api_username:
-                    invalid_tuples.append((i, "Can't restart: started by different user. Consider --force"))
+                    invalid_tuples.append(
+                        (
+                            i,
+                            "Can't restart: started by different user. Consider --force",
+                        )
+                    )
                     continue
 
                 try:
