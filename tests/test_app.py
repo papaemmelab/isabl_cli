@@ -1088,10 +1088,6 @@ def test_commit_description(tmpdir, capsys):
 
     captured = capsys.readouterr()
     assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
-<<<<<<< HEAD
-=======
-    assert "Add --commit to run 1 analysis" in captured.out
->>>>>>> master
 
     ran_analyses, skipped_analyses, invalid_analyses = application.run(
         [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
