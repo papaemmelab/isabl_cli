@@ -899,12 +899,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f"SKIPPED {len(skipped_tuples)} | "
                 f"INVALID {len(invalid_tuples)}\n"
             )
-        if commit:
-            click.echo(
-                f"RAN {len(run_tuples)} | "
-                f"SKIPPED {len(skipped_tuples)} | "
-                f"INVALID {len(invalid_tuples)}\n"
-            )
 
         else:
             click.echo(
