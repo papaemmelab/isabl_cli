@@ -783,13 +783,13 @@ def test_get_experiments_from_default_cli_options(tmpdir):
     )
     result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "RAN 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
+    assert "STAGED 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
 
     # revalidate experiment on existing analysis
     api.patch_instance("experiments", experiments[0].system_id, notes="")
     result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "RAN 5 | SKIPPED 0 | INVALID 0" in result.output
+    assert "STAGED 5 | SKIPPED 0 | INVALID 0" in result.output
 
     # just get coverage for get_job_name
     assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)
@@ -1013,3 +1013,85 @@ def test_ran_by_user(tmpdir, capsys):
 
     captured = capsys.readouterr()
     assert "Can't restart: started by different user. Consider --force" in captured.out
+
+
+def test_commit_description(tmpdir, capsys):
+    user = api.create_instance("users", **factories.UserFactory())
+
+    # testing description on application_protect_results = False, with and without --commit
+    experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    application.application_protect_results = False
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment2],
+    )
+
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="SUCCEEDED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment3],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
+    )
+
+    captured = capsys.readouterr()
+    assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
+    assert "2 analyses available to run:" in captured.out
+    assert "\t1 STAGED" in captured.out
+    assert "\t1 SUCCEEDED (Unprotected)" in captured.out
+
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
+    )
+    captured = capsys.readouterr()
+    assert "RAN 2 | SKIPPED 1 | INVALID 0" in captured.out
+
+    # testing description on application_protect_results = True, with and without --commit
+    experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    application.application_protect_results = True
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment2],
+    )
+
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="SUCCEEDED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment3],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
+    )
+
+    captured = capsys.readouterr()
+    assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
+    assert "Add --commit to run 1 analysis" in captured.out
+
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
+    )
+    captured = capsys.readouterr()
+    assert "RAN 1 | SKIPPED 2 | INVALID 0" in captured.out
