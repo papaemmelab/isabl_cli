@@ -1825,7 +1825,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if i["sample"]["individual"]["species"] != self.SPECIES:
+            if self.ASSEMBLY and i["sample"]["individual"]["species"] != self.SPECIES:
                 msg.append(f'{i["system_id"]} species not supported')
 
         assert not msg, "\n".join(msg)
