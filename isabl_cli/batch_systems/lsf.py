@@ -9,6 +9,7 @@ from os.path import join
 import os
 import random
 import re
+import json
 import subprocess
 
 import click
@@ -133,11 +134,15 @@ def submit_lsf_array(
                 utils.force_symlink(src, dst)
 
     # submit array of commands
+    cmds = {}
     cmd = (
         f"bsub {requirements} {extra_args} "
         f'-J "ISABL | {jobname}[1-{total}]%{throttle_by}" '
         f'-oo "{root}/log.%I" -eo "{root}/err.%I" -i "{root}/in.%I" bash'
     )
+    cmds["command"] = cmd
+    with open(join(rundir, "job_commands.json"), "w") as f:
+        json.dump(cmds, f, indent=4, sort_keys=True)
 
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
     jobid = re.findall("<(.*?)>", jobid)[0]
@@ -148,11 +153,20 @@ def submit_lsf_array(
         f'bsub -W 15 -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
         f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash '
     )
+    cmds["exit"] = cmd
+    with open(join(rundir, "job_commands.json"), "w") as f:
+        json.dump(cmds, f, indent=4, sort_keys=True)
 
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # clean the execution directory
     cmd = f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti {wait} rm -r {root}'
+    cmds["clean"] = cmd
+    with open(join(rundir, "job_commands.json"), "w") as f:
+        json.dump(cmds, f, indent=4, sort_keys=True)
+
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    return re.findall("<(.*?)>", jobid)[0]
+    jobid = re.findall("<(.*?)>", jobid)[0]
+
+    return jobid
