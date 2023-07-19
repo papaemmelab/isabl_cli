@@ -355,7 +355,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not analyses or len(analyses) < 2:
             click.secho(
                 f"Not enough analyses for {instance} merge, "
-                f"at least 2 required but got: {len(analyses)}", 
+                f"at least 2 required but got: {len(analyses)}",
                 err=True,
                 fg="yellow",
             )
@@ -884,18 +884,49 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 self._patch_analysis(i)
 
         # run analyses
-        run_tuples, skipped_tuples = self.run_analyses(
+        run_tuples, skipped_tuples, invalid_run_tuples = self.run_analyses(
             analyses=analyses, commit=commit, force=force, restart=restart, local=local
         )
+
+        invalid_tuples.extend(invalid_run_tuples)
 
         if verbose:
             self.echo_run_summary(run_tuples, skipped_tuples, invalid_tuples)
 
-        click.echo(
-            f"RAN {len(run_tuples)} | "
-            f"SKIPPED {len(skipped_tuples)} | "
-            f"INVALID {len(invalid_tuples)}\n"
-        )
+        if commit:
+            click.echo(
+                f"RAN {len(run_tuples)} | "
+                f"SKIPPED {len(skipped_tuples)} | "
+                f"INVALID {len(invalid_tuples)}\n"
+            )
+
+        else:
+            click.echo(
+                f"STAGED {len(run_tuples)} | "
+                f"SKIPPED {len(skipped_tuples)} | "
+                f"INVALID {len(invalid_tuples)}\n"
+            )
+
+            num_run_on_commit = len(run_tuples)
+            num_succeeded = 0
+            num_failed = 0
+
+            for i in skipped_tuples:
+                if i[1] == "SUCCEEDED":
+                    num_succeeded += 1
+                    if not self.application_protect_results:
+                        num_run_on_commit += 1
+                else:
+                    num_failed += 1
+
+            if not self.application_protect_results:
+                if num_run_on_commit == 1:
+                    click.echo(f"{num_run_on_commit} analysis available to run:")
+                else:
+                    click.echo(f"{num_run_on_commit} analyses available to run:")
+
+                click.echo(f"\t{len(run_tuples)} STAGED")
+                click.echo(f"\t{num_succeeded} SUCCEEDED (Unprotected)")
 
         return run_tuples, skipped_tuples, invalid_tuples
 
@@ -907,6 +938,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             list: tuple of
         """
         skipped_tuples = []
+        invalid_tuples = []
         command_tuples = []
         submit_analyses = (
             submit_local
@@ -937,6 +969,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     skipped_tuples.append((i, i["status"]))
                     continue
 
+                elif restart and i.ran_by != system_settings.api_username:
+                    invalid_tuples.append(
+                        (
+                            i,
+                            "Can't restart: started by different user. Consider --force",
+                        )
+                    )
+                    continue
+
                 try:
                     inputs = i.pop(
                         "application_inputs",
@@ -953,6 +994,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         self.send_analytics(
             command_tuples=command_tuples,
             skipped_tuples=skipped_tuples,
+            invalid_tuples=invalid_tuples,
             commit=commit,
             force=force,
             restart=restart,
@@ -965,10 +1007,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             run_tuples = [(i, self._staged_message) for i, _ in command_tuples]
 
-        return run_tuples, skipped_tuples
+        return run_tuples, skipped_tuples, invalid_tuples
 
     def send_analytics(
-        self, command_tuples, skipped_tuples, commit, force, restart, submitter
+        self,
+        command_tuples,
+        skipped_tuples,
+        invalid_tuples,
+        commit,
+        force,
+        restart,
+        submitter,
     ):
         """Send analytics event of analyses ran from cli."""
         analyses_tuples = []
@@ -983,7 +1032,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 else self._staged_message
             )
             analyses_tuples.append((i, status))
-        for i, _ in skipped_tuples:
+        for i, _ in skipped_tuples + invalid_tuples:
             analyses_tuples.append((i, "INVALID"))
 
         analyses = []
@@ -1007,7 +1056,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 "total": len(analyses),
                 "submitter": submitter,
                 "valid": len(command_tuples),
-                "invalid": len(skipped_tuples),
+                "invalid": len(skipped_tuples) + len(invalid_tuples),
             },
         )
 
@@ -1116,7 +1165,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             # Match app by name, and optionally by version
             if dependency.get("app_name"):
                 result_args["application_name"] = dependency.get("app_name")
-                if "version" in dependency:
+                if "app_version" in dependency:
                     result_args["application_version"] = dependency.get("app_version")
             else:
                 # Match app by primary key
@@ -1182,7 +1231,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         try:
             assert self.application.settings.get(client_id) == settings
-            click.secho(f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow")
+            click.secho(
+                f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow"
+            )
         except AssertionError:
             try:
                 api.patch_instance(
@@ -1203,7 +1254,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:  # pragma: no cover
-                click.secho(f"\tPatched failed with error: {error}.\n", err=True, fg="red")
+                click.secho(
+                    f"\tPatched failed with error: {error}.\n", err=True, fg="red"
+                )
 
         # create or update project level application
         if self.has_project_auto_merge:
@@ -1558,7 +1611,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 current_tuple = tuples_map[individual.pk]
 
                 # make sure we only have one analysis per individual
-                assert individual.pk not in existing, f"Multiple analyses for {individual}"
+                assert (
+                    individual.pk not in existing
+                ), f"Multiple analyses for {individual}"
                 existing[individual.pk] = i
 
                 # patch analysis if tuples differ
@@ -1764,7 +1819,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if i["sample"]["individual"]["species"] != self.SPECIES:
+            if self.ASSEMBLY and i["sample"]["individual"]["species"] != self.SPECIES:
                 msg.append(f'{i["system_id"]} species not supported')
 
         assert not msg, "\n".join(msg)
@@ -1825,7 +1880,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         analysts = set([project.analyst for project in projects if project.analyst])
         if not analysts:
             click.secho(
-                "Skipping notification as projects have no registered analysts", 
+                "Skipping notification as projects have no registered analysts",
                 err=True,
                 fg="red",
             )

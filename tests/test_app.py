@@ -16,13 +16,11 @@ from isabl_cli.settings import get_application_settings
 
 
 class NonSequencingApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
 
 
 class ExperimentsFromDefaulCLIApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -40,12 +38,11 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     def validate_experiments(self, targets, references):
         assert not any("raise validation error" in target.notes for target in targets)
 
-    def get_command(*_): # pylint: disable=no-method-argument
+    def get_command(*_):  # pylint: disable=no-method-argument
         return ""
 
 
 class MockApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -137,7 +134,6 @@ class MockApplication(AbstractApplication):
 
 
 class UniquePerIndividualApplication(AbstractApplication):
-
     NAME = "UNIQUE_PER_INDIVIDUAL"
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -167,7 +163,6 @@ class UniquePerIndividualApplication(AbstractApplication):
 
 
 class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
-
     NAME = "UNIQUE_PER_INDIVIDUAL_NO_PROTECT"
     application_protect_results = False
 
@@ -424,14 +419,11 @@ def test_engine(tmpdir):
     assert f"{experiments[0].system_id} has no registered bedfile" in str(error.value)
 
     # test that get results work as expected
-    assert (
-        application.get_results(
-            result_key="analysis_result_key",
-            experiment=target,
-            application_key=application.primary_key,
-        )
-        == [(1, ran_analyses[1][0].pk)]
-    )
+    assert application.get_results(
+        result_key="analysis_result_key",
+        experiment=target,
+        application_key=application.primary_key,
+    ) == [(1, ran_analyses[1][0].pk)]
 
     # check assertion error is raised when an invalid result is searched for
     with pytest.raises(AssertionError) as error:
@@ -635,7 +627,7 @@ def test_validate_dna_rna_only():
 
 
 def test_validate_species():
-    application = AbstractApplication()
+    application = MockApplication()
     targets = [{"sample": {"individual": {"species": "MOUSE"}}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
@@ -791,13 +783,13 @@ def test_get_experiments_from_default_cli_options(tmpdir):
     )
     result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "RAN 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
+    assert "STAGED 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
 
     # revalidate experiment on existing analysis
     api.patch_instance("experiments", experiments[0].system_id, notes="")
     result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "RAN 5 | SKIPPED 0 | INVALID 0" in result.output
+    assert "STAGED 5 | SKIPPED 0 | INVALID 0" in result.output
 
     # just get coverage for get_job_name
     assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)
@@ -996,3 +988,109 @@ def test_get_dependencies():
     analysis, status = ran_analyses[0]
     assert status == "SUCCEEDED"
     assert not analysis.analyses
+
+
+def test_ran_by_user(tmpdir, capsys):
+    user = api.create_instance("users", **factories.UserFactory())
+
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment], [])], commit=True, restart=True
+    )
+    assert len(ran_analyses) == 0
+    assert len(skipped_analyses) == 0
+    assert len(invalid_analyses) == 1
+
+    captured = capsys.readouterr()
+    assert "Can't restart: started by different user. Consider --force" in captured.out
+
+
+def test_commit_description(tmpdir, capsys):
+    user = api.create_instance("users", **factories.UserFactory())
+
+    # testing description on application_protect_results = False, with and without --commit
+    experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    application.application_protect_results = False
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment2],
+    )
+
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="SUCCEEDED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment3],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
+    )
+
+    captured = capsys.readouterr()
+    assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
+    assert "2 analyses available to run:" in captured.out
+    assert "\t1 STAGED" in captured.out
+    assert "\t1 SUCCEEDED (Unprotected)" in captured.out
+
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
+    )
+    captured = capsys.readouterr()
+    assert "RAN 2 | SKIPPED 1 | INVALID 0" in captured.out
+
+    # testing description on application_protect_results = True, with and without --commit
+    experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    application.application_protect_results = True
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment2],
+    )
+
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="SUCCEEDED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment3],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
+    )
+
+    captured = capsys.readouterr()
+    assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
+
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
+    )
+    captured = capsys.readouterr()
+    assert "RAN 1 | SKIPPED 2 | INVALID 0" in captured.out
