@@ -1869,6 +1869,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     "are of different individuals."
                 )
 
+    def validate_source(self, experiments, source):
+        """
+        Validate experiments are from a specific source material.
+        """
+        for i in experiments:
+            assert (
+                i["sample"]["source"] == source
+            ), f"Sample source for {i['sample']['system_id']} does not match {source}."
+
     # -------------------------
     # NOTIFICATION UTILS
     # -------------------------
