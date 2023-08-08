@@ -1172,6 +1172,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 result_args["application_key"] = dependency.get("app").primary_key
                 result_args["application_name"] = dependency.get("app").NAME
 
+            if "status" in dependency:
+                result_args["status"]  = dependency["status"]
+
             input_name = dependency.get("name")
             inputs[input_name], key = self.get_result(targets[0], **result_args)
 
