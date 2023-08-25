@@ -388,7 +388,7 @@ def get_dependency_analyses_option(dependencies_results, **extra_filters):
             if i.get("app_name")
             and (
                 not i.get("app_version")
-                or i.get("app_version") == "any"
+                or i.get("app_version") in {"latest", "any"}
             )
         ],
         *[
@@ -400,6 +400,6 @@ def get_dependency_analyses_option(dependencies_results, **extra_filters):
             for i in dependencies_results
             if i.get("app_name")
             and i.get("app_version")
-            and i.get("app_version") != "any"
+            and i.get("app_version") not in {"latest", "any"}
         ]
     ]
