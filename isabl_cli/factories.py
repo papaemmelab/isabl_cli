@@ -22,6 +22,7 @@ class ProjectFactory(BaseFactory):
     owner = factory.Sequence(lambda n: f"owner-{n}@test.com")
     principal_investigator = factory.Sequence(lambda n: f"pi-{n}@test.com")
     title = fuzzy.FuzzyText(length=20, chars=string.ascii_lowercase + " ")
+    sharing = {"can_share": [], "can_read": [], "is_public": True}
 
 
 class CenterFactory(BaseFactory):
