@@ -111,6 +111,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         exceptions.MissingOutputError,
     )
 
+    # It is possible to set LSF arguments for each application as requirements change for each pipeline.
+    # For example, you may want to set a different queue for each application. Provide a string with the
+    # arguments to be passed to LSF. For example: "-q cpuqueue -W 24:00 -n 8 -R 'rusage[mem=8GB]'"
+    lsf_args = None
+
     # private variables
     _staged_message = "READY FOR SUBMISSION"
 
@@ -1865,6 +1870,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     f"{tind['system_id']} and {rind['system_id']} "
                     "are of different individuals."
                 )
+
+    def get_lsf_args(self):
+        return self.lsf_args
 
     # -------------------------
     # NOTIFICATION UTILS

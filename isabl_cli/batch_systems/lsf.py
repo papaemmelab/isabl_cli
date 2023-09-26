@@ -55,13 +55,17 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
             submit_configuration = system_settings.SUBMIT_CONFIGURATION
+            
+            extra_args = app.get_lsf_args()
+            if extra_args is None:
+                extra_args = submit_configuration.get("extra_args", "")
 
             # LSF may not like arrays bigger thank 10K
             for i in api.chunks(commands, 10000):
                 submit_lsf_array(
                     commands=i,
                     requirements=requirements or "",
-                    extra_args=submit_configuration.get("extra_args", ""),
+                    extra_args=extra_args,
                     throttle_by=submit_configuration.get("throttle_by", 50),
                     jobname=(
                         f"application: {app} | "
