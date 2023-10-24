@@ -1,6 +1,4 @@
 from click.testing import CliRunner
-import pytest
-import click
 
 from isabl_cli import api
 from isabl_cli import commands
@@ -331,6 +329,7 @@ def test_rejected_analysis(tmpdir):
     analysis = api.create_instance(
         "analyses",
         status="FINISHED",
+        storage_url=tmpdir.strpath,
         **factories.AnalysisFactory(ran_by=None),
     )
     runner = CliRunner()

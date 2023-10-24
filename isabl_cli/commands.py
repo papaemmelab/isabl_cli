@@ -477,4 +477,4 @@ def reject_analysis(key, reason):
     """Patch an analysis status as REJECTED, providing the rejection reason."""
     analysis = api.get_instance("analyses", key)
     api.patch_analysis_status(analysis, "REJECTED")
-    api.patch_instance("analyses", key, {"notes": reason})
+    api.patch_instance("analyses", key, notes=reason)
