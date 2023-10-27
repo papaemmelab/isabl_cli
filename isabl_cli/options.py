@@ -49,6 +49,7 @@ ANALYSIS_STATUS = click.option(
             "STARTED",
             "SUBMITTED",
             "SUCCEEDED",
+            "REJECTED",
         ]
     ),
 )

@@ -628,7 +628,7 @@ def patch_analysis_status(analysis, status):
     analysis["status"] = status  # make sure that the analysis status is updated
     _set_analysis_permissions(analysis)
 
-    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS"}:
+    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS", "REJECTED"}:
         data["storage_usage"] = utils.get_tree_size(storage_url)
 
     if status == "STARTED":

@@ -99,7 +99,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
-    skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED"}
+    skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED", "REJECTED"}
 
     # If any of these errors is raised during the command generation process, the
     # submission will continue. Errors or valdation messages are presented at the end.
@@ -957,7 +957,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     api.patch_analysis_status(i, "STAGED")
 
                 # trash analysis and create outdir again
-                elif force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
+                elif force and i["status"] not in {"SUCCEEDED", "FINISHED", "REJECTED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
                     utils.makedirs(i["storage_url"])
 

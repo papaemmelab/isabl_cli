@@ -468,3 +468,13 @@ def run_signals(endpoint, filters, signals):
 
     for i in api.get_instances(endpoint, **filters):
         api._run_signals(endpoint, i, signals, raise_error=True, create_record=False)
+
+
+@click.command(hidden=True)
+@options.ANALYSIS_PRIMARY_KEY
+@click.option("--reason", help="Rejection reason. (Will be stored in Analysis.notes)")
+def reject_analysis(key, reason):
+    """Patch an analysis status as REJECTED, providing the rejection reason."""
+    analysis = api.get_instance("analyses", key)
+    api.patch_analysis_status(analysis, "REJECTED")
+    api.patch_instance("analyses", key, notes=reason)
