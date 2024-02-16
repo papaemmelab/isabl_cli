@@ -9,6 +9,7 @@ from os.path import isfile
 from os.path import join
 import abc
 import os
+import re
 import sys
 import traceback
 
@@ -705,12 +706,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             is_flag=True,
         )
 
+        cpus = click.option(
+            "--cpus",
+            help="When running local, mask cpus with taskset. e.g. 0, 0-32",
+            type=click.STRING,
+            default=None,
+        )
+
         cli_options = [  # pylint: disable=unused-variable
             (quiet, True),
             (commit, True),
             (force, cls.cli_allow_force),
             (restart, cls.cli_allow_restart),
             (local, cls.cli_allow_local),
+            (cpus, None)
         ]
 
         def print_url(ctx, _, value):
@@ -739,6 +748,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             force = cli_options.pop("force", False)
             restart = cli_options.pop("restart", False)
             local = cli_options.pop("local", False)
+            cpus = cli_options.pop("cpus", None)
             tuples = []
 
             if commit and force:
@@ -764,6 +774,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 verbose=not quiet,
                 restart=restart,
                 local=local,
+                cpus=cpus,
                 run_args=cli_options,
             )
 
@@ -835,6 +846,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         verbose=True,
         run_args=None,
         local=False,
+        cpus=None,
     ):
         """
         Run a list of targets, references tuples.
@@ -843,6 +855,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             restart (bool): set settings.restart = True.
             force (bool): if true, analyses are wiped before being submitted.
             local (bool): if true, analyses will be run locally one by one.
+            cpus (str): if set, mask cpus with taskset.
             commit (bool): if true, analyses are started (`force` overwrites).
             verbose (bool): whether or not verbose output should be printed.
             tuples (list): list of (targets, references) tuples.
@@ -875,6 +888,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # run extra settings validation
         self.validate_settings(self.settings)
 
+        # validate cpus input if local and set
+        if local and cpus and not self.validate_taskset_input(cpus):
+            raise exceptions.ValidationError(
+                f"CPU input not supported by taskset: {cpus}"
+            )
+
         # create analyses
         analyses, invalid_tuples = self.get_or_create_analyses(tuples)
 
@@ -885,7 +904,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         # run analyses
         run_tuples, skipped_tuples, invalid_run_tuples = self.run_analyses(
-            analyses=analyses, commit=commit, force=force, restart=restart, local=local
+            analyses=analyses, commit=commit, force=force, restart=restart, local=local, cpus=cpus,
         )
 
         invalid_tuples.extend(invalid_run_tuples)
@@ -930,7 +949,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return run_tuples, skipped_tuples, invalid_tuples
 
-    def run_analyses(self, analyses, commit, force, restart, local):
+    def run_analyses(self, analyses, commit, force, restart, local, cpus=None):
         """
         Run a list of analyses.
 
@@ -1003,7 +1022,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         if commit:
             click.echo(f"Running analyses with {submit_analyses.__name__}...")
-            run_tuples = submit_analyses(self, command_tuples)
+            if local:
+                run_tuples = submit_analyses(self, command_tuples, cpus)
+            else:
+                run_tuples = submit_analyses(self, command_tuples)
         else:
             run_tuples = [(i, self._staged_message) for i, _ in command_tuples]
 
@@ -1877,6 +1899,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             assert (
                 i["sample"]["source"] == source
             ), f"Sample source for {i['sample']['system_id']} does not match {source}."
+
+    def validate_taskset_input(self, cpus):
+        """Validate cpus option is in proper taskset format."""
+        regex = r'^\s*([0-9]+(-[0-9]+)?\s*)(,\s*[0-9]+(-[0-9]+)?\s*)*$'
+        if re.match(regex, cpus):
+            return True
+        return False
 
     # -------------------------
     # NOTIFICATION UTILS

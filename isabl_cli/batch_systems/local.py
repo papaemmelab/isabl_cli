@@ -9,19 +9,11 @@ from isabl_cli.settings import system_settings
 from isabl_cli.settings import perform_import
 
 
-def submit_local(app, command_tuples):
+def submit_local(app, command_tuples, specific_cpus=None):
     """Submit analyses locally and serially."""
     # make sure analyses are in submitted status to avoid
     # merging project level analyses in every success
     ret = []
-
-    get_requirements = system_settings.SUBMIT_CONFIGURATION.get("get_requirements")
-
-    if get_requirements:
-        name = "SUBMIT_CONFIGURATION.get_requirements"
-        get_requirements = perform_import(val=get_requirements, setting_name=name)
-        method = command_tuples[0][0]["targets"][0]["technique"]["method"]
-        requirements = get_requirements(app, method)
 
     api.patch_analyses_status([i for i, _ in command_tuples], "SUBMITTED")
     label = f"Running {len(command_tuples)} analyses..."
@@ -34,9 +26,9 @@ def submit_local(app, command_tuples):
             oldmask = os.umask(0o22)
             status = app._get_after_completion_status(i)
             
-            # add requirements if specified
-            if requirements:
-                j = f"{requirements} {j}"
+            # add cpus if specified
+            if specific_cpus:
+                j = f"taskset -c {specific_cpus} {j}"
 
             with open(log, "w") as stdout, open(err, "w") as stderr:
                 try:
