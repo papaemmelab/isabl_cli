@@ -31,6 +31,7 @@ def submit_local(app, command_tuples):
                         stdout=stdout,
                         stderr=stderr,
                         shell=True,
+                        executable="/bin/bash"
                     )
 
                 except subprocess.CalledProcessError:
