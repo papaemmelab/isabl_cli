@@ -123,7 +123,7 @@ def submit_slurm_array(
                 # important when the scheduler kills the head job
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 afternotok = (
-                    f"sbatch --depend=afternotok:{dependency} --kill-on-invalid-dep yes "
+                    f"sbatch {extra_args} --depend=afternotok:{dependency} --kill-on-invalid-dep yes "
                     f'-o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
@@ -155,7 +155,7 @@ def submit_slurm_array(
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
     cmd = (
-        f"sbatch -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
+        f"sbatch {extra_args} -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
         f"-o /dev/null -e /dev/null --depend=afterany:{jobid} --parsable {root}/clean.sh"
     )
 
