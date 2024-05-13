@@ -87,9 +87,9 @@ def submit_slurm_array(
 
     Arguments:
         commands (list): of (path to bash script, on exit command) tuples.
-        requirements (str): string of LSF requirements.
+        requirements (str): string of SLURM requirements.
         jobname (str): slurm array jobname.
-        extra_args (str): extra LSF args.
+        extra_args (str): extra SLURM args.
         throttle_by (int): max number of jobs running at same time.
         wait (bool): if true, wait until clean command finishes.
 
@@ -130,7 +130,7 @@ def submit_slurm_array(
 
                 # use random sleep to avoid parallel API hits
                 f.write(
-                    f"#!/bin/sh\nsleep {random.uniform(0, 10):.3} && "
+                    f"#!/bin/bash\nsleep {random.uniform(0, 10):.3} && "
                     f"({afternotok}) && bash {command}"
                 )
 
@@ -141,10 +141,10 @@ def submit_slurm_array(
                 utils.force_symlink(src, dst)
 
     with open(join(root, "in.sh"), "w") as f:
-        f.write(f"#!/bin/sh\nbash {root}/in.$SLURM_ARRAY_TASK_ID")
+        f.write(f"#!/bin/bash\nbash {root}/in.$SLURM_ARRAY_TASK_ID")
 
     with open(join(root, "clean.sh"), "w") as f:
-        f.write(f"#!/bin/sh\nrm -rf {root}")
+        f.write(f"#!/bin/bash\nrm -rf {root}")
 
     cmd = (
         f"sbatch {requirements} {extra_args} --array 1-{total}%{throttle_by} "
