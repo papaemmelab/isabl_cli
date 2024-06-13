@@ -122,16 +122,17 @@ def submit_slurm_array(
                 # submit a dependency job on failure
                 # important when the scheduler kills the head job
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
-                afternotok = (
+                after_not_ok_job = (
                     f"sbatch {extra_args} --depend=afternotok:{dependency} --kill-on-invalid-dep yes "
-                    f'-o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
+                    f'--export=TMP,TMPDIR,TMP_DIR -o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
 
                 # use random sleep to avoid parallel API hits
                 f.write(
-                    f"#!/bin/bash\nsleep {random.uniform(0, 10):.3} && "
-                    f"({afternotok}) && bash {command}"
+                    f"#!/bin/bash\n\n"
+                    f"sleep {random.uniform(0, 10):.3} && "
+                    f"({after_not_ok_job}) && bash {command}"
                 )
 
             for j in "log", "err", "exit":
