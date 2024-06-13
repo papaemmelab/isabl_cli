@@ -33,6 +33,7 @@ _DEFAULTS = {
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
     "FASTQ_READ_SUFFIX": "",
     "ADMIN_USER": getpass.getuser(),
+    "CLIENT_NAME": None,
     "TIME_ZONE": "America/New_York",
     "INSTALLED_APPLICATIONS": [],
     "CUSTOM_COMMANDS": [],
