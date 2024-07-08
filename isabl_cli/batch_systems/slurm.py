@@ -135,7 +135,7 @@ def submit_slurm_array(
                     f"({after_not_ok_job}) && bash {command}"
                 )
 
-            for j in "log", "err", "exit":
+            for j in "log", "err", "exit", "slurm":
                 src = join(rundir, f"head_job.{j}")
                 dst = join(root, f"{j}.{index}")
                 open(src, "w").close()
@@ -147,17 +147,31 @@ def submit_slurm_array(
     with open(join(root, "clean.sh"), "w") as f:
         f.write(f"#!/bin/bash\nrm -rf {root}")
 
+    # Main job array
     cmd = (
         f"sbatch {requirements} {extra_args} --array 1-{total}%{throttle_by} "
         f"-o '{root}/log.%a' -e '{root}/err.%a' "
         f'-J "ISABL: {jobname}" --parsable {root}/in.sh'
     )
-
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
+    # Job to print out slurm job metrics upon main job completion
+    seff_jobids = []
+    for i in range(1, total + 1):
+        seff_cmd = (
+            f"sbatch {extra_args} --kill-on-invalid-dep=yes "
+            f"--dependency=afterany:{jobid}_{i} -o '{root}/slurm.{i}' -J 'SEFF: {jobname}' "
+            f"--wrap='seff {jobid}_{i}'"
+        )
+        seff_jobid = subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
+        seff_jobids.append(seff_jobid.split()[-1])
+
+    # Job to clean job array rundir
+    with open(join(root, "clean.sh"), "w") as f:
+        f.write(f"#!/bin/bash\nrm -rf {root}")
     cmd = (
         f"sbatch {extra_args} -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
-        f"-o /dev/null -e /dev/null --depend=afterany:{jobid} --parsable {root}/clean.sh"
+        f"-o /dev/null -e /dev/null --depend=afterany:{':'.join(seff_jobids)} --parsable {root}/clean.sh"
     )
 
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
