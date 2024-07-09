@@ -1,4 +1,5 @@
 """Abstract Application."""
+
 # pylint: disable=R0201,C0103,too-many-lines
 
 from collections import defaultdict
@@ -29,7 +30,6 @@ from isabl_cli.settings import system_settings
 
 
 class AbstractApplication:  # pylint: disable=too-many-public-methods
-
     """An Abstract Isabl application."""
 
     # The uniqueness of an application is determined by it's name and version.
@@ -560,9 +560,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             endpoint="applications",
             name=self.NAME,
             version=self.VERSION,
-            assembly={"name": self.ASSEMBLY, "species": self.SPECIES}
-            if self.ASSEMBLY
-            else None,
+            assembly=(
+                {"name": self.ASSEMBLY, "species": self.SPECIES}
+                if self.ASSEMBLY
+                else None
+            ),
         )
 
         if application.settings.get("default_client") is None:
@@ -944,12 +946,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
 
-                    # # Store run_args in analysis data
-                    # api.patch_instance(
-                    #     "analyses",
-                    #     i.pk,
-                    #     data={**i.data, "run_args": self.settings.run_args},
-                    # )
+                    # Store only native types in run_args
+                    run_args = {
+                        key: value
+                        for key, value in (self.settings.run_args or {}).items()
+                        if isinstance(value, (int, float, str, bool))
+                    }
+                    api.patch_instance(
+                        "analyses",
+                        i.pk,
+                        data={**i.data, "run_args": run_args},
+                    )
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
