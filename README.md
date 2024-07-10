@@ -1,3 +1,5 @@
+-- **_Terms of Use: Academic Research_** --
+
 # Isabl CLI
 
 [![travis badge][travis_badge]][travis_base]
@@ -24,9 +26,9 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [elli papaemmanuil's lab]: https://www.mskcc.org/research-areas/labs/elli-papaemmanuil
 [black_badge]: https://img.shields.io/badge/code%20style-black-000000.svg
 [black_base]: https://github.com/ambv/black
-[codecov_badge]: https://codecov.io/github/papaemmelab/isabl_cli/coverage.svg?branch=master&token=PSypdR9o4P
+[codecov_badge]: https://codecov.io/gh/papaemmelab/isabl_cli/branch/master/graph/badge.svg?token=ODJ8DU73PH
 [codecov_base]: https://codecov.io/gh/papaemmelab/isabl_cli
-[travis_badge]: https://travis-ci.com/papaemmelab/isabl_cli.svg?token=P6GGbmdLPwysz69FFv2X&branch=master
+[travis_badge]: https://app.travis-ci.com/papaemmelab/isabl_cli.svg?token=P6GGbmdLPwysz69FFv2X&branch=master
 [travis_base]: https://travis-ci.com/papaemmelab/isabl_cli
 
 <!--

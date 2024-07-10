@@ -1,10 +1,9 @@
 from os.path import isfile
 from os.path import join
-import os
 import uuid
 
+from cached_property import cached_property
 from click.testing import CliRunner
-import click
 import pytest
 
 from isabl_cli import AbstractApplication
@@ -12,20 +11,16 @@ from isabl_cli import api
 from isabl_cli import exceptions
 from isabl_cli import factories
 from isabl_cli import options
-from isabl_cli import utils
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import get_application_settings
-from isabl_cli.settings import system_settings
 
 
 class NonSequencingApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
 
 
 class ExperimentsFromDefaulCLIApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -40,15 +35,14 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
         options.NULLABLE_REFERENCES,
     ]
 
-    def validate_experiments(self, targets, refereces):
+    def validate_experiments(self, targets, references):
         assert not any("raise validation error" in target.notes for target in targets)
 
-    def get_command(*_):
+    def get_command(*_):  # pylint: disable=no-method-argument
         return ""
 
 
 class MockApplication(AbstractApplication):
-
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -140,7 +134,6 @@ class MockApplication(AbstractApplication):
 
 
 class UniquePerIndividualApplication(AbstractApplication):
-
     NAME = "UNIQUE_PER_INDIVIDUAL"
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -170,7 +163,6 @@ class UniquePerIndividualApplication(AbstractApplication):
 
 
 class UniquePerIndividualProtectResultsFalse(UniquePerIndividualApplication):
-
     NAME = "UNIQUE_PER_INDIVIDUAL_NO_PROTECT"
     application_protect_results = False
 
@@ -427,14 +419,11 @@ def test_engine(tmpdir):
     assert f"{experiments[0].system_id} has no registered bedfile" in str(error.value)
 
     # test that get results work as expected
-    assert (
-        application.get_results(
-            result_key="analysis_result_key",
-            experiment=target,
-            application_key=application.primary_key,
-        )
-        == [(1, ran_analyses[1][0].pk)]
-    )
+    assert application.get_results(
+        result_key="analysis_result_key",
+        experiment=target,
+        application_key=application.primary_key,
+    ) == [(1, ran_analyses[1][0].pk)]
 
     # check assertion error is raised when an invalid result is searched for
     with pytest.raises(AssertionError) as error:
@@ -638,7 +627,7 @@ def test_validate_dna_rna_only():
 
 
 def test_validate_species():
-    application = AbstractApplication()
+    application = MockApplication()
     targets = [{"sample": {"individual": {"species": "MOUSE"}}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
@@ -794,13 +783,13 @@ def test_get_experiments_from_default_cli_options(tmpdir):
     )
     result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "RAN 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
+    assert "STAGED 3 | SKIPPED 0 | INVALID 2" in result.output, result.output
 
     # revalidate experiment on existing analysis
     api.patch_instance("experiments", experiments[0].system_id, notes="")
     result = runner.invoke(command, args, catch_exceptions=False)
     assert experiments[0].system_id in result.output
-    assert "RAN 5 | SKIPPED 0 | INVALID 0" in result.output
+    assert "STAGED 5 | SKIPPED 0 | INVALID 0" in result.output
 
     # just get coverage for get_job_name
     assert ExperimentsFromDefaulCLIApplication.get_job_name(analysis)
@@ -863,3 +852,245 @@ def test_notify_project_analyst():
     )
 
     assert application.notify_project_analyst(analysis, "test", "test").ok
+
+
+######## Test App Dependencies ###########
+
+
+class MockFirstVersion(MockApplication):
+    NAME = "PRE-PROCESSING"
+    VERSION = "v1"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 1}
+
+
+class MockSecondVersion(MockApplication):
+    NAME = "PRE-PROCESSING"
+    VERSION = "v2"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 2}
+
+
+class PostMockApp(MockApplication):
+    application_inputs = {"dependency_key": NotImplemented}
+
+    def get_command(self, analysis, inputs, settings):
+        assert inputs["dependency_key"] == 1
+        return f"echo {analysis['targets'][0]['system_id']}"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 3}
+
+
+class PostMockAppWithFirstFixedDependency(PostMockApp):
+    NAME = "POST-PROCESSING FIXED"
+    VERSION = "DEPENDS ON PRE-PROCESSING v1"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app": MockFirstVersion(),
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class PostMockAppWithSecondFixedDependency(PostMockApp):
+    NAME = "POST-PROCESSING FIXED"
+    VERSION = "DEPENDS ON PRE-PROCESSING v2"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app": MockSecondVersion(),
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class PostMockAppWithFlexibleDependency(PostMockApp):
+    NAME = "POST-PROCESSING FLEXIBLE"
+    VERSION = "DEPENDS ON PRE-PROCESSING, ANY VERSION"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app_name": "PRE-PROCESSING",
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class PostMockAppWithFlexibleDependencyNoLinked(PostMockAppWithFlexibleDependency):
+    VERSION = "DEPENDS ON PRE-PROCESSING, ANY VERSION. NO LINK"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app_name": "PRE-PROCESSING",
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+                "linked": False,
+            }
+        ]
+
+
+def test_get_dependencies():
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(
+        identifier="test-experiment", sample=sample, projects=[project]
+    )
+    experiment = api.create_instance("experiments", **experiment)
+    tuples = [([experiment], [])]
+
+    # Run dependency first
+    application = MockFirstVersion()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    preprocess_analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+
+    experiment = api.get_instance("experiments", experiment.system_id)
+    tuples = [([experiment], [])]
+
+    # A) App with fixed dependency succeeds
+    application = PostMockAppWithFirstFixedDependency()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    _, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+
+    # B) App with newer version dependency invalid, because version is strict
+    application = PostMockAppWithSecondFixedDependency()
+    _, _, invalid_analyses = application.run(tuples, commit=True)
+    _, validation_error = invalid_analyses[0]
+    assert "No results found for application" in validation_error.message
+
+    # C) App with newer version dependency succeeds, because version is flexible
+    application = PostMockAppWithFlexibleDependency()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+    assert analysis.analyses[0] == preprocess_analysis.pk
+
+    # New analysis doesn't link the previous analyses to it's run
+    application = PostMockAppWithFlexibleDependencyNoLinked()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+    assert not analysis.analyses
+
+
+def test_ran_by_user(tmpdir, capsys):
+    user = api.create_instance("users", **factories.UserFactory())
+
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment], [])], commit=True, restart=True
+    )
+    assert len(ran_analyses) == 0
+    assert len(skipped_analyses) == 0
+    assert len(invalid_analyses) == 1
+
+    captured = capsys.readouterr()
+    assert "Can't restart: started by different user. Consider --force" in captured.out
+
+
+def test_commit_description(tmpdir, capsys):
+    user = api.create_instance("users", **factories.UserFactory())
+
+    # testing description on application_protect_results = False, with and without --commit
+    experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    application.application_protect_results = False
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment2],
+    )
+
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="SUCCEEDED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment3],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
+    )
+
+    captured = capsys.readouterr()
+    assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
+    assert "2 analyses available to run:" in captured.out
+    assert "\t1 STAGED" in captured.out
+    assert "\t1 SUCCEEDED (Unprotected)" in captured.out
+
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
+    )
+    captured = capsys.readouterr()
+    assert "RAN 2 | SKIPPED 1 | INVALID 0" in captured.out
+
+    # testing description on application_protect_results = True, with and without --commit
+    experiment1 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment2 = api.create_instance("experiments", **factories.ExperimentFactory())
+    experiment3 = api.create_instance("experiments", **factories.ExperimentFactory())
+
+    application = MockApplication()
+    application.application_protect_results = True
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="FAILED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment2],
+    )
+
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="SUCCEEDED",
+        ran_by=user.username,
+        application=application.application,
+        targets=[experiment3],
+    )
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
+    )
+
+    captured = capsys.readouterr()
+    assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
+
+    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+        [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
+    )
+    captured = capsys.readouterr()
+    assert "RAN 1 | SKIPPED 2 | INVALID 0" in captured.out

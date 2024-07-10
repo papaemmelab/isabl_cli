@@ -4,6 +4,7 @@ from collections import OrderedDict
 from glob import glob
 from os.path import join
 from requests.exceptions import HTTPError
+from subprocess import CalledProcessError
 import json
 import os
 import shutil
@@ -80,21 +81,41 @@ def merge_individual_analyses(individual, application):  # pragma: no cover
 
 
 @click.command()
+@click.option("--force", help="Update previously patched results.", is_flag=True)
 @options.NULLABLE_FILTERS
-def process_finished(filters):
+def process_finished(filters, force):
     """Process and update finished analyses."""
     utils.check_admin()
     filters.update(status="FINISHED", fields="pk")
     tag = "PROCESSING FINISHED"
 
     # refetch analysis to avoid race conditions
+    n_not_patched = 0
+    n_patched = 0
     for i in api.get_instances("analyses", verbose=True, **filters):
         i = api.Analysis(i.pk)
 
-        if i.status == "FINISHED" and tag not in {j.name for j in i.tags}:
-            api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
-            api.patch_analysis_status(i, "SUCCEEDED")
-            api.patch_instance("analyses", i.pk, tags=i.tags)
+        if i.status == "FINISHED":
+            if not force and tag in {j.name for j in i.tags}:
+                n_not_patched += 1
+            else:
+                api.patch_instance("analyses", i.pk, tags=i.tags + [{"name": tag}])
+                try:
+                    api.patch_analysis_status(i, "SUCCEEDED")
+                    n_patched += 1
+                    patch_error = None
+                except (PermissionError, AssertionError, CalledProcessError) as error:
+                    patch_error = error
+
+                api.patch_instance("analyses", i.pk, tags=i.tags)
+
+                if patch_error:
+                    raise Exception(patch_error)
+    if n_not_patched:
+        click.echo(
+            f"Successfully processed {n_patched} analyses, but skipped "
+            + f"{n_not_patched} analyses in use by other processes"
+        )
 
 
 @click.command()
@@ -131,7 +152,7 @@ def patch_status(key, status):
 
 @click.command(
     epilog="Learn more about fx: "
-    "https://github.com/antonmedv/fx/blob/master/docs.md#interactive-mode"
+    "https://github.com/antonmedv/fx/blob/master/doc/doc.md#interactive-mode"
 )
 @options.ENDPOINT
 @options.FIELDS
@@ -140,10 +161,12 @@ def patch_status(key, status):
 @options.NULLABLE_IDENTIFIERS
 @click.option("--json", "json_", help="Print as JSON", is_flag=True)
 @click.option("--fx", "use_fx", help="Visualize json with fx", is_flag=True)
-def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_fx):
+@click.option("--pretty", "pretty", help="prettified output", is_flag=True)
+@click.option("--all", "output_all", help="include all fields in the tabular output", is_flag=True)
+def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_fx, output_all, pretty):
     """Retrieve metadata for multiple instances."""
-    if not field and not (json_ or use_fx):  # pragma: no cover
-        raise click.UsageError("Pass --field or use --json/--fx")
+    if not field and not (json_ or use_fx or output_all):  # pragma: no cover
+        raise click.UsageError("Pass --field or use --json/--fx/--all")
 
     if use_fx and not shutil.which("fx"):  # pragma: no cover
         raise click.UsageError("fx is not installed")
@@ -160,6 +183,8 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
             OrderedDict([(".".join(j), utils.traverse_dict(i, j)) for j in field])
             for i in instances
         ]
+    elif output_all:
+        field = [[i] for i in instances[0].__dict__.keys()]
 
     if json_:
         click.echo(json.dumps(instances, sort_keys=True, indent=4))
@@ -172,7 +197,10 @@ def get_metadata(identifiers, endpoint, field, filters, no_headers, json_, use_f
     else:
         result = [] if no_headers else ["\t".join(".".join(i) for i in field)]
         result += ["\t".join(map(str, i.values())) for i in instances]
-        click.echo("\n".join(result).expandtabs(30))
+        if pretty:
+            click.echo("\n".join(result).expandtabs(30))
+        else:
+            click.echo("\n".join(result))
 
 
 @click.command()
@@ -468,3 +496,13 @@ def run_failed_analyses(failed_analyses_filters, force, restart):
             force=force,
             run_args=i.data.get("run_args", {}),
         )
+
+
+@click.command(hidden=True)
+@options.ANALYSIS_PRIMARY_KEY
+@click.option("--reason", help="Rejection reason. (Will be stored in Analysis.notes)")
+def reject_analysis(key, reason):
+    """Patch an analysis status as REJECTED, providing the rejection reason."""
+    analysis = api.get_instance("analyses", key)
+    api.patch_analysis_status(analysis, "REJECTED")
+    api.patch_instance("analyses", key, notes=reason)

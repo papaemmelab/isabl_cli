@@ -88,6 +88,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # to NotImplemented is considered required and must be resolved at get_dependencies
     application_inputs = dict()
 
+    dependencies_results = []
+
     # It is possible to create applications that are unique at the individual level.
     # A good example of a unique per individual application could be a patient centric
     # report that aggregates results across all samples. Applications that require a
@@ -97,7 +99,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
-    skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED"}
+    skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED", "REJECTED"}
 
     # If any of these errors is raised during the command generation process, the
     # submission will continue. Errors or valdation messages are presented at the end.
@@ -118,17 +120,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     _command_err_key = "command_err"
     _base_results = {
         _command_script_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Script used to execute the analysis.",
             "verbose_name": "Analysis Script",
         },
         _command_log_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Analysis standard output.",
             "verbose_name": "Standard Output",
         },
         _command_err_key: {
-            "frontend_type": "text-file",
+            "frontend_type": "ansi",
             "description": "Analysis standard error.",
             "verbose_name": "Standard Error",
         },
@@ -354,6 +356,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             click.secho(
                 f"Not enough analyses for {instance} merge, "
                 f"at least 2 required but got: {len(analyses)}",
+                err=True,
                 fg="yellow",
             )
             return
@@ -883,18 +886,49 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 self._patch_analysis(i)
 
         # run analyses
-        run_tuples, skipped_tuples = self.run_analyses(
+        run_tuples, skipped_tuples, invalid_run_tuples = self.run_analyses(
             analyses=analyses, commit=commit, force=force, restart=restart, local=local
         )
+
+        invalid_tuples.extend(invalid_run_tuples)
 
         if verbose:
             self.echo_run_summary(run_tuples, skipped_tuples, invalid_tuples)
 
-        click.echo(
-            f"RAN {len(run_tuples)} | "
-            f"SKIPPED {len(skipped_tuples)} | "
-            f"INVALID {len(invalid_tuples)}\n"
-        )
+        if commit:
+            click.echo(
+                f"RAN {len(run_tuples)} | "
+                f"SKIPPED {len(skipped_tuples)} | "
+                f"INVALID {len(invalid_tuples)}\n"
+            )
+
+        else:
+            click.echo(
+                f"STAGED {len(run_tuples)} | "
+                f"SKIPPED {len(skipped_tuples)} | "
+                f"INVALID {len(invalid_tuples)}\n"
+            )
+
+            num_run_on_commit = len(run_tuples)
+            num_succeeded = 0
+            num_failed = 0
+
+            for i in skipped_tuples:
+                if i[1] == "SUCCEEDED":
+                    num_succeeded += 1
+                    if not self.application_protect_results:
+                        num_run_on_commit += 1
+                else:
+                    num_failed += 1
+
+            if not self.application_protect_results:
+                if num_run_on_commit == 1:
+                    click.echo(f"{num_run_on_commit} analysis available to run:")
+                else:
+                    click.echo(f"{num_run_on_commit} analyses available to run:")
+
+                click.echo(f"\t{len(run_tuples)} STAGED")
+                click.echo(f"\t{num_succeeded} SUCCEEDED (Unprotected)")
 
         return run_tuples, skipped_tuples, invalid_tuples
 
@@ -906,6 +940,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             list: tuple of
         """
         skipped_tuples = []
+        invalid_tuples = []
         command_tuples = []
         submit_analyses = (
             submit_local
@@ -924,7 +959,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     api.patch_analysis_status(i, "STAGED")
 
                 # trash analysis and create outdir again
-                elif force and i["status"] not in {"SUCCEEDED", "FINISHED"}:
+                elif force and i["status"] not in {"SUCCEEDED", "FINISHED", "REJECTED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
                     utils.makedirs(i["storage_url"])
 
@@ -934,6 +969,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     and i["status"] in self.skip_status
                 ):
                     skipped_tuples.append((i, i["status"]))
+                    continue
+
+                elif restart and i.ran_by != system_settings.api_username:
+                    invalid_tuples.append(
+                        (
+                            i,
+                            "Can't restart: started by different user. Consider --force",
+                        )
+                    )
                     continue
 
                 try:
@@ -964,6 +1008,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         self.send_analytics(
             command_tuples=command_tuples,
             skipped_tuples=skipped_tuples,
+            invalid_tuples=invalid_tuples,
             commit=commit,
             force=force,
             restart=restart,
@@ -976,10 +1021,17 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         else:
             run_tuples = [(i, self._staged_message) for i, _ in command_tuples]
 
-        return run_tuples, skipped_tuples
+        return run_tuples, skipped_tuples, invalid_tuples
 
     def send_analytics(
-        self, command_tuples, skipped_tuples, commit, force, restart, submitter
+        self,
+        command_tuples,
+        skipped_tuples,
+        invalid_tuples,
+        commit,
+        force,
+        restart,
+        submitter,
     ):
         """Send analytics event of analyses ran from cli."""
         analyses_tuples = []
@@ -994,7 +1046,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 else self._staged_message
             )
             analyses_tuples.append((i, status))
-        for i, _ in skipped_tuples:
+        for i, _ in skipped_tuples + invalid_tuples:
             analyses_tuples.append((i, "INVALID"))
 
         analyses = []
@@ -1014,10 +1066,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             system_settings.api_username,
             "Ran app",
             {
-                "analyses": analyses,
+                "analyses": analyses[:200],
+                "total": len(analyses),
                 "submitter": submitter,
                 "valid": len(command_tuples),
-                "invalid": len(skipped_tuples),
+                "invalid": len(skipped_tuples) + len(invalid_tuples),
             },
         )
 
@@ -1078,7 +1131,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def _get_dependencies(self, targets, references):
         missing = []
-        analyses, inputs = self.get_dependencies(targets, references, self.settings)
+        if self.dependencies_results:
+            analyses, inputs = self._get_dependencies_results(targets, references)
+        else:
+            analyses, inputs = self.get_dependencies(targets, references, self.settings)
 
         for i, j in self.application_inputs.items():  # pragma: no cover
             if i not in inputs:
@@ -1092,6 +1148,53 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             raise exceptions.ConfigurationError(
                 f"Required inputs missing from `get_dependencies`: {missing}"
             )
+
+        return analyses, inputs
+
+    def _get_dependencies_results(self, targets, references):
+        """
+        Get dependencies' results from a defined application version.
+
+        It's called when `self.dependencies_results` is an array containing an object:
+            {
+                result (str): Result key `Application.results.result_key`.
+                name (str): Name the result will have in the inputs objects.
+                app (obj): `Application` instance.
+                app_name (str): `Application.name`.
+                app_version (str): `Application.version`. If not defined, use
+                    any available. Use `any` if you want to use the latest available.
+                linked (bool): if False, the analysis is not linked as a dependencie of
+                    the analysis. As adding new dependencies to an analysis forces isabl
+                    to not recognize existing ones (Default: True).
+            }
+        """
+        inputs = {}
+        analyses = []
+        for dependency in self.dependencies_results:
+            result_args = {
+                "result_key": dependency["result"],
+                "targets": targets,
+                "references": references,
+            }
+            # Match app by name, and optionally by version
+            if dependency.get("app_name"):
+                result_args["application_name"] = dependency.get("app_name")
+                if "app_version" in dependency:
+                    result_args["application_version"] = dependency.get("app_version")
+            else:
+                # Match app by primary key
+                result_args["application_key"] = dependency.get("app").primary_key
+                result_args["application_name"] = dependency.get("app").NAME
+
+            if "status" in dependency:
+                result_args["status"]  = dependency["status"]
+
+            input_name = dependency.get("name")
+            inputs[input_name], key = self.get_result(targets[0], **result_args)
+
+            if not "linked" in dependency or dependency["linked"]:
+                # Avoid linking the analysis as dependency to avoid creating new runs.
+                analyses.append(key)
 
         return analyses, inputs
 
@@ -1145,7 +1248,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         try:
             assert self.application.settings.get(client_id) == settings
-            click.secho(f"\tNo changes detected, skipping patch.\n", fg="yellow")
+            click.secho(
+                f"\tNo changes detected, skipping patch.\n", err=True, fg="yellow"
+            )
         except AssertionError:
             try:
                 api.patch_instance(
@@ -1166,7 +1271,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                 click.secho("\tSuccessfully patched settings.\n", fg="green")
             except TypeError as error:  # pragma: no cover
-                click.secho(f"\tPatched failed with error: {error}.\n", fg="red")
+                click.secho(
+                    f"\tPatched failed with error: {error}.\n", err=True, fg="red"
+                )
 
         # create or update project level application
         if self.has_project_auto_merge:
@@ -1431,7 +1538,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             for i in bar:
                 try:
                     targets, references, analyses, inputs, individual = i
-                    self.validate_species(targets + references)
+                    # self.validate_species(targets + references)
                     self.validate_experiments(targets, references)
                     analysis = self._patch_analysis(
                         api.create_instance(
@@ -1512,30 +1619,33 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         tuples_map = {i[-1].pk: i for i in tuples}
         existing = {}
 
-        for i in api.get_analyses(
-            application=self.application.pk,
-            individual_level_analysis__pk__in=",".join(map(str, tuples_map)),
-        ):
-            individual = i.individual_level_analysis
-            current_tuple = tuples_map[individual.pk]
+        if tuples_map:
+            for i in api.get_analyses(
+                application=self.application.pk,
+                individual_level_analysis__pk__in=",".join(map(str, tuples_map)),
+            ):
+                individual = i.individual_level_analysis
+                current_tuple = tuples_map[individual.pk]
 
-            # make sure we only have one analysis per individual
-            assert individual.pk not in existing, f"Multiple analyses for {individual}"
-            existing[individual.pk] = i
+                # make sure we only have one analysis per individual
+                assert (
+                    individual.pk not in existing
+                ), f"Multiple analyses for {individual}"
+                existing[individual.pk] = i
 
-            # patch analysis if tuples differ
-            for ix, key in enumerate(["targets", "references", "analyses"]):
-                if {getattr(j, "pk", j) for j in i[key]} != {
-                    getattr(j, "pk", j) for j in current_tuple[ix]
-                }:
-                    existing[individual.pk] = api.patch_instance(
-                        "analyses",
-                        i.pk,
-                        targets=current_tuple[0],
-                        references=current_tuple[1],
-                        analyses=current_tuple[2],
-                    )
-                    break
+                # patch analysis if tuples differ
+                for ix, key in enumerate(["targets", "references", "analyses"]):
+                    if {getattr(j, "pk", j) for j in i[key]} != {
+                        getattr(j, "pk", j) for j in current_tuple[ix]
+                    }:
+                        existing[individual.pk] = api.patch_instance(
+                            "analyses",
+                            i.pk,
+                            targets=current_tuple[0],
+                            references=current_tuple[1],
+                            analyses=current_tuple[2],
+                        )
+                        break
 
         return list(existing.values()), [i for i in tuples if i[-1].pk not in existing]
 
@@ -1726,7 +1836,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         msg = []
 
         for i in experiments:
-            if i["sample"]["individual"]["species"] != self.SPECIES:
+            if self.ASSEMBLY and i["sample"]["individual"]["species"] != self.SPECIES:
                 msg.append(f'{i["system_id"]} species not supported')
 
         assert not msg, "\n".join(msg)
@@ -1758,7 +1868,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             tind = targets_set[0]["sample"]["individual"]
             rind = references_set[0]["sample"]["individual"]
 
-            if hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED:
+            if (
+                hasattr(self, "IS_UNMATCHED") and self.IS_UNMATCHED
+            ):  # pylint: disable=no-member
                 assert tind["pk"] != rind["pk"], (
                     "Different individuals required: "
                     f"{tind['system_id']} and {rind['system_id']} "
@@ -1771,6 +1883,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     "are of different individuals."
                 )
 
+    def validate_source(self, experiments, source):
+        """
+        Validate experiments are from a specific source material.
+        """
+        for i in experiments:
+            assert (
+                i["sample"]["source"] == source
+            ), f"Sample source for {i['sample']['system_id']} does not match {source}."
+
     # -------------------------
     # NOTIFICATION UTILS
     # -------------------------
@@ -1782,9 +1903,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         projects = []
         for target in analysis.targets:
             projects.extend(target.projects)
-        analysts = set([project.analyst for project in projects])
+        analysts = set([project.analyst for project in projects if project.analyst])
+        if not analysts:
+            click.secho(
+                "Skipping notification as projects have no registered analysts",
+                err=True,
+                fg="red",
+            )
+            return
         kwargs = {
             "data": {"recipients": analysts, "subject": subject, "content": message}
         }
-
         return api.api_request("post", url=f"/send_email", **kwargs)

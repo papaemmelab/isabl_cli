@@ -7,12 +7,14 @@ from pwd import getpwuid
 import getpass
 import json
 import os
+import re
 import sys
 import tarfile
 
 import analytics
 import click
 
+from packaging import version
 from isabl_cli.settings import system_settings
 
 
@@ -25,8 +27,10 @@ def makedirs(path, exist_ok=True, mode=0o777):
 
 def get_results(
     experiment,
-    application_key,
     result_key,
+    application_key=None,
+    application_name=None,
+    application_version=None,
     targets=None,
     references=None,
     analyses=None,
@@ -36,18 +40,21 @@ def get_results(
     Match results from a experiment object.
 
     If targets, references or analyses are provided the analysis result must
-    match these list of samples and dependencies.
+    match these list of samples and dependencies. Match can be done by app pk, by app
+    name, or by app name and cversion.
 
     Pass `result_key='storage_url'` to get the output directory.
 
     Arguments:
         experiment (dict): experiment object for which result will be retrieved.
-        application_key (int): key of the application that generated the result.
         result_key (dict): name of the result.
+        application_key (int): key of the application that generated the result.
+        application_name (str): name of the application that generated the result.
+        application_version (str): version of the application that generated the result.
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
-        status (str): expected analysis status.
+        status (str): expected analysis status. For multiple, string with `\`.
 
     Returns:
         list: of tuples (result_value, analysis primary key).
@@ -57,42 +64,66 @@ def get_results(
     references = {i.pk for i in references or []}
     analyses = {i.pk for i in analyses or []}
 
+    # Filter candidates by same pk or name and/ version
+    experiment_results = []
     for i in experiment.results:
-        if i.application.pk == application_key:
-            if targets and {j.pk for j in i.targets}.difference(
-                targets
-            ):  # pragma: no cover
-                continue
+        if application_key:
+            if i.application.pk == application_key:
+                experiment_results.append(i)
+        elif application_name:
+            if (
+                application_version
+                and application_version != "latest"
+            ):
+                if (
+                    i.application.name == application_name
+                    and i.application.version == application_version
+                ):
+                    experiment_results.append(i)
+            else:
+                if i.application.name == application_name:
+                    experiment_results.append(i)
 
-            if references and {j.pk for j in i.references}.difference(
-                references
-            ):  # pragma: no cover
-                continue
+    # Filter candidates by same targets/references/analyses
+    for i in experiment_results:
+        if targets and {j.pk for j in i.targets}.difference(
+            targets
+        ):  # pragma: no cover
+            continue
 
-            if analyses and not analyses.issubset(
-                {j.pk for j in i.analyses}
-            ):  # pragma: no cover
-                continue
+        if references and {j.pk for j in i.references}.difference(
+            references
+        ):  # pragma: no cover
+            continue
 
-            results_dict = i if result_key == "storage_url" else i.results
-            result = results_dict.get(result_key)
-            results.append((result, i.pk))
+        if analyses and not analyses.issubset(
+            {j.pk for j in i.analyses}
+        ):  # pragma: no cover
+            continue
 
-            assert result_key in results_dict, (
-                f"Result '{result_key}' not found for analysis {i.pk}"
-                f"({i.application.name} {i.application.version}) "
-                f"with status: {i.status}"
-            )
+        results_dict = i if result_key == "storage_url" else i.results
+        result = results_dict.get(result_key)
+        results.append((result, i.pk))
 
-            assert i.status == status if status else True, (
-                f"Expected status '{status}' for result '{result_key}' did not match: "
-                f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
-            )
+        assert result_key in results_dict, (
+            f"Result '{result_key}' not found for analysis {i.pk}"
+            f"({i.application.name} {i.application.version}) "
+            f"with status: {i.status}"
+        )
+
+        assert i.status in status.split("/") if status else True, (
+            f"Expected status '{status}' for result '{result_key}' did not match: "
+            f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
+        )
+
+    # Return latest if more than 1 result and version is `latest`.
+    if len(results) > 2 and application_version == "latest":
+        results = sorted(results, key=lambda x: x[1], reverse=True)[:1]
 
     return results
 
 
-def get_result(*args, application_name=None, **kwargs):
+def get_result(*args, **kwargs):
     """
     See get_results for full signature.
 
@@ -104,10 +135,11 @@ def get_result(*args, application_name=None, **kwargs):
     Returns:
         tuple: result value, analysis pk that produced the result
     """
-    app_name = application_name or kwargs.get("application_key")
+    app_name = kwargs.get("application_name") or kwargs.get("application_key")
     results = get_results(*args, **kwargs)
     assert results, f"No results found for application: {app_name}"
-    assert len(results) == 1, f"Multiple results returned {results}"
+    if kwargs.get("application_version") != "latest": 
+        assert len(results) == 1, f"Multiple results returned {results}"
     result, key = results[0]
     return result, key
 
@@ -170,6 +202,13 @@ def get_rsync_command(src, dst, chmod="a-w"):
         f"find {src}/ -depth -type d -empty "
         r'-exec rmdir "{}" \;'
     )
+
+def check_rsync_version(version_stdout):
+    """check for outdated rsync lacking the --append-verify"""
+    version_string =  re.search(r'.*(?P<ver>\d\.\d\.\d).*', version_stdout).group("ver")
+    major_version = version.parse(version_string).major
+    if major_version != 3:
+        raise ValueError("Please upgrade your version of rsync!")
 
 
 def get_tree_size(path, follow_symlinks=False):

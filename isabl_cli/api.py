@@ -185,7 +185,7 @@ def chunks(array, size):
 def get_api_url(url):
     """Get an API URL."""
     # hmm, don't like this messing around with slashes
-    base_url = environ.get("ISABL_API_URL", "http://0.0.0.0:8000/api/v1/")
+    base_url = environ.get("ISABL_API_URL", "http://localhost:8000/api/v1/")
     base_url = base_url if base_url[-1] == "/" else f"{base_url}/"
 
     if not url.startswith(base_url):
@@ -244,11 +244,11 @@ def get_token_headers():
         if (
             not response.ok and "non_field_errors" in response.text and not testing
         ):  # pragma: no cover
-            click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
+            click.secho("\n".join(response.json()["non_field_errors"]), err=True, fg="red")
             get_token_headers.cache_clear()
             return get_token_headers()
         elif not response.ok:  # pragma: no cover
-            click.secho(f"Request Error: {response.url}", fg="red")
+            click.secho(f"Request Error: {response.url}", err=True, fg="red")
             response.raise_for_status()
 
         user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
@@ -268,7 +268,7 @@ def send_analytics(user):
     if user.get("username"):
         username = user["username"]
         api_url = get_api_url("/")
-        if "localhost" in api_url or "0.0.0.0" in api_url:
+        if "localhost" in api_url or  "0.0.0.0" in api_url or "isabl-api" in api_url:
             domain = urlparse(api_url).netloc
             subdomain = ""
             group_id = "DEV"
@@ -306,7 +306,7 @@ def api_request(method, url, authenticate=True, **kwargs):
         except Exception:  # pylint: disable=broad-except
             msg = ""
 
-        click.echo(f"Request Error: {response.url}\n{msg}")
+        click.echo(f"Request Error: {response.url}\n{msg}", err=True)
         response.raise_for_status()
 
     return response
@@ -332,7 +332,7 @@ def process_api_filters(**filters):
             if key == "fields" and "pk" not in value:  # pk is required
                 value = ",".join(value.split(",") + ["pk"])
             filters_dict[key] = value
-        elif isinstance(value, collections.Iterable):
+        elif isinstance(value, collections.abc.Iterable):
             is_in = key.endswith("__in") or key.endswith("__in!")
             value = list(map(str, value))
             filters_dict[key] = [",".join(value)] if is_in else value
@@ -628,7 +628,7 @@ def patch_analysis_status(analysis, status):
     analysis["status"] = status  # make sure that the analysis status is updated
     _set_analysis_permissions(analysis)
 
-    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS"}:
+    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS", "REJECTED"}:
         data["storage_usage"] = utils.get_tree_size(storage_url)
 
     if status == "STARTED":
@@ -702,7 +702,17 @@ def _set_analysis_permissions(analysis):
             src = analysis.storage_url + "__tmp"
             shutil.move(analysis.storage_url, src)
             cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
-            subprocess.check_call(cmd, shell=True)
+            try:
+                subprocess.check_call(cmd, shell=True)
+            except subprocess.CalledProcessError:
+                try:
+                    version_stdout = subprocess.run(
+                        ["rsync", "--version"], capture_output=True, text=True
+                    ).stdout.split("\n")[0]
+                    utils.check_rsync_version(version_stdout)
+                except Exception as e:
+                    click.secho(f"Error running rsync and checking its version", err=True, fg="red")
+                    raise(e)
         else:
             subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
 
@@ -728,7 +738,7 @@ def _get_analysis_results(analysis, raise_error=True):
     try:
         application = import_from_string(analysis.application.application_class)()
     except ImportError as error:
-        click.secho(f"{error_msg} cant import application class", fg="red")
+        click.secho(f"{error_msg} cant import application class", err=True, fg="red")
         return results
 
     if not analysis.storage_url:  # pragma: no cover
@@ -752,7 +762,7 @@ def _get_analysis_results(analysis, raise_error=True):
 
         results = application._get_analysis_results(analysis)
     except Exception as error:  # pragma: no cover pylint: disable=broad-except
-        click.secho(f"{error_msg} {error}", fg="red")
+        click.secho(f"{error_msg} {error}", err=True, fg="red")
         if raise_error:
             raise error
         print(traceback.format_exc())
@@ -799,7 +809,7 @@ def _run_signals(endpoint, instance, signals, raise_error=False, create_record=T
             + click.style("\n".join([f"{i}:\n\t{j}" for i, j in errors]), fg="red")
         )
 
-        click.echo(msg)
+        click.echo(msg, err=True)
 
         if raise_error:
             raise exceptions.AutomationError(msg)

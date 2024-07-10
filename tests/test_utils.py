@@ -145,3 +145,10 @@ def test_called_from():
     assert "a_function" in a_function()
     assert "test_called_from" in a_function()
     assert "pytest_pyfunc_call" in a_function()
+
+def test_rsync_version_checking():
+    incompatible_version_string = "rsync  version 2.6.9  protocol version 29"
+    with pytest.raises(ValueError):
+        utils.check_rsync_version(incompatible_version_string)
+    compatible_version_string = "rsync  version 3.2.7  protocol version 31"
+    assert utils.check_rsync_version(compatible_version_string) is None

@@ -163,7 +163,7 @@ def test_local_data_import(tmpdir):
     projects = [api.create_instance("projects", **factories.ProjectFactory())]
     experiments = [factories.ExperimentFactory(projects=projects) for i in range(7)]
     experiments = [api.create_instance("experiments", **i) for i in experiments]
-    keys = [i["pk"] for i in experiments]
+    keys = ",".join([str(i["pk"]) for i in experiments])
 
     importer = data.LocalDataImporter()
     _, summary = importer.import_data(directories=dirs, pk__in=keys)
@@ -320,10 +320,10 @@ def test_local_data_import(tmpdir):
     assert path_2.exists()
 
 
-def test_local_data_import_with_extra(tmpdir, use_test_client):
-    assert use_test_client == os.environ.get(
+def test_local_data_import_with_extra(tmpdir):
+    assert "test-cli-client" == os.environ.get(
         "ISABL_CLIENT_ID"
-    ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
+    ), f"export ISABL_CLIENT_ID='test-cli-client' for this test to work"
 
     dirs = [tmpdir.strpath]
     project = api.create_instance("projects", **factories.ProjectFactory())
@@ -387,10 +387,10 @@ def test_get_dst():
                     )
 
 
-def test_extra_raw_data_formats(use_test_client):
-    assert use_test_client == os.environ.get(
+def test_extra_raw_data_formats():
+    assert "test-cli-client" == os.environ.get(
         "ISABL_CLIENT_ID"
-    ), f"export ISABL_CLIENT_ID='{use_test_client}' for this test to work"
+    ), f"export ISABL_CLIENT_ID='test-cli-client' for this test to work"
 
     for i, j in [
         ("sample.tf", "TEST_FORMAT"),

@@ -45,7 +45,7 @@ def add_apps_groups(apps):
             command = i.as_cli_command()
             apps_dict[i.ASSEMBLY][command.name] = command
         except (exceptions.ConfigurationError, AttributeError) as error:
-            click.secho(f"Invalid configuration, failed to register {i}: {error}")
+            click.secho(f"Invalid configuration, failed to register {i}: {error}", err=True, fg="red")
 
         if (time.time() - start_time) > 0.1:  # pragma: no cover
             click.secho(f"{i.__name__} is loading slowly...", err=True, fg="yellow")
@@ -66,10 +66,9 @@ for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
 try:
-    if system_settings.INSTALLED_APPLICATIONS:  # pragma: no cover
-        add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
+    add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
 except ImportError as error:
-    click.secho(f"Failed to import applications: {error}", fg="red")
+    click.secho(f"Failed to import applications: {error}", err=True, fg="red")
 
 
 if system_settings.is_admin_user:
@@ -87,6 +86,6 @@ if system_settings.is_admin_user:
 
     if system_settings.BED_IMPORTER:
         main.add_command(system_settings.BED_IMPORTER.as_cli_command())
-    
+
     if system_settings.YAML_DATA_IMPORTER:
         main.add_command(system_settings.YAML_DATA_IMPORTER.as_cli_command())

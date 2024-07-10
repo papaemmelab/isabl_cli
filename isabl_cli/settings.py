@@ -33,6 +33,7 @@ _DEFAULTS = {
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
     "FASTQ_READ_SUFFIX": "",
     "ADMIN_USER": getpass.getuser(),
+    "CLIENT_NAME": None,
     "TIME_ZONE": "America/New_York",
     "INSTALLED_APPLICATIONS": [],
     "CUSTOM_COMMANDS": [],
@@ -57,12 +58,13 @@ _DEFAULTS = {
         "isabl_cli.commands.get_reference",
         "isabl_cli.commands.get_results",
         "isabl_cli.commands.login",
-        "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.merge_individual_analyses",
+        "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.patch_status",
+        "isabl_cli.commands.reject_analysis",
         "isabl_cli.commands.rerun_signals",
-        "isabl_cli.commands.run_web_signals",
         "isabl_cli.commands.run_signals",
+        "isabl_cli.commands.run_web_signals",
     ],
     "EXTRA_RAW_DATA_FORMATS": [],
 }
@@ -89,12 +91,24 @@ _IMPORT_STRINGS = {
 _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
 
 
+def import_valid_applications(val, setting_name):
+    if setting_name == "INSTALLED_APPLICATIONS":
+        apps = []
+        for item in val:
+            try:
+                apps.append(import_from_string(item, setting_name))
+            except ImportError as error:
+                click.secho(f"Failed to import applications: {error}", err=True, fg="red")
+        return apps
+    return [import_from_string(item, setting_name) for item in val]
+
+
 def perform_import(val, setting_name):
     """Perform the necessary import or imports."""
     if isinstance(val, six.string_types):
         return import_from_string(val, setting_name)
     elif isinstance(val, (list, tuple)):
-        return [import_from_string(item, setting_name) for item in val]
+        return import_valid_applications(val, setting_name)
     return val  # pragma: no cover
 
 
@@ -211,6 +225,7 @@ class SystemSettings(BaseSettings):
                 "Set environment variable ISABL_CLIENT_ID "
                 "to your databased client primary key or slug "
                 "to configure Isabl CLI directly from the API.",
+                err=True,
                 fg="yellow",
             )
 
