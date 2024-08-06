@@ -59,7 +59,6 @@ def get_results(
     Returns:
         list: of tuples (result_value, analysis primary key).
     """
-    results = []
     targets = {i.pk for i in targets or []}
     references = {i.pk for i in references or []}
     analyses = {i.pk for i in analyses or []}
@@ -85,6 +84,7 @@ def get_results(
                     experiment_results.append(i)
 
     # Filter candidates by same targets/references/analyses
+    candidates = []
     for i in experiment_results:
         if targets and {j.pk for j in i.targets}.difference(
             targets
@@ -101,6 +101,14 @@ def get_results(
         ):  # pragma: no cover
             continue
 
+        candidates.append(i)
+
+    # Return latest if more than 1 result and version is `latest`.
+    if len(candidates) > 1 and application_version == "latest":
+        candidates = sorted(candidates, key=lambda x: x.pk, reverse=True)[:1]
+
+    results = []
+    for i in candidates:
         results_dict = i if result_key == "storage_url" else i.results
         result = results_dict.get(result_key)
         results.append((result, i.pk))
@@ -115,11 +123,6 @@ def get_results(
             f"Expected status '{status}' for result '{result_key}' did not match: "
             f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
         )
-
-    # Return latest if more than 1 result and version is `latest`.
-    if len(results) > 2 and application_version == "latest":
-        results = sorted(results, key=lambda x: x[1], reverse=True)[:1]
-
     return results
 
 
