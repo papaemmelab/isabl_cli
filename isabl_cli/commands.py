@@ -470,6 +470,34 @@ def run_signals(endpoint, filters, signals):
         api._run_signals(endpoint, i, signals, raise_error=True, create_record=False)
 
 
+@click.command()
+@options.FAILED_ANALYSES
+@options.FORCE
+@options.RESTART
+def run_failed_analyses(failed_analyses_filters, force, restart):
+    """Command to run failed analyses in batch."""
+    utils.check_admin()
+    # group analyses per application
+    analyses = {}
+    for i in failed_analyses_filters:
+        app_class = i.application.application_class
+        if app_class in analyses:
+            analyses[app_class].append(i)
+        else:
+            analyses[app_class] = [i]
+
+    for app_class, app_analyses in analyses.items():
+        tuples = [(i.targets, i.references) for i in app_analyses]
+        app = import_from_string(app_class)
+        app().run(
+            tuples=tuples,
+            commit=False,
+            restart=restart,
+            force=force,
+            run_args=i.data.get("run_args", {}),
+        )
+
+
 @click.command(hidden=True)
 @options.ANALYSIS_PRIMARY_KEY
 @click.option("--reason", help="Rejection reason. (Will be stored in Analysis.notes)")
