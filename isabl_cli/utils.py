@@ -124,7 +124,6 @@ def get_results(
             f"Expected status '{status}' for result '{result_key}' did not match: "
             f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
         )
-
     return results
 
 
