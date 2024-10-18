@@ -8,6 +8,7 @@ from os.path import dirname
 from os.path import join
 import os
 import random
+import shutil
 import subprocess
 
 from slugify import slugify
@@ -60,6 +61,7 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
                     requirements=requirements or "",
                     extra_args=submit_configuration.get("extra_args", ""),
                     throttle_by=submit_configuration.get("throttle_by", 50),
+                    unbuffer=submit_configuration.get("unbuffer", False),
                     jobname=(
                         f"application: {app} | "
                         f"methods: {', '.join(methods)} | "
@@ -75,7 +77,13 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
 
 
 def submit_slurm_array(
-    commands, requirements, jobname, extra_args=None, throttle_by=50, wait=False, unbuffer=True,
+    commands,
+    requirements,
+    jobname,
+    extra_args=None,
+    throttle_by=50,
+    wait=False,
+    unbuffer=False,
 ):  # pragma: no cover
     """
     Submit an array of bash scripts.
@@ -109,7 +117,7 @@ def submit_slurm_array(
     )
 
     wait_flag = "-W" if wait else ""
-    unbuffer = "unbuffer" if unbuffer else ""
+    unbuffer = "unbuffer" if unbuffer and shutil.which("unbuffer") else ""
     os.makedirs(root, exist_ok=True)
     jobname += "-rundir: {}".format(root)
     jobname = slugify(jobname)
@@ -163,7 +171,9 @@ def submit_slurm_array(
             f"--dependency=afterany:{jobid}_{i} -J 'SEFF: {jobname}' "
             f"--wrap='seff {jobid}_{i} >> {root}/slurm.{i}'"
         )
-        seff_jobid = subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
+        seff_jobid = (
+            subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
+        )
         seff_jobids.append(seff_jobid.split()[-1])
 
     # Job to clean job array rundir

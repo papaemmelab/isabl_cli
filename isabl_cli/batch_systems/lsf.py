@@ -9,6 +9,7 @@ from os.path import join
 import os
 import random
 import re
+import shutil
 import subprocess
 
 import click
@@ -62,6 +63,7 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
                     requirements=requirements or "",
                     extra_args=submit_configuration.get("extra_args", ""),
                     throttle_by=submit_configuration.get("throttle_by", 50),
+                    unbuffer=submit_configuration.get("unbuffer", False),
                     jobname=(
                         f"application: {app} | "
                         f"methods: {', '.join(methods)} | "
@@ -77,7 +79,13 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
 
 def submit_lsf_array(
-    commands, requirements, jobname, extra_args=None, throttle_by=50, wait=False
+    commands,
+    requirements,
+    jobname,
+    extra_args=None,
+    throttle_by=50,
+    wait=False,
+    unbuffer=False,
 ):  # pragma: no cover
     """
     Submit an array of bash scripts.
@@ -94,6 +102,7 @@ def submit_lsf_array(
         extra_args (str): extra LSF args.
         throttle_by (int): max number of jobs running at same time.
         wait (bool): if true, wait until clean command finishes.
+        unbuffer (bool): if true, will unbuffer the stdout/stderr.
 
     Returns:
         str: jobid of clean up job.
@@ -108,7 +117,8 @@ def submit_lsf_array(
         datetime.now(system_settings.TIME_ZONE).isoformat(),
     )
 
-    wait = "-K" if wait else ""
+    wait_flag = "-K" if wait else ""
+    unbuffer = "unbuffer" if unbuffer and shutil.which("unbuffer") else ""
     os.makedirs(root, exist_ok=True)
     jobname += " | rundir: {}".format(root)
     total = len(commands)
@@ -121,7 +131,9 @@ def submit_lsf_array(
 
             with open(join(root, "in.%s" % index), "w") as f:
                 # use random sleep to avoid parallel API hits
-                f.write(f"sleep {random.uniform(0, 10):.3} && bash {command}")
+                f.write(
+                    f"sleep {random.uniform(0, 10):.3} && {unbuffer} bash {command}"
+                )
 
             with open(join(root, "exit_cmd.%s" % index), "w") as f:
                 f.write(exit_command)
@@ -153,6 +165,8 @@ def submit_lsf_array(
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # clean the execution directory
-    cmd = f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti {wait} rm -r {root}'
+    cmd = (
+        f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti {wait_flag} rm -r {root}'
+    )
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
     return re.findall("<(.*?)>", jobid)[0]
