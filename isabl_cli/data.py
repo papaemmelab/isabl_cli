@@ -451,7 +451,9 @@ class LocalReferenceGenomeImporter:
 
             for i in commands:
                 if dont_index:
-                    click.secho(f"Skipping indexing:\n\n\t{' '.join(i)}", err=True, fg="yellow")
+                    click.secho(
+                        f"Skipping indexing:\n\n\t{' '.join(i)}", err=True, fg="yellow"
+                    )
                     continue
 
                 try:  # pragma: no cover
@@ -461,7 +463,9 @@ class LocalReferenceGenomeImporter:
                     subprocess.CalledProcessError,
                 ):  # pragma: no cover
                     click.secho(
-                        f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}", err=True, fg="red"
+                        f"INDEX FAILED, MUST BE FIXED:\n\n\t{' '.join(i)}",
+                        err=True,
+                        fg="red",
                     )
 
             indexes = {
@@ -1054,7 +1058,11 @@ class LocalDataImporter(BaseImporter):
                 raise click.UsageError(f"Use either --copy or --symlink.")
 
             if symlink and ignore_ownership:
-                click.secho("--ignore-ownership isnt used when --symlink.", err=True, fg="yellow")
+                click.secho(
+                    "--ignore-ownership isnt used when --symlink.",
+                    err=True,
+                    fg="yellow",
+                )
 
             matched, summary = cls().import_data(
                 directories=directories,
@@ -1087,6 +1095,7 @@ class LocalYamlDataImporter(LocalDataImporter):
         ignore_ownership=False,
         **filters,
     ):
+        """Import data from local YAML file."""
         utils.check_admin()
         experiments_matched = []
         files_to_import = []
@@ -1151,6 +1160,7 @@ class LocalYamlDataImporter(LocalDataImporter):
 
     @staticmethod
     def get_summary(files, experiment, commit, matched):
+        """Return summary of the import operation."""
         summary = (
             f"\n\nFor experiment '{experiment.system_id}' "
             f"linked to sample '{experiment.sample.identifier}', "
@@ -1171,7 +1181,6 @@ class LocalYamlDataImporter(LocalDataImporter):
     @classmethod
     def as_cli_command(cls):
         """Get data importer as a click command line interface."""
-
         # build isabl_cli command and return it
         @click.command(name="import-data-from-yaml")
         @options.FILTERS
@@ -1182,11 +1191,12 @@ class LocalYamlDataImporter(LocalDataImporter):
         @click.option("--copy", help="Copy files instead of moving them.", is_flag=True)
         def cmd(commit, filters, symlink, copy, files_data, ignore_ownership):
             """
-            Import data into an experiment by specifying a path to a
-            files_data yaml file. The files_data yaml file must contain
-            absolute file paths.
+            Import data into an experiment by specifying a path to a files_data yaml file.
+
+            The files_data yaml file must contain absolute file paths.
 
             files_data.yaml structure:
+
             The top level key needs to be an absolute path to a file,
             while the values can be whatever data is relevant to the person importing.
 
@@ -1202,14 +1212,17 @@ class LocalYamlDataImporter(LocalDataImporter):
                     key_2: value_2                                    <-- top level value
                 ...
             """
-
             # verify yaml file exits
             assert os.path.exists(
                 files_data
             ), f"The following files_data yaml path '{files_data}' does not exist."
 
             if symlink and ignore_ownership:
-                click.secho("--ignore-ownership isnt used when --symlink.", err=True, fg="yellow")
+                click.secho(
+                    "--ignore-ownership isnt used when --symlink.",
+                    err=True,
+                    fg="yellow",
+                )
 
             summary = cls().import_data_from_yaml(
                 symlink=symlink,

@@ -208,7 +208,7 @@ def get_rsync_command(src, dst, chmod="a-w"):
     )
 
 def check_rsync_version(version_stdout):
-    """check for outdated rsync lacking the --append-verify"""
+    """Check for outdated rsync lacking the --append-verify."""
     version_string =  re.search(r'.*(?P<ver>\d\.\d\.\d).*', version_stdout).group("ver")
     major_version = version.parse(version_string).major
     if major_version != 3:
