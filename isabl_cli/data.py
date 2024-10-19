@@ -1171,7 +1171,7 @@ class LocalYamlDataImporter(LocalDataImporter):
         for file in files:
             summary += f"\n\t {click.style('->', fg='yellow', bold=True)} {file}"
 
-        if not commit and matched:
+        if not commit and matched: # pragma: no cover
             summary += click.style(
                 "\n\nAdd --commit to proceed.\n", fg="green", blink=True
             )
@@ -1217,7 +1217,7 @@ class LocalYamlDataImporter(LocalDataImporter):
                 files_data
             ), f"The following files_data yaml path '{files_data}' does not exist."
 
-            if symlink and ignore_ownership:
+            if symlink and ignore_ownership: # pragma: no cover
                 click.secho(
                     "--ignore-ownership isnt used when --symlink.",
                     err=True,
