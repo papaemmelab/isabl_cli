@@ -731,6 +731,17 @@ def test_validate_same_platform():
         application.validate_same_platform(targets, references)
 
     assert "Expected one platform, got:" in str(error.value)
+    
+
+def test_validate_source():
+    application = AbstractApplication()
+    targets = [{"sample": {"system_id": "FOO", "source": "BLOOD"}}]
+    application.validate_source(targets, "BLOOD")
+
+    with pytest.raises(AssertionError) as error:
+        application.validate_source(targets, "BONE MARROW")
+
+    assert "Sample source for FOO does not match BONE MARROW." in str(error.value)
 
 
 def test_get_experiments_from_default_cli_options(tmpdir):
