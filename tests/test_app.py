@@ -872,6 +872,16 @@ class MockSecondVersion(MockApplication):
     def get_analysis_results(self, analysis):
         return {"analysis_result_key": 2}
 
+class PreProcessWithInProgress(MockApplication):
+    NAME = "PRE-PROCESSING"
+    VERSION = "v3"
+
+    def get_analysis_results(self, analysis):
+        return {"analysis_result_key": 3}
+
+    def get_after_completion_status(self, analysis):
+        return "IN_PROGRESS"
+
 
 class PostMockApp(MockApplication):
     application_inputs = {"dependency_key": NotImplemented}
@@ -880,7 +890,7 @@ class PostMockApp(MockApplication):
         return f"echo {analysis['targets'][0]['system_id']}"
 
     def get_analysis_results(self, analysis):
-        return {"analysis_result_key": 3}
+        return {"analysis_result_key": 4}
 
 
 class AppThatDependsOnFixedVersionV1(PostMockApp):
@@ -944,6 +954,21 @@ class AppThatDependsOnAnyLatestVersion(PostMockApp):
             }
         ]
 
+class AppThatDependsOnAnyLatestVersionInProgress(PostMockApp):
+    NAME = "POST-PROCESSING"
+    VERSION = "DEPENDS ON PRE-PROCESSING, LATEST VERSION RUN IN PROGRESS STATUS"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app_name": "PRE-PROCESSING",
+                "app_version": "latest",
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+                "status": "IN_PROGRESS",
+            }
+        ]
 
 class AppThatDependsOnAnyLatestVersionNoLinked(PostMockApp):
     NAME = "POST-PROCESSING"
@@ -1025,6 +1050,23 @@ def test_get_dependencies():
     analysis, status = ran_analyses[0]
     assert status == "SUCCEEDED"
     assert not analysis.analyses
+
+    # III) Run VERSION v3, with IN_PROGRESS status
+    # --------------------------------------------
+    application = PreProcessWithInProgress()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    preprocess_analysis_v3, status = ran_analyses[0]
+    assert status == "IN_PROGRESS"
+
+    experiment = api.get_instance("experiments", experiment.system_id)
+    tuples = [([experiment], [])]
+
+    # F) Succeeds, using result from IN_PROGRESS analysis
+    application = AppThatDependsOnAnyLatestVersionInProgress()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    analysis, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+    assert analysis.analyses[0] == preprocess_analysis_v3.pk
 
 
 def test_ran_by_user(tmpdir, capsys):
