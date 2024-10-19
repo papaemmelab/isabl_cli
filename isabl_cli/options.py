@@ -371,6 +371,7 @@ def get_analyses_filters_option(application_classes=None, **defaults):
     )
 
 def get_dependency_analyses_option(dependencies_results, **extra_filters):
+    """Get dependencies from specified app pk or name [with version]."""
     return [
         *[
             get_analyses_filters_option(

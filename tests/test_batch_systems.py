@@ -2,11 +2,7 @@
 
 from os import path
 from os.path import join
-import time
 import os
-import tempfile
-import subprocess
-import copy
 import shutil
 import pytest
 
@@ -34,7 +30,6 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
     test_dir = tmpdir.strpath
     commands = []
     total_jobs = 10
-    jobname = "test_execute_headjob"
 
     # kill SGE with time limit instead of failing directly
     # because SGE's implementation uses SIGUSR2 signal to catch
@@ -47,7 +42,7 @@ def _test_submit_commands(tmpdir, scheduler, submit_array):
         rundir = path.join(test_dir, str(i))
         os.makedirs(rundir, exist_ok=True)
 
-        # the head job script echoes to stdout and stdout, both will be stored in
+        # the head job script echoes to stdout and stderr, both will be stored in
         # head_job.log and head_job.err respectively
         cmd_content = "echo 'FERMINA' && (>&2 echo 'VALENTINO') "
         command_path = join(rundir, "head_job.sh")

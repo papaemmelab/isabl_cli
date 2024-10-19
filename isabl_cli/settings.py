@@ -91,6 +91,7 @@ _PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
 
 
 def import_valid_applications(val, setting_name):
+    """Import all valid applications strings specified on the client settings."""
     if setting_name == "INSTALLED_APPLICATIONS":
         apps = []
         for item in val:

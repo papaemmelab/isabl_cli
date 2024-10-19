@@ -35,6 +35,7 @@ def get_results(
     references=None,
     analyses=None,
     status="SUCCEEDED",
+    raise_error=True,
 ):
     """
     Match results from a experiment object.
@@ -112,12 +113,12 @@ def get_results(
         results_dict = i if result_key == "storage_url" else i.results
         result = results_dict.get(result_key)
         results.append((result, i.pk))
-
-        assert result_key in results_dict, (
-            f"Result '{result_key}' not found for analysis {i.pk}"
-            f"({i.application.name} {i.application.version}) "
-            f"with status: {i.status}"
-        )
+        if raise_error:
+            assert result_key in results_dict, (
+                f"Result '{result_key}' not found for analysis {i.pk}"
+                f"({i.application.name} {i.application.version}) "
+                f"with status: {i.status}"
+            )
 
         assert i.status in status.split("/") if status else True, (
             f"Expected status '{status}' for result '{result_key}' did not match: "
@@ -207,7 +208,7 @@ def get_rsync_command(src, dst, chmod="a-w"):
     )
 
 def check_rsync_version(version_stdout):
-    """check for outdated rsync lacking the --append-verify"""
+    """Check for outdated rsync lacking the --append-verify."""
     version_string =  re.search(r'.*(?P<ver>\d\.\d\.\d).*', version_stdout).group("ver")
     major_version = version.parse(version_string).major
     if major_version != 3:

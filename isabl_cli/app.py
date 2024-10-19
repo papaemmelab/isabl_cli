@@ -1,4 +1,5 @@
 """Abstract Application."""
+
 # pylint: disable=R0201,C0103,too-many-lines
 
 from collections import defaultdict
@@ -99,7 +100,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
-    skip_status = {"FAILED", "FINISHED", "STARTED", "SUBMITTED", "SUCCEEDED", "REJECTED"}
+    skip_status = {
+        "FAILED",
+        "FINISHED",
+        "STARTED",
+        "SUBMITTED",
+        "SUCCEEDED",
+        "REJECTED",
+    }
 
     # If any of these errors is raised during the command generation process, the
     # submission will continue. Errors or valdation messages are presented at the end.
@@ -320,7 +328,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         Use setting SUBMIT_MERGE_ANALYSIS to submit the merge work with custom logic.
 
         Arguments:
-            unused-argument (dict): a project or individual instance.
+            instance (obj): a project or individual instance.
         """
         submit_merge = system_settings.SUBMIT_MERGE_ANALYSIS
 
@@ -563,9 +571,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             endpoint="applications",
             name=self.NAME,
             version=self.VERSION,
-            assembly={"name": self.ASSEMBLY, "species": self.SPECIES}
-            if self.ASSEMBLY
-            else None,
+            assembly=(
+                {"name": self.ASSEMBLY, "species": self.SPECIES}
+                if self.ASSEMBLY
+                else None
+            ),
         )
 
         if application.settings.get("default_client") is None:
@@ -1025,11 +1035,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             status = (
                 "FORCED"
                 if force
-                else "RESTARTED"
-                if restart
-                else "SUBMITTED"
-                if commit
-                else self._staged_message
+                else (
+                    "RESTARTED"
+                    if restart
+                    else "SUBMITTED" if commit else self._staged_message
+                )
             )
             analyses_tuples.append((i, status))
         for i, _ in skipped_tuples + invalid_tuples:
@@ -1173,7 +1183,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 result_args["application_name"] = dependency.get("app").NAME
 
             if "status" in dependency:
-                result_args["status"]  = dependency["status"]
+                result_args["status"] = dependency["status"]
 
             input_name = dependency.get("name")
             inputs[input_name], key = self.get_result(targets[0], **result_args)
@@ -1835,7 +1845,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def validate_individuals(self, targets, references):
         """
-        Validate pairs are of the same individual if the pipeline is matched;
+        Validate the individual of the targets and references.
+
+        Validate pairs are of the same individual if the pipeline is matched.
         Validate pairs are of the different individuals if the pipeline is unmatched.
         """
         if references:
@@ -1870,9 +1882,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 )
 
     def validate_source(self, experiments, source):
-        """
-        Validate experiments are from a specific source material.
-        """
+        """Validate experiments are from a specific source material."""
         for i in experiments:
             assert (
                 i["sample"]["source"] == source
@@ -1883,9 +1893,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -------------------------
 
     def notify_project_analyst(self, analysis, subject, message):
-        """
-        Send email notification to analysts of projects associated with specified analysis.
-        """
+        """Send email notification to project's analysts of projects."""
         projects = []
         for target in analysis.targets:
             projects.extend(target.projects)
