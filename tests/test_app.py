@@ -877,16 +877,15 @@ class PostMockApp(MockApplication):
     application_inputs = {"dependency_key": NotImplemented}
 
     def get_command(self, analysis, inputs, settings):
-        assert inputs["dependency_key"] == 1
         return f"echo {analysis['targets'][0]['system_id']}"
 
     def get_analysis_results(self, analysis):
         return {"analysis_result_key": 3}
 
 
-class PostMockAppWithFirstFixedDependency(PostMockApp):
-    NAME = "POST-PROCESSING FIXED"
-    VERSION = "DEPENDS ON PRE-PROCESSING v1"
+class AppThatDependsOnFixedVersionV1(PostMockApp):
+    NAME = "POST-PROCESSING"
+    VERSION = "DEPENDS ON PRE-PROCESSING v1, FIXED WITH PK"
 
     @cached_property
     def dependencies_results(self):
@@ -899,23 +898,24 @@ class PostMockAppWithFirstFixedDependency(PostMockApp):
         ]
 
 
-class PostMockAppWithSecondFixedDependency(PostMockApp):
-    NAME = "POST-PROCESSING FIXED"
-    VERSION = "DEPENDS ON PRE-PROCESSING v2"
+class AppThatDependsOnFixedVersionV2(PostMockApp):
+    NAME = "POST-PROCESSIN"
+    VERSION = "DEPENDS ON PRE-PROCESSING v2, FIXED WITH NAME AND VERSION"
 
     @cached_property
     def dependencies_results(self):
         return [
             {
-                "app": MockSecondVersion(),
+                "app_name": "PRE-PROCESSING",
+                "app_version": "v2",
                 "result": "analysis_result_key",
                 "name": "dependency_key",
             }
         ]
 
 
-class PostMockAppWithFlexibleDependency(PostMockApp):
-    NAME = "POST-PROCESSING FLEXIBLE"
+class AppThatDependsOnAnyVersion(PostMockApp):
+    NAME = "POST-PROCESSING"
     VERSION = "DEPENDS ON PRE-PROCESSING, ANY VERSION"
 
     @cached_property
@@ -929,14 +929,32 @@ class PostMockAppWithFlexibleDependency(PostMockApp):
         ]
 
 
-class PostMockAppWithFlexibleDependencyNoLinked(PostMockAppWithFlexibleDependency):
-    VERSION = "DEPENDS ON PRE-PROCESSING, ANY VERSION. NO LINK"
+class AppThatDependsOnAnyLatestVersion(PostMockApp):
+    NAME = "POST-PROCESSING"
+    VERSION = "DEPENDS ON PRE-PROCESSING, LATEST VERSION RUN"
 
     @cached_property
     def dependencies_results(self):
         return [
             {
                 "app_name": "PRE-PROCESSING",
+                "app_version": "latest",
+                "result": "analysis_result_key",
+                "name": "dependency_key",
+            }
+        ]
+
+
+class AppThatDependsOnAnyLatestVersionNoLinked(PostMockApp):
+    NAME = "POST-PROCESSING"
+    VERSION = "DEPENDS ON PRE-PROCESSING, LATEST VERSION. NO LINK"
+
+    @cached_property
+    def dependencies_results(self):
+        return [
+            {
+                "app_name": "PRE-PROCESSING",
+                "app_version": "latest",
                 "result": "analysis_result_key",
                 "name": "dependency_key",
                 "linked": False,
@@ -945,6 +963,7 @@ class PostMockAppWithFlexibleDependencyNoLinked(PostMockAppWithFlexibleDependenc
 
 
 def test_get_dependencies():
+    """Test dependencies when multiple versions of the same app exists."""
     individual = factories.IndividualFactory(species="HUMAN")
     sample = factories.SampleFactory(individual=individual)
     project = api.create_instance("projects", **factories.ProjectFactory())
@@ -954,36 +973,54 @@ def test_get_dependencies():
     experiment = api.create_instance("experiments", **experiment)
     tuples = [([experiment], [])]
 
-    # Run dependency first
+    # I) Run dependency VERSION v1, only 1 result exists
+    # --------------------------------------------------
     application = MockFirstVersion()
     ran_analyses, _, __ = application.run(tuples, commit=True)
-    preprocess_analysis, status = ran_analyses[0]
+    preprocess_analysis_v1, status = ran_analyses[0]
     assert status == "SUCCEEDED"
 
     experiment = api.get_instance("experiments", experiment.system_id)
     tuples = [([experiment], [])]
 
-    # A) App with fixed dependency succeeds
-    application = PostMockAppWithFirstFixedDependency()
+    # A) App that relies on strict v1 results succeeds
+    application = AppThatDependsOnFixedVersionV1()
     ran_analyses, _, __ = application.run(tuples, commit=True)
-    _, status = ran_analyses[0]
+    postprocess_analysis, status = ran_analyses[0]
     assert status == "SUCCEEDED"
+    assert postprocess_analysis.analyses[0] == preprocess_analysis_v1.pk
 
-    # B) App with newer version dependency invalid, because version is strict
-    application = PostMockAppWithSecondFixedDependency()
+    # B) App that relies on strict v2 is invalid, it doesn't have available results
+    application = AppThatDependsOnFixedVersionV2()
     _, _, invalid_analyses = application.run(tuples, commit=True)
     _, validation_error = invalid_analyses[0]
     assert "No results found for application" in validation_error.message
 
-    # C) App with newer version dependency succeeds, because version is flexible
-    application = PostMockAppWithFlexibleDependency()
+    # II) Run VERSION v2, now multiple results of different versions exist
+    # --------------------------------------------------------------------
+    application = MockSecondVersion()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+    preprocess_analysis_v2, status = ran_analyses[0]
+    assert status == "SUCCEEDED"
+
+    experiment = api.get_instance("experiments", experiment.system_id)
+    tuples = [([experiment], [])]
+
+    # C) Invalid, multiple version results found but no version was specified
+    application = AppThatDependsOnAnyVersion()
+    _, _, invalid_analyses = application.run(tuples, commit=True)
+    _, validation_error = invalid_analyses[0]
+    assert "Multiple results returned" in validation_error.message
+
+    # D) Succeeds, multiple version results exist, latest used (v2)
+    application = AppThatDependsOnAnyLatestVersion()
     ran_analyses, _, __ = application.run(tuples, commit=True)
     analysis, status = ran_analyses[0]
     assert status == "SUCCEEDED"
-    assert analysis.analyses[0] == preprocess_analysis.pk
+    assert analysis.analyses[0] == preprocess_analysis_v2.pk
 
-    # New analysis doesn't link the previous analyses to it's run
-    application = PostMockAppWithFlexibleDependencyNoLinked()
+    # E) New analysis doesn't link the previous analyses to it's run
+    application = AppThatDependsOnAnyLatestVersionNoLinked()
     ran_analyses, _, __ = application.run(tuples, commit=True)
     analysis, status = ran_analyses[0]
     assert status == "SUCCEEDED"
@@ -996,7 +1033,7 @@ def test_ran_by_user(tmpdir, capsys):
     experiment = api.create_instance("experiments", **factories.ExperimentFactory())
 
     application = MockApplication()
-    analysis = api.create_instance(
+    api.create_instance(
         "analyses",
         storage_url=tmpdir.strpath,
         status="FAILED",
@@ -1065,7 +1102,7 @@ def test_commit_description(tmpdir, capsys):
 
     application = MockApplication()
     application.application_protect_results = True
-    analysis = api.create_instance(
+    api.create_instance(
         "analyses",
         storage_url=tmpdir.strpath,
         status="FAILED",
@@ -1074,7 +1111,7 @@ def test_commit_description(tmpdir, capsys):
         targets=[experiment2],
     )
 
-    analysis = api.create_instance(
+    api.create_instance(
         "analyses",
         storage_url=tmpdir.strpath,
         status="SUCCEEDED",
@@ -1082,14 +1119,13 @@ def test_commit_description(tmpdir, capsys):
         application=application.application,
         targets=[experiment3],
     )
-    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+    application.run(
         [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=False
     )
-
     captured = capsys.readouterr()
     assert "STAGED 1 | SKIPPED 2 | INVALID 0\n" in captured.out
 
-    ran_analyses, skipped_analyses, invalid_analyses = application.run(
+    application.run(
         [([experiment1], []), ([experiment2], []), ([experiment3], [])], commit=True
     )
     captured = capsys.readouterr()
