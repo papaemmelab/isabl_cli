@@ -10,14 +10,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Configure credential helper to clone private repos
-      run: |
-        echo '#!/bin/bash' > ~/.git-credential-helper.sh
-        echo 'echo username=${{ secrets.GH_USERNAME }}' >> ~/.git-credential-helper.sh
-        echo 'echo password=${{ secrets.GH_PAT }}' >> ~/.git-credential-helper.sh
-        chmod +x ~/.git-credential-helper.sh
-        git config --global credential.helper "/bin/bash ~/.git-credential-helper.sh"
-
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
@@ -42,9 +34,11 @@ jobs:
 
     - name: Install dependencies
       run: pip install -r requirements.txt
-    
+
     - name: Run tests
       run: bash tests/test-with-compose.sh
+      env:
+        GH_PAT: ${{ secrets.GH_PAT }}
 
     - name: Upload coverage reports to Codecov with GitHub Action
       uses: codecov/codecov-action@v4.2.0
