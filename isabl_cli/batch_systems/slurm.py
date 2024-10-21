@@ -8,6 +8,7 @@ from os.path import dirname
 from os.path import join
 import os
 import random
+import shutil
 import subprocess
 
 from slugify import slugify
@@ -60,6 +61,7 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
                     requirements=requirements or "",
                     extra_args=submit_configuration.get("extra_args", ""),
                     throttle_by=submit_configuration.get("throttle_by", 50),
+                    unbuffer=submit_configuration.get("unbuffer", False),
                     jobname=(
                         f"application: {app} | "
                         f"methods: {', '.join(methods)} | "
@@ -75,14 +77,21 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
 
 
 def submit_slurm_array(
-    commands, requirements, jobname, extra_args=None, throttle_by=50, wait=False
+    commands,
+    requirements,
+    jobname,
+    extra_args=None,
+    throttle_by=50,
+    wait=False,
+    unbuffer=False,
 ):  # pragma: no cover
     """
     Submit an array of bash scripts.
 
-    Two other jobs will also be submitted:
+    Three other jobs will also be submitted:
 
         EXIT: run exit command if failure.
+        SEFF: run slurm utility to printout job metrics.
         CLEAN: clean temporary files and directories after completion.
 
     Arguments:
@@ -92,6 +101,7 @@ def submit_slurm_array(
         extra_args (str): extra SLURM args.
         throttle_by (int): max number of jobs running at same time.
         wait (bool): if true, wait until clean command finishes.
+        unbuffer (bool): if true, will unbuffer the stdout/stderr.
 
     Returns:
         str: jobid of clean up job.
@@ -106,7 +116,8 @@ def submit_slurm_array(
         datetime.now(system_settings.TIME_ZONE).isoformat(),
     )
 
-    wait = "-W" if wait else ""
+    wait_flag = "-W" if wait else ""
+    unbuffer = "unbuffer" if unbuffer and shutil.which("unbuffer") else ""
     os.makedirs(root, exist_ok=True)
     jobname += "-rundir: {}".format(root)
     jobname = slugify(jobname)
@@ -118,24 +129,24 @@ def submit_slurm_array(
             index += 1
             rundir = abspath(dirname(command))
 
-            with open(join(root, "in.%s" % index), "w") as f:
+            with open(join(root, f"in.{index}"), "w") as f:
                 # submit a dependency job on failure
                 # important when the scheduler kills the head job
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 after_not_ok_job = (
-                    f"sbatch {extra_args} --depend=afternotok:{dependency} --kill-on-invalid-dep yes "
-                    f'--export=TMP,TMPDIR,TMP_DIR -o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
+                    f"sbatch {extra_args} --depend=afternotok:{dependency} --kill-on-invalid-dep=yes "
+                    f'--export=ALL -o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
 
                 # use random sleep to avoid parallel API hits
                 f.write(
                     f"#!/bin/bash\n\n"
-                    f"sleep {random.uniform(0, 10):.3} && "
-                    f"({after_not_ok_job}) && bash {command}"
+                    f"sleep {random.uniform(0, 10):.3f} && "
+                    f"({after_not_ok_job}) && {unbuffer} bash {command}"
                 )
 
-            for j in "log", "err", "exit", "slurm":
+            for j in {"log", "err", "exit", "slurm"}:
                 src = join(rundir, f"head_job.{j}")
                 dst = join(root, f"{j}.{index}")
                 open(src, "w").close()
@@ -143,9 +154,6 @@ def submit_slurm_array(
 
     with open(join(root, "in.sh"), "w") as f:
         f.write(f"#!/bin/bash\nbash {root}/in.$SLURM_ARRAY_TASK_ID")
-
-    with open(join(root, "clean.sh"), "w") as f:
-        f.write(f"#!/bin/bash\nrm -rf {root}")
 
     # Main job array
     cmd = (
@@ -159,19 +167,23 @@ def submit_slurm_array(
     seff_jobids = []
     for i in range(1, total + 1):
         seff_cmd = (
-            f"sbatch {extra_args} --kill-on-invalid-dep=yes "
-            f"--dependency=afterany:{jobid}_{i} -o '{root}/slurm.{i}' -J 'SEFF: {jobname}' "
-            f"--wrap='seff {jobid}_{i}'"
+            f"sbatch {extra_args} -o /dev/null -e /dev/null "
+            f"--dependency=afterany:{jobid}_{i} -J 'SEFF: {jobid}_{i}' "
+            f"--wrap='for sleep_time in 10 20 60 180 360; do sleep $sleep_time;"
+            f"(seff {jobid}_{i} >> {root}/slurm.{i} || false) && break; done'"
         )
-        seff_jobid = subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
+        seff_jobid = (
+            subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
+        )
         seff_jobids.append(seff_jobid.split()[-1])
 
     # Job to clean job array rundir
     with open(join(root, "clean.sh"), "w") as f:
         f.write(f"#!/bin/bash\nrm -rf {root}")
+
     cmd = (
-        f"sbatch {extra_args} -J 'CLEAN: {jobname}' {wait} --kill-on-invalid-dep yes "
-        f"-o /dev/null -e /dev/null --depend=afterany:{':'.join(seff_jobids)} --parsable {root}/clean.sh"
+        f"sbatch {extra_args} -J 'CLEAN: {dependency}' {wait_flag} -o /dev/null "
+        f"-e /dev/null --dependency=afterany:{':'.join(seff_jobids)} {root}/clean.sh"
     )
 
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()

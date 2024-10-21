@@ -647,7 +647,7 @@ def patch_analysis_status(analysis, status):
 
 def send_error_email(recipients, subject, message):
     """
-    Sends an error message to recipients.
+    Send an error message to recipients.
 
     Arguments:
         recipients (list): email recipients.
