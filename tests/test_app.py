@@ -920,7 +920,7 @@ class AppThatDependsOnFixedVersionV1(PostMockApp):
 
 
 class AppThatDependsOnFixedVersionV2(PostMockApp):
-    NAME = "POST-PROCESSIN"
+    NAME = "POST-PROCESSING"
     VERSION = "DEPENDS ON PRE-PROCESSING v2, FIXED WITH NAME AND VERSION"
 
     @cached_property
