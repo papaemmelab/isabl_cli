@@ -1055,14 +1055,16 @@ class LocalDataImporter(BaseImporter):
                 files_data = {}
 
             if symlink and copy:
-                raise click.UsageError(f"Use either --copy or --symlink.")
+                raise click.UsageError(
+                    f"Use either --copy or --symlink."
+                ) # pragma: no cover
 
             if symlink and ignore_ownership:
                 click.secho(
                     "--ignore-ownership isnt used when --symlink.",
                     err=True,
                     fg="yellow",
-                )
+                ) # pragma: no cover
 
             matched, summary = cls().import_data(
                 directories=directories,
