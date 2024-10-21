@@ -135,7 +135,7 @@ def submit_slurm_array(
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 after_not_ok_job = (
                     f"sbatch {extra_args} --depend=afternotok:{dependency} --kill-on-invalid-dep=yes "
-                    f'--export=ALL -o {join(rundir, "head_job.exit")} -J "EXIT: {jobname}" '
+                    f'--export=ALL -o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
 
@@ -168,8 +168,9 @@ def submit_slurm_array(
     for i in range(1, total + 1):
         seff_cmd = (
             f"sbatch {extra_args} -o /dev/null -e /dev/null "
-            f"--dependency=afterany:{jobid}_{i} -J 'SEFF: {jobname}' "
-            f"--wrap='seff {jobid}_{i} >> {root}/slurm.{i}'"
+            f"--dependency=afterany:{jobid}_{i} -J 'SEFF: {jobid}_{i}' "
+            f"--wrap='for sleep_time in 10 20 60 180 360; do sleep $sleep_time;"
+            f"(seff {jobid}_{i} >> {root}/slurm.{i} || false) && break; done'"
         )
         seff_jobid = (
             subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
@@ -181,7 +182,7 @@ def submit_slurm_array(
         f.write(f"#!/bin/bash\nrm -rf {root}")
 
     cmd = (
-        f"sbatch {extra_args} -J 'CLEAN: {jobname}' {wait_flag} -o /dev/null "
+        f"sbatch {extra_args} -J 'CLEAN: {dependency}' {wait_flag} -o /dev/null "
         f"-e /dev/null --dependency=afterany:{':'.join(seff_jobids)} {root}/clean.sh"
     )
 
