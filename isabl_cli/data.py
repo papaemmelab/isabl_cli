@@ -134,7 +134,7 @@ def symlink_analysis_to_targets(analysis):
 
 def trigger_analyses_merge(analysis):
     """Submit project level analyses merge if neccessary."""
-    if analysis["status"] not in {"SUCCEEDED", "FAILED"}:
+    if analysis["status"] not in {"SUCCEEDED", "FAILED", "FINISHED"}:
         return
 
     try:
