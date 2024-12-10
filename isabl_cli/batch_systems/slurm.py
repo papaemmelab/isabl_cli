@@ -135,7 +135,7 @@ def submit_slurm_array(
                 dependency = "${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
                 after_not_ok_job = (
                     f"sbatch {extra_args} --depend=afternotok:{dependency} --kill-on-invalid-dep=yes "
-                    f'--export=ALL -o {join(rundir, "head_job.exit")} -J "EXIT: {dependency}" '
+                    f'--export=ALL -o {join(rundir, "head_job.exit")} -J "EXIT: {jobname}" '
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
 
@@ -143,10 +143,11 @@ def submit_slurm_array(
                 f.write(
                     f"#!/bin/bash\n\n"
                     f"sleep {random.uniform(0, 10):.3f} && "
+                    f"echo {dependency} >> {command.replace('head_job.sh', 'job_ids.txt')} && "
                     f"({after_not_ok_job}) && {unbuffer} bash {command}"
                 )
 
-            for j in {"log", "err", "exit", "slurm"}:
+            for j in {"log", "err", "exit"}:
                 src = join(rundir, f"head_job.{j}")
                 dst = join(root, f"{j}.{index}")
                 open(src, "w").close()
@@ -163,27 +164,14 @@ def submit_slurm_array(
     )
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
 
-    # Job to print out slurm job metrics upon main job completion
-    seff_jobids = []
-    for i in range(1, total + 1):
-        seff_cmd = (
-            f"sbatch {extra_args} -o /dev/null -e /dev/null "
-            f"--dependency=afterany:{jobid}_{i} -J 'SEFF: {jobid}_{i}' "
-            f"--wrap='for sleep_time in 10 20 60 180 360; do sleep $sleep_time;"
-            f"(seff {jobid}_{i} >> {root}/slurm.{i} || false) && break; done'"
-        )
-        seff_jobid = (
-            subprocess.check_output(seff_cmd, shell=True).decode("utf-8").strip()
-        )
-        seff_jobids.append(seff_jobid.split()[-1])
-
     # Job to clean job array rundir
     with open(join(root, "clean.sh"), "w") as f:
         f.write(f"#!/bin/bash\nrm -rf {root}")
 
     cmd = (
-        f"sbatch {extra_args} -J 'CLEAN: {dependency}' {wait_flag} -o /dev/null "
-        f"-e /dev/null --dependency=afterany:{':'.join(seff_jobids)} {root}/clean.sh"
+        f"sbatch {extra_args} -J 'CLEAN: {jobname}' {wait_flag} "
+        f"--kill-on-invalid-dep yes -o /dev/null -e /dev/null "
+        f"--depend=afterany:{jobid} --parsable {root}/clean.sh"
     )
 
     return subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
