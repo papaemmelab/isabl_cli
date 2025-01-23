@@ -158,7 +158,7 @@ def submit_slurm_array(
 
     # Main job array
     cmd = (
-        f"sbatch {requirements} {extra_args} --array 1-{total}%{throttle_by} "
+        f"sbatch {extra_args} {requirements} --array 1-{total}%{throttle_by} "
         f"-o '{root}/log.%a' -e '{root}/err.%a' "
         f'-J "ISABL: {jobname}" --parsable {root}/in.sh'
     )
