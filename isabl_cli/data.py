@@ -147,7 +147,7 @@ def trigger_analyses_merge(analysis):
             ("Skipping " if pending else "Submitting ")
             + ("individual " if "species" in instance else "project ")
             + f"merge for {instance} and application {application}",
-            fg="green" if pending else "yellow",
+            fg="yellow" if pending else "green",
         )
 
     if application.has_project_auto_merge:

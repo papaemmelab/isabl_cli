@@ -42,7 +42,7 @@ class ExperimentsFromDefaulCLIApplication(AbstractApplication):
         return ""
 
 
-class MockApplication(AbstractApplication):
+class BaseMockApplication(AbstractApplication):
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
     ASSEMBLY = "GRCh4000"
@@ -57,28 +57,6 @@ class MockApplication(AbstractApplication):
         "from_system_settings": None,
     }
     application_inputs = {"bar": None}
-    application_results = {
-        "analysis_result_key": {
-            "frontend_type": "number",
-            "description": "A random description",
-            "verbose_name": "The Test Result",
-        }
-    }
-    application_project_level_results = {
-        "project_result_key": {
-            "frontend_type": "text-file",
-            "description": "A random description",
-            "verbose_name": "The Test Result",
-        }
-    }
-
-    application_individual_level_auto_merge_results = {
-        "individual_result_key": {
-            "frontend_type": "text-file",
-            "description": "A random description",
-            "verbose_name": "The Test Result",
-        }
-    }
 
     # this is commented out to test get_experiments_from_default_cli_options
     # def get_experiments_from_cli_options(self, targets):
@@ -107,17 +85,38 @@ class MockApplication(AbstractApplication):
         return f"echo {analysis['targets'][0]['system_id']}"
 
     def merge_project_analyses(self, analysis, analyses):
-        assert len(analyses) == 2, f"Expected 2, got: {len(analyses)}"
-
         with open(join(analysis["storage_url"], "test.merge"), "w") as f:
             f.write(str(len(analyses)))
 
     def merge_individual_analyses(self, analysis, analyses):
-        try:
-            with open(join(analysis["storage_url"], "test.merge"), "w") as f:
-                f.write(str(len(analyses)))
-        except:
-            pass
+        with open(join(analysis["storage_url"], "test.merge"), "w") as f:
+            f.write(str(len(analyses)))
+
+
+class MockApplication(BaseMockApplication):
+
+    application_results = {
+        "analysis_result_key": {
+            "frontend_type": "number",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
+    application_project_level_results = {
+        "project_result_file": {
+            "frontend_type": "text-file",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
+
+    application_individual_level_results = {
+        "individual_result_file": {
+            "frontend_type": "text-file",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+        }
+    }
 
     def get_analysis_results(self, analysis):
         return {"analysis_result_key": 1}
@@ -125,12 +124,61 @@ class MockApplication(AbstractApplication):
     def get_project_analysis_results(self, analysis):
         # please note that ipdb wont work here as this function will
         # be submitted by a subprocess call
-        return {"project_result_key": join(analysis["storage_url"], "test.merge")}
+        return {"project_result_file": join(analysis["storage_url"], "test.merge")}
 
     def get_individual_analysis_results(self, analysis):
         # please note that ipdb wont work here as this function will
         # be submitted by a subprocess call
-        return {"individual_result_key": join(analysis["storage_url"], "test.merge")}
+        return {"individual_result_file": join(analysis["storage_url"], "test.merge")}
+
+
+class MockApplicationWithPatternResults(BaseMockApplication):
+
+    """Application with results found using the 'pattern' field."""
+
+    NAME = "TESTING RESULT PATTERN MATCHING"
+
+    application_results = {
+        "analysis_result_file": {
+            "frontend_type": "number",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+            "pattern": "test.pattern",
+        }
+    }
+
+    application_project_level_results = {
+        "project_result_file": {
+            "frontend_type": "text-file",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+            "pattern": "test.project.merge",
+        }
+    }
+
+    application_individual_level_results = {
+        "individual_result_file": {
+            "frontend_type": "text-file",
+            "description": "A random description",
+            "verbose_name": "The Test Result",
+            "pattern": "test.*.merge",
+            "exclude": "test.exclude.merge",
+        }
+    }
+
+    def get_command(self, analysis, inputs, settings):
+        nested_dir = join(analysis["storage_url"], "nested")
+        pattern_file = join(nested_dir, "test.pattern")
+        return f"mkdir -p {nested_dir} && echo 'Test' > {pattern_file}"
+
+    def merge_project_analyses(self, analysis, analyses):
+        with open(join(analysis["storage_url"], "test.project.merge"), "w") as f:
+            f.write(str(len(analyses)))
+
+    def merge_individual_analyses(self, analysis, analyses):
+        for i in ["test.individual.merge", "test.exclude.merge"]:
+            with open(join(analysis["storage_url"], i), "w") as f:
+                f.write(str(len(analyses)))
 
 
 class UniquePerIndividualApplication(AbstractApplication):
@@ -469,7 +517,7 @@ def test_engine(tmpdir):
     assert "SKIPPED 3" in result.output
     assert "INVALID 1" in result.output
     assert isfile(merged)
-    assert "project_result_key" in analysis["results"]
+    assert "project_result_file" in analysis["results"]
 
     with open(merged) as f:
         assert f.read().strip() == "2"
@@ -479,7 +527,7 @@ def test_engine(tmpdir):
     merged = join(analysis["storage_url"], "test.merge")
     assert analysis["status"] == "SUCCEEDED", f"Individual Analysis failed {analysis}"
     assert isfile(merged)
-    assert "individual_result_key" in analysis["results"]
+    assert "individual_result_file" in analysis["results"]
 
     with open(merged) as f:
         assert f.read().strip() == "2"
@@ -511,6 +559,27 @@ def test_engine(tmpdir):
     )
     assert "--force" not in result.output
     assert "--restart" not in result.output
+
+    # Test results are available, which should be matched by patterns
+    application = MockApplicationWithPatternResults()
+    ran_analyses, _, __ = application.run(tuples, commit=True)
+
+    for output in ran_analyses:
+        analysis, *_ = output
+        if analysis["status"] == "SUCCEEDED":
+            expected_file = join(analysis["storage_url"], "nested", "test.pattern")
+            assert "analysis_result_file" in analysis["results"]
+            assert analysis["results"]["analysis_result_file"] == expected_file
+
+    analysis = application.get_project_level_auto_merge_analysis(project)
+    merged = join(analysis["storage_url"], "test.project.merge")
+    assert "project_result_file" in analysis["results"]
+    assert analysis["results"]["project_result_file"] == merged
+
+    analysis = application.get_individual_level_auto_merge_analysis(individual)
+    merged = join(analysis["storage_url"], "test.individual.merge")
+    assert "individual_result_file" in analysis["results"]
+    assert analysis["results"]["individual_result_file"] == merged
 
 
 def test_validate_is_pair():
