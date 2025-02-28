@@ -318,8 +318,7 @@ def send_analytics(command):  # noqa
 
 def first_matching_file(directory, pattern, exclude=None):
     """
-    Recursively search within a dicrectory for the first file that matches the pattern.
-
+    Recursively search within a directory for the first file that matches the pattern.
     Args:
         directory (str): the directory to search within.
         pattern (str): a glob pattern (e.g., '*.txt') to match filenames.
