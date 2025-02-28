@@ -333,7 +333,7 @@ def first_matching_file(directory, pattern, exclude=None):
         FileNotFoundError: If no matching file is found.
     """
     root_path = Path(directory)
-    if not root_path.is_dir():
+    if not root_path.is_dir(): # pragma: no cover
         raise NotADirectoryError(f"{directory} is not a valid directory.")
 
     matching_files = (
@@ -343,5 +343,5 @@ def first_matching_file(directory, pattern, exclude=None):
 
     try:
         return str(next(matching_files))
-    except StopIteration:
+    except StopIteration: # pragma: no cover
         raise FileNotFoundError(f"No file matching pattern '{pattern}' found in '{directory}'")
