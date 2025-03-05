@@ -107,6 +107,9 @@ def submit_lsf_array(
     Returns:
         str: jobid of clean up job.
     """
+    if not shutil.which("bsub"):
+        raise RuntimeError("LSF is not available.")
+
     extra_args = extra_args or ""
     assert system_settings.BASE_STORAGE_DIRECTORY
 
