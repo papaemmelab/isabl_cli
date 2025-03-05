@@ -1194,6 +1194,18 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return analyses, inputs
 
+    def _get_analysis_results_from_patterns(self, analysis, specification):
+        """Get first matching file, if "pattern" is in result specification."""
+        results = {}
+        for name, result_specification in specification.items():
+            pattern = result_specification.get("pattern")
+            exclude = result_specification.get("exclude")
+            if pattern:
+                results[name] = utils.first_matching_file(
+                    analysis.storage_url, pattern, exclude
+                )
+        return results
+
     def _get_analysis_results(self, analysis, created=False):
         """Get results dictionary and append head job script, logs and error files."""
         results = {
@@ -1215,6 +1227,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             specification = self.application_results
             get_results = self.get_analysis_results
 
+        results.update(
+            self._get_analysis_results_from_patterns(analysis, specification)
+        )
         results.update(get_results(analysis))
 
         for i in specification:

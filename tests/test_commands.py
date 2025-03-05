@@ -94,7 +94,7 @@ def test_commands(tmpdir):
             ([api.create_instance("experiments", **experiment_b)], []),
         ],
         commit=True,
-        project_results=["project_result_key"],
+        project_results=["project_result_file"],
     )[0]
 
     args = ["--app-results", analysis.application.pk]
