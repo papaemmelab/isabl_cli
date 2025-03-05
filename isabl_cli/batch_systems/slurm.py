@@ -106,6 +106,9 @@ def submit_slurm_array(
     Returns:
         str: jobid of clean up job.
     """
+    if not shutil.which("sbatch"):
+        raise RuntimeError("Slurm is not available.")
+
     extra_args = extra_args or ""
     assert system_settings.BASE_STORAGE_DIRECTORY
 
