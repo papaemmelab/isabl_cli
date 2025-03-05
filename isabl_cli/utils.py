@@ -3,6 +3,7 @@
 from functools import update_wrapper
 from getpass import getuser
 from os import stat
+from pathlib import Path
 from pwd import getpwuid
 import getpass
 import json
@@ -313,3 +314,33 @@ def send_analytics(command):  # noqa
         )
 
     return update_wrapper(wrapper, command)
+
+
+def first_matching_file(directory, pattern, exclude=None):
+    """
+    Recursively search within a directory for the first file that matches the pattern.
+    Args:
+        directory (str): the directory to search within.
+        pattern (str): a glob pattern (e.g., '*.txt') to match filenames.
+        exclude (str, optional): files containing this substring will be skipped.
+
+    Returns:
+        str: the path to the first matching file as a string.
+
+    Raises:
+        NotADirectoryError: If `directory` is not a valid directory.
+        FileNotFoundError: If no matching file is found.
+    """
+    root_path = Path(directory)
+    if not root_path.is_dir(): # pragma: no cover
+        raise NotADirectoryError(f"{directory} is not a valid directory.")
+
+    matching_files = (
+        file for file in root_path.rglob(pattern)
+        if not (exclude and exclude in file.name)
+    )
+
+    try:
+        return str(next(matching_files))
+    except StopIteration: # pragma: no cover
+        raise FileNotFoundError(f"No file matching pattern '{pattern}' found in '{directory}'")
