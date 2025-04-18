@@ -197,6 +197,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Possible values are FINISHED and IN_PROGRESS."""
         return "FINISHED"
 
+    def update_analysis_at_runtime(self, analysis, inputs):  # pylint: disable=W0613
+        """Define custom logic to be executed at runtime
+        This can be used to update analysis objects's custom fields with values
+        only available during job execution, such as logging the inputs used
+        """
+        return
+
+
     def validate_settings(self, settings):
         """
         Validate settings.
@@ -995,6 +1003,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     )
 
                     command = self.get_command(i, inputs, self.settings)
+                    self.update_analysis_at_runtime(i, inputs)
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
                 except self.skip_exceptions as error:  # pragma: no cover
