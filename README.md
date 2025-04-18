@@ -52,7 +52,14 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 ## License
 
 isabl is free for academic and research use. For commercial use, please contact us.
+<<<<<<< HEAD
 
+=======
+<<<<<<< HEAD
+=======
+
+>>>>>>> f71c162 (✅ Fix the github action to deploy to Pypi (#73))
+>>>>>>> 6aa84a2 (✅ Fix the github action to deploy to Pypi (#73))
 ## Credits
 
 Isabl was created at [Elli Papaemmanuil's lab].
