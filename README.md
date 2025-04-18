@@ -1,5 +1,4 @@
->-- **_Terms of Use: Academic Research_** --
-
+> **_Terms of Use: Academic Research_**
 # Isabl CLI
 
 [![pypi badge][pypi_badge]][pypi_base]
@@ -51,8 +50,7 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 
 ## License
 
-isabl has a free license to use to users for academy and research. For commercial use, please contact us.
-
+isabl is free for academic and research use. For commercial use, please contact us.
 ## Credits
 
 Isabl was created at [Elli Papaemmanuil's lab].
