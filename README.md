@@ -68,5 +68,3 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [travis_base]: https://travis-ci.com/papaemmelab/isabl_cli
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
-
-
