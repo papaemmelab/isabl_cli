@@ -591,7 +591,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @cached_property
     def individual_level_auto_merge_application(self):
         """Get or create an individual level application database object."""
-        if not self.is_overridden(self.merge_individual_analyses.__name__):
+        if not self.is_overridden(self.merge_individual_analyses):
             raise NotImplementedError(
                 "No logic implemented to merge analyses for an individual..."
             )
@@ -615,7 +615,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @cached_property
     def project_level_auto_merge_application(self):
         """Get or create a project level application database object."""
-        if not self.is_overridden(self.merge_project_analyses.__name__):
+        if not self.is_overridden(self.merge_project_analyses):
             raise NotImplementedError(
                 "No logic implemented to merge analyses for a project..."
             )
@@ -644,7 +644,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @property
     def has_project_auto_merge(self):
         """Return True if project level auto merge logic is defined."""
-        if not self.is_overridden(self.merge_project_analyses.__name__):
+        if not self.is_overridden(self.merge_project_analyses):
             raise NotImplementedError(
                 "No logic implemented to merge analyses for a project..."
             )
@@ -652,7 +652,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @property
     def has_individual_auto_merge(self):
         """Return True if individual level auto merge logic is defined.""" 
-        return self.is_overridden(self.merge_individual_analyses.__name__)
+        return self.is_overridden(self.merge_individual_analyses)
 
     @property
     def _application_results(self):
@@ -1243,11 +1243,12 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     # APPLICATION UTILS
     # -----------------
 
-    @staticmethod
-    def is_overridden(self, method_name):
-        base_method = getattr(AbstractApplication, method_name, None)
-        instance_method = getattr(self, method_name, None)
-        return instance_method is not None and instance_method.__func__ is not base_method
+    def is_overridden(self, method):
+        """Checks if a method of the base class was overridden."""
+        method_name = method.__name__
+        base_method = getattr(self.__class__.__bases__[0], method_name, None)
+        return method.__func__ is not base_method
+
 
     @staticmethod
     def get_result(*args, **kwargs):  # pragma: no cover
