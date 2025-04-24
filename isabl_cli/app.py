@@ -29,7 +29,7 @@ from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
 
-class AbstractApplication:  # pylint: disable=too-many-public-methods
+class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
 
     """An Abstract Isabl application."""
 
@@ -147,7 +147,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -----------------------------
     # USER REQUIRED IMPLEMENTATIONS
     # -----------------------------
-
+    @abc.abstractmethod
     def get_command(self, analysis, inputs, settings):  # pylint: disable=W9008
         """
         Must return a shell command for the analysis as a string.
@@ -166,7 +166,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # OPTIONAL IMPLEMENTATIONS
     # ------------------------
 
-    @abc.abstractmethod
     def get_experiments_from_cli_options(self, **cli_options):  # pylint: disable=W9008
         """
         Must return list of target-reference experiment tuples given the parsed options.
@@ -261,7 +260,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         return {}  # pragma: no cover
 
-    @abc.abstractmethod  # add __isabstractmethod__ property to method
     def merge_project_analyses(self, analysis, analyses):
         """
         Merge analyses on a project level basis.
@@ -298,7 +296,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         return {}  # pragma: no cover
 
-    @abc.abstractmethod  # add __isabstractmethod__ property to method
     def merge_individual_analyses(self, analysis, analyses):
         """
         Merge analyses on a individual level basis.
@@ -594,9 +591,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def individual_level_auto_merge_application(self):
         """Get or create an individual level application database object."""
-        assert not hasattr(
-            self.merge_individual_analyses, "__isabstractmethod__"
-        ), "No logic implemented to merge analyses for an individual..."
+        if not self.is_overridden(self.merge_individual_analyses.__name__):
+            raise NotImplementedError(
+                "No logic implemented to merge analyses for an individual..."
+            )
 
         application = api.create_instance(
             endpoint="applications",
@@ -617,10 +615,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @cached_property
     def project_level_auto_merge_application(self):
         """Get or create a project level application database object."""
-        assert not hasattr(
-            self.merge_project_analyses, "__isabstractmethod__"
-        ), "No logic implemented to merge project analyses..."
-
+        if not self.is_overridden(self.merge_project_analyses.__name__):
+            raise NotImplementedError(
+                "No logic implemented to merge analyses for a project..."
+            )
+        
         application = api.create_instance(
             endpoint="applications",
             name=f"{self.NAME} Project Application",
@@ -645,12 +644,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     @property
     def has_project_auto_merge(self):
         """Return True if project level auto merge logic is defined."""
-        return not hasattr(self.merge_project_analyses, "__isabstractmethod__")
+        if not self.is_overridden(self.merge_project_analyses.__name__):
+            raise NotImplementedError(
+                "No logic implemented to merge analyses for a project..."
+            )
 
     @property
     def has_individual_auto_merge(self):
-        """Return True if individual level auto merge logic is defined."""
-        return not hasattr(self.merge_individual_analyses, "__isabstractmethod__")
+        """Return True if individual level auto merge logic is defined.""" 
+        return self.is_overridden(self.merge_individual_analyses.__name__)
 
     @property
     def _application_results(self):
@@ -1240,6 +1242,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # -----------------
     # APPLICATION UTILS
     # -----------------
+
+    @staticmethod
+    def is_overridden(self, method_name):
+        base_method = getattr(AbstractApplication, method_name, None)
+        instance_method = getattr(self, method_name, None)
+        return instance_method is not None and instance_method.__func__ is not base_method
 
     @staticmethod
     def get_result(*args, **kwargs):  # pragma: no cover
