@@ -644,10 +644,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @property
     def has_project_auto_merge(self):
         """Return True if project level auto merge logic is defined."""
-        if not self.is_overridden(self.merge_project_analyses):
-            raise NotImplementedError(
-                "No logic implemented to merge analyses for a project..."
-            )
+        return self.is_overridden(self.merge_project_analyses)
 
     @property
     def has_individual_auto_merge(self):
