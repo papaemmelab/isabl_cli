@@ -19,6 +19,10 @@ class NonSequencingApplication(AbstractApplication):
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
 
+    def get_command(*_):  # pylint: disable=no-method-argument
+        return "echo instantiated without an assembly"
+
+
 
 class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     NAME = str(uuid.uuid4())
