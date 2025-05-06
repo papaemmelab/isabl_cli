@@ -1242,8 +1242,9 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     def is_implemented(cls, method):
         """Checks if a method of the base class was overridden."""
         method_name = method.__name__
+        method_func = getattr(cls, method_name, None) # accounts for classmethods vs instance methods
         base_method = getattr(AbstractApplication, method_name, None)        
-        return method.__func__ is not base_method
+        return method_func is not base_method
 
 
     @staticmethod
