@@ -591,7 +591,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @cached_property
     def individual_level_auto_merge_application(self):
         """Get or create an individual level application database object."""
-        if not self.is_overridden(self.merge_individual_analyses):
+        if not self.is_implemented(self.merge_individual_analyses):
             raise NotImplementedError(
                 "No logic implemented to merge analyses for an individual..."
             )
@@ -615,7 +615,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @cached_property
     def project_level_auto_merge_application(self):
         """Get or create a project level application database object."""
-        if not self.is_overridden(self.merge_project_analyses):
+        if not self.is_implemented(self.merge_project_analyses):
             raise NotImplementedError(
                 "No logic implemented to merge analyses for a project..."
             )
@@ -644,12 +644,12 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     @property
     def has_project_auto_merge(self):
         """Return True if project level auto merge logic is defined."""
-        return self.is_overridden(self.merge_project_analyses)
+        return self.is_implemented(self.merge_project_analyses)
 
     @property
     def has_individual_auto_merge(self):
         """Return True if individual level auto merge logic is defined.""" 
-        return self.is_overridden(self.merge_individual_analyses)
+        return self.is_implemented(self.merge_individual_analyses)
 
     @property
     def _application_results(self):
@@ -759,7 +759,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
             if force and restart:
                 raise click.UsageError("cant use --force and --restart together")
             
-            if not cls.is_overridden(cls.get_experiments_from_cli_options):
+            if not cls.is_implemented(cls.get_experiments_from_cli_options):
                 tuples = pipe.get_experiments_from_cli_options(**cli_options)
             else:
                 tuples = cls.get_experiments_from_default_cli_options(cli_options)
@@ -1238,7 +1238,7 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
     # APPLICATION UTILS
     # -----------------
 
-    def is_overridden(self, method):
+    def is_implemented(self, method):
         """Checks if a method of the base class was overridden."""
         method_name = method.__name__
         base_method = getattr(AbstractApplication, method_name, None)
