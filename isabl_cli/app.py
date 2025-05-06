@@ -761,10 +761,8 @@ class AbstractApplication(abc.ABC):  # pylint: disable=too-many-public-methods
 
             if force and restart:
                 raise click.UsageError("cant use --force and --restart together")
-
-            if not hasattr(
-                cls.get_experiments_from_cli_options, "__isabstractmethod__"
-            ):
+            
+            if not cls.is_overridden(cls.get_experiments_from_cli_options):
                 tuples = pipe.get_experiments_from_cli_options(**cli_options)
             else:
                 tuples = cls.get_experiments_from_default_cli_options(cli_options)
