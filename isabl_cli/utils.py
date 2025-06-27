@@ -107,7 +107,7 @@ def get_results(
 
     # Return latest [`pk`] if more than 1 result and version is `latest`.
     if len(candidates) > 1 and application_version == "latest":
-        candidates = [max(candidates, key=lambda x: x.pk)]
+        candidates = sorted(candidates, key=lambda x: int(x.pk), reverse=True)[:1]
 
     results = []
     for i in candidates:
