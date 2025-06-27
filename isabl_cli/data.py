@@ -156,7 +156,7 @@ def trigger_analyses_merge(analysis):
         for i in projects.values():
             pending = api.get_instances_count(
                 endpoint="analyses",
-                status__in="STARTED,SUBMITTED",
+                status__in="STARTED,SUBMITTED,FINISHED",
                 application=analysis["application"]["pk"],
                 projects=i["pk"],
             )
