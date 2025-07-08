@@ -345,9 +345,6 @@ def first_matching_file(directory, pattern, exclude=None):
     except StopIteration: # pragma: no cover
         raise FileNotFoundError(f"No file matching pattern '{pattern}' found in '{directory}'")
 
-
-
-
 def stage_s3_file(s3_url, local_dir="/scratch"):
     """
     Download an S3 file to a local scratch directory, if it doesn't already exist.
