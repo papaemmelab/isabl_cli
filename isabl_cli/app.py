@@ -406,6 +406,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     api.patch_analysis_status(analysis, "STARTED")
                     merge_analyses(analysis, analyses)
                     api.patch_analysis_status(analysis, "SUCCEEDED")
+                    analysis.data["merged_analyses"] = len(analyses)
                 except Exception as e:  # pragma: no cover pylint: disable=W0703
                     error_msg = traceback.format_exc()
                     click.echo(error_msg, file=sys.stderr)
@@ -1527,7 +1528,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # validate existing analyses
         with click.progressbar(
             existing_analyses,
-            file=sys.stderr,
             label=f"Validating tuples of the {len(existing_analyses)} existing analyses...\t\t",
         ) as bar:
             for i in bar:
@@ -1543,7 +1543,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # create new analyses and validate
         with click.progressbar(
             valid_tuples,
-            file=sys.stderr,
             label=f"Creating analyses for {len(valid_tuples)} tuples...\t\t",
         ) as bar:
             for i in bar:
@@ -1585,7 +1584,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not tuples:  # pragma: no cover
             return [], []
 
-        click.echo("Checking for existing analyses...", file=sys.stderr)
+        click.echo("Checking for existing analyses...")
         projects = {j["pk"] for i in tuples for j in i[0][0]["projects"]}
         cache = defaultdict(list)
         existing, missing = [], []

@@ -269,7 +269,7 @@ def echo_title(title, color="cyan", blink=False):
     """Echo a title."""
     title = "\n" + title.strip().upper() + "\n"
     title += "".join("-" for i in title.strip()) + "\n"
-    click.secho(title, fg=color, file=sys.stderr, blink=blink)
+    click.secho(title, fg=color, blink=blink)
 
 
 def find_owner(filename):
