@@ -316,13 +316,14 @@ def send_analytics(command):  # noqa
     return update_wrapper(wrapper, command)
 
 
-def first_matching_file(directory, pattern, exclude=None):
+def first_matching_file(directory, pattern, exclude=None, sort_by_newest=True):
     """
     Recursively search within a directory for the first file that matches the pattern.
     Args:
         directory (str): the directory to search within.
         pattern (str): a glob pattern (e.g., '*.txt') to match filenames.
         exclude (str, optional): files containing this substring will be skipped.
+        sort_by_newest (bool, optional): sort by file's creation time, newer to older.
 
     Returns:
         str: the path to the first matching file as a string.
@@ -339,7 +340,10 @@ def first_matching_file(directory, pattern, exclude=None):
         file for file in root_path.rglob(pattern)
         if not (exclude and exclude in file.name)
     )
-
+    if sort_by_newest:
+        matching_files = iter(
+            sorted(matching_files, key=lambda f: f.stat().st_mtime, reverse=True)
+        )
     try:
         return str(next(matching_files))
     except StopIteration: # pragma: no cover
