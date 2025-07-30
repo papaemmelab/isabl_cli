@@ -54,8 +54,7 @@ setup(
             "pytest>=4.5",
             "pytest-cov>=2.5.1",
             "pytest-env>=0.6.2",
-            "pytest-sugar>=1.0.0",
-            "termcolor>=3.0.1",
+            "pytest-sugar>=0.9.6",
             "tox>=2.9.1"
         ]
     },
