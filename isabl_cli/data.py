@@ -59,8 +59,7 @@ def raw_data_inspector(path):
                 return f"FASTQ_{fq_type}{i}"
 
     if re.search(r"\.f(ast)?q(\.gz)?$", path):
-        # raise click.UsageError(f"cant determine fastq type from: {path}")
-        return "FASTQ_R1"
+        raise click.UsageError(f"cant determine fastq type from: {path}")
 
     return None
 
