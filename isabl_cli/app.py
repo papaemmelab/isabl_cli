@@ -1236,6 +1236,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for i in specification:
             assert i in results, f"Missing expected result {i} in: {results}"
 
+        # update bam with result if specified
+        for key, attributes in specification.items():
+            if attributes.get("store_as_bam") and results[key]:
+                self.update_experiment_bam_file(
+                    experiment=analysis["targets"][0],
+                    bam_url=results[key],
+                    analysis_pk=analysis["pk"],
+                )
+
         return results
 
     # -----------------
