@@ -1160,6 +1160,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 app_name (str): `Application.name`.
                 app_version (str): `Application.version`. If not defined, use
                     any available. Use `any` if you want to use the latest available.
+                app_assembly (str): `Application.assembly.name`. i.e: GRCh37
                 linked (bool): if False, the analysis is not linked as a dependencie of
                     the analysis. As adding new dependencies to an analysis forces isabl
                     to not recognize existing ones (Default: True).
@@ -1182,6 +1183,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 # Match app by primary key
                 result_args["application_key"] = dependency.get("app").primary_key
                 result_args["application_name"] = dependency.get("app").NAME
+
+            if "app_assembly" in dependency:
+                result_args["application_assembly"] = dependency.get("app_assembly")
 
             if "status" in dependency:
                 result_args["status"] = dependency["status"]

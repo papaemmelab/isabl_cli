@@ -32,6 +32,7 @@ def get_results(
     application_key=None,
     application_name=None,
     application_version=None,
+    application_assembly=None,
     targets=None,
     references=None,
     analyses=None,
@@ -53,6 +54,7 @@ def get_results(
         application_key (int): key of the application that generated the result.
         application_name (str): name of the application that generated the result.
         application_version (str): version of the application that generated the result.
+        application_assembly (str): assembly name of the app. i.e: GRCh37.
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
@@ -65,9 +67,11 @@ def get_results(
     references = {i.pk for i in references or []}
     analyses = {i.pk for i in analyses or []}
 
-    # Filter candidates by same pk or name and/ version
+    # Filter candidates by app pk or name and/ version, and assembly, if provided.
     experiment_results = []
     for i in experiment.results:
+        if application_assembly and i.application.assembly.name != application_assembly:
+            continue
         if application_key:
             if i.application.pk == application_key:
                 experiment_results.append(i)
@@ -136,13 +140,17 @@ def get_result(*args, **kwargs):
         args (list): see get_results.
         kwargs (dict): see get_results.
         application_name (str): app name to display a more explicit error.
+        application_assembly (str): app assembly name to display better error.
 
     Returns:
         tuple: result value, analysis pk that produced the result
     """
     app_name = kwargs.get("application_name") or kwargs.get("application_key")
+    app_assembly = kwargs.get("application_assembly")
     results = get_results(*args, **kwargs)
-    assert results, f"No results found for application: {app_name}"
+    assert results, f"No results found for application: {app_name}" + (
+        f" for {app_assembly}) assembly" if app_assembly else ""
+    )
     if kwargs.get("application_version") != "latest": 
         assert len(results) == 1, f"Multiple results returned {results}"
     result, key = results[0]
