@@ -12,7 +12,7 @@ echo "API directory set to: $API_DIR"
 echo "CLI directory set to: $CLI_DIR"
 
 # get current isabl branch in case this test depends on a particular branch
-GH_BRANCH=$(echo ${GITHUB_REF#refs/heads/})
+GH_BRANCH=${GITHUB_REF#refs/heads/}
 ISABL_BRANCH=${GH_BRANCH:-master}
 echo "ISABL_BRANCH set to $ISABL_BRANCH given Github branch: $GH_BRANCH"
 
