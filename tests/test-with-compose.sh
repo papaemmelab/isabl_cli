@@ -8,6 +8,10 @@ for arg in "$@"; do
     ;;
   esac
 done
+if [ -n "$GITHUB_TOKEN" ]; then
+  umask 077
+  printf "machine github.com\n  login x-access-token\n  password %s\n" "$GITHUB_TOKEN" > ~/.netrc
+fi
 
 # get path to demo directory
 if [ "$SHELL" = "zsh" ]; then
@@ -31,18 +35,9 @@ GH_BRANCH=$(echo ${GITHUB_REF#refs/heads/})
 ISABL_BRANCH=${GH_BRANCH:-master}
 echo "ISABL_BRANCH set to $ISABL_BRANCH given Github branch: $GH_BRANCH"
 
-<<<<<<< HEAD
 # reset environment variables
 unset ISABL_CLIENT_ID
 unset ISABL_API_URL
-=======
-# clone api from github
-rm -rf $API_DIR && git clone https://${GH_PAT}@github.com/papaemmelab/isabl_api.git $API_DIR
-cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker-compose build && docker-compose up -d
-
-# give some time to API to start and test Isabl CLI
-echo "Giving 30 seconds to API to get started..."
->>>>>>> 8cb582f (🔐 try appending GH_PAT to repo url)
 export ISABL_CLIENT_ID=test-cli-client
 
 if [ "$SKIP_BUILD" = false ]; then
