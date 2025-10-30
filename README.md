@@ -3,7 +3,6 @@
 > **_Terms of Use: Academic Research_**
 
 [![pypi badge][pypi_badge]][pypi_base]
-[![travis badge][travis_badge]][travis_base]
 [![codecov badge][codecov_badge]][codecov_base]
 [![code formatting][black_badge]][black_base]
 
@@ -64,7 +63,5 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [black_base]: https://github.com/ambv/black
 [codecov_badge]: https://codecov.io/github/papaemmelab/isabl_cli/graph/badge.svg?token=ODJ8DU73PH
 [codecov_base]: https://codecov.io/github/papaemmelab/isabl_cli
-[travis_badge]: https://app.travis-ci.com/papaemmelab/isabl_cli.svg?token=P6GGbmdLPwysz69FFv2X&branch=master
-[travis_base]: https://travis-ci.com/papaemmelab/isabl_cli
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli

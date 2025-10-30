@@ -8,10 +8,14 @@ for arg in "$@"; do
     ;;
   esac
 done
-if [ -n "$GITHUB_TOKEN" ]; then
-  umask 077
-  printf "machine github.com\n  login x-access-token\n  password %s\n" "$GITHUB_TOKEN" > ~/.netrc
+
+# require GitHub token and configure netrc
+if [ -z "$GITHUB_TOKEN" ]; then
+  echo "GITHUB_TOKEN is required for cloning dependencies. Set it in the workflow env." >&2
+  exit 1
 fi
+umask 077
+printf "machine github.com\n  login x-access-token\n  password %s\n" "$GITHUB_TOKEN" > ~/.netrc
 
 # get path to demo directory
 if [ "$SHELL" = "zsh" ]; then
