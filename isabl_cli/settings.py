@@ -18,6 +18,7 @@ import pytz
 import six
 
 from isabl_cli import exceptions
+from isabl_cli import utils
 
 _DEFAULTS = {
     "SUBMIT_ANALYSES": "isabl_cli.batch_systems.submit_local",
@@ -256,6 +257,9 @@ def get_application_settings(defaults, settings, reference_data, import_strings)
             setting = setting["url"] if setting else NotImplemented
         elif attr in import_strings:  # coerce import strings into object
             setting = perform_import(setting, attr)
+
+        if isinstance(setting, str) and setting.startswith("s3://"):
+            setting = utils.stage_s3_file(setting)
 
         if setting == NotImplemented:
             errors.append(f"Missing required setting: '{attr}'")

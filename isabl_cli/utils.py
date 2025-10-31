@@ -348,3 +348,50 @@ def first_matching_file(directory, pattern, exclude=None, sort_by_newest=True):
         return str(next(matching_files))
     except StopIteration: # pragma: no cover
         raise FileNotFoundError(f"No file matching pattern '{pattern}' found in '{directory}'")
+
+def stage_s3_file(s3_url, local_dir="/scratch"):
+    """
+    Download an S3 file to a local scratch directory, if it doesn't already exist.
+
+    Args:
+        s3_url (str): The S3 URL of the file (e.g., "s3://bucket-name/path/to/file").
+        local_dir (str): The local directory where the file will be downloaded.
+
+    Returns:
+        str: The local path to the downloaded file.
+
+    Raises:
+        ValueError: If the S3 URL is invalid.
+        FileNotFoundError: If the file could not be downloaded.
+    """
+    if not s3_url.startswith("s3://"):
+        raise ValueError(f"Invalid S3 URL: {s3_url}")
+
+    s3_parts = s3_url[5:].split("/", 1)
+    if len(s3_parts) != 2:
+        raise ValueError(f"Invalid S3 URL format: {s3_url}")
+
+    bucket_name, object_key = s3_parts
+
+    # Create the scratch directory if it doesn't exist
+    scratch_path = Path(local_dir)
+    scratch_path.mkdir(parents=True, exist_ok=True)
+    local_file_path = scratch_path / Path(object_key).name
+
+    if local_file_path.exists():
+        print(f"File already exists in scratch: {local_file_path}")
+        return str(local_file_path)
+
+    # Download the file from S3
+    s3 = boto3.client("s3")
+    try:
+        print(f"Downloading {s3_url} to {local_file_path}...")
+        s3.download_file(bucket_name, object_key, str(local_file_path))
+    except Exception as e:
+        raise FileNotFoundError(f"Failed to download {s3_url}: {e}")
+
+    if not local_file_path.exists() or local_file_path.stat().st_size == 0:
+        raise FileNotFoundError(f"File {local_file_path} was not fully downloaded.")
+
+    print(f"File successfully downloaded to {local_file_path}")
+    return str(local_file_path)
