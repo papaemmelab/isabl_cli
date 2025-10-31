@@ -1,10 +1,11 @@
-> **_Terms of Use: Academic Research_**
 # Isabl CLI
 
+[![Run Isabl CLI tests][gh_actions_badge]][gh_actions_base]
 [![pypi badge][pypi_badge]][pypi_base]
-[![travis badge][travis_badge]][travis_base]
 [![codecov badge][codecov_badge]][codecov_base]
 [![code formatting][black_badge]][black_base]
+
+> **_Terms of Use: Academic Research_**
 
 `isabl_cli` is a command line client and SDK for the Isabl Platform infrastructure.
 
@@ -51,6 +52,7 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 ## License
 
 isabl is free for academic and research use. For commercial use, please contact us.
+
 ## Credits
 
 Isabl was created at [Elli Papaemmanuil's lab].
@@ -60,9 +62,9 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [elli papaemmanuil's lab]: https://www.mskcc.org/research-areas/labs/elli-papaemmanuil
 [black_badge]: https://img.shields.io/badge/code%20style-black-000000.svg
 [black_base]: https://github.com/ambv/black
-[codecov_badge]: https://codecov.io/gh/papaemmelab/isabl_cli/branch/master/graph/badge.svg?token=ODJ8DU73PH
-[codecov_base]: https://codecov.io/gh/papaemmelab/isabl_cli
-[travis_badge]: https://app.travis-ci.com/papaemmelab/isabl_cli.svg?token=P6GGbmdLPwysz69FFv2X&branch=master
-[travis_base]: https://travis-ci.com/papaemmelab/isabl_cli
+[codecov_badge]: https://codecov.io/github/papaemmelab/isabl_cli/graph/badge.svg?token=ODJ8DU73PH
+[codecov_base]: https://codecov.io/github/papaemmelab/isabl_cli
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
+[gh_actions_badge]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml/badge.svg
+[gh_actions_base]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml

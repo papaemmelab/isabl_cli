@@ -23,8 +23,9 @@ echo "API directory set to: $API_DIR"
 echo "CLI directory set to: $CLI_DIR"
 
 # get current isabl branch in case this test depends on a particular branch
-ISABL_BRANCH=${TRAVIS_PULL_REQUEST_BRANCH:-${TRAVIS_BRANCH:-master}}
-echo "ISABL_BRANCH set to $ISABL_BRANCH given travis branch: $TRAVIS_BRANCH $TRAVIS_PULL_REQUEST_BRANCH"
+GH_BRANCH=${GITHUB_REF#refs/heads/}
+ISABL_BRANCH=${GH_BRANCH:-master}
+echo "ISABL_BRANCH set to $ISABL_BRANCH given Github branch: $GH_BRANCH"
 
 # reset environment variables
 unset ISABL_CLIENT_ID
@@ -33,8 +34,17 @@ export ISABL_CLIENT_ID=test-cli-client
 
 if [ "$SKIP_BUILD" = false ]; then
    # clone api from github
-   rm -rf $API_DIR && git clone https://github.com/papaemmelab/isabl_api.git $API_DIR
-   cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker-compose build && docker-compose up -d
+   echo "Attempting to clone papaemmelab/isabl_api..."
+   echo "Target directory: $API_DIR"
+   echo "Branch: $ISABL_BRANCH"
+   rm -rf $API_DIR
+   
+   git clone https://github.com/papaemmelab/isabl_api.git $API_DIR
+   if [ $? -ne 0 ]; then
+     echo "ERROR: git clone failed" >&2
+     exit 1
+   fi
+   cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker compose build && docker compose up -d
 
    # give some time to API to start and test Isabl CLI
    echo "Giving 30 seconds to API to get started..."
@@ -43,5 +53,5 @@ fi
 
 cd $CLI_DIR && pytest -vs tests/ --cov=isabl_cli || (
    # print django logs if tests fail
-   cd $API_DIR && docker-compose logs django && exit 1
+   cd $API_DIR && docker compose logs django && exit 1
 )
