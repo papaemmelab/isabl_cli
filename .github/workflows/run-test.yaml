@@ -5,126 +5,10 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # If isabl_api is private, you may need to use a PAT (GH_PAT secret) instead of GITHUB_TOKEN
-      # because GITHUB_TOKEN typically can't access private repos outside the current org
 
     steps:
-    - name: Configure git and verify access
-      run: | 
-        # Check if token is set
-        if [ -z "$TOKEN" ]; then
-          echo "❌ ERROR: GH_PAT secret is not set"
-          echo "Please add GH_PAT secret in repository settings"
-          exit 1
-        fi
-        
-        echo "=== Token Validation ==="
-        # Trim whitespace from token (secrets can have newlines/spaces)
-        TOKEN=$(echo "$TOKEN" | tr -d '[:space:]')
-        echo "Token length: ${#TOKEN} characters"
-        echo "Token prefix: ${TOKEN:0:4}..." 
-        echo "Token suffix: ...${TOKEN: -4}"
-        echo "Token type: Classic Personal Access Token"
-        echo ""
-        
-        # First, verify token works with GitHub API
-        echo "=== Testing token with GitHub API ==="
-        # Try Bearer format first (newer format)
-        API_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/user)
-        HTTP_CODE=$(echo "$API_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
-        API_BODY=$(echo "$API_RESPONSE" | sed '/HTTP_CODE/d')
-        
-        # If Bearer fails, try token format (older format)
-        if [ "$HTTP_CODE" != "200" ]; then
-          echo "Bearer format failed, trying 'token' format..."
-          API_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/user)
-          HTTP_CODE=$(echo "$API_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
-          API_BODY=$(echo "$API_RESPONSE" | sed '/HTTP_CODE/d')
-        fi
-        
-        if [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Token is valid and authenticated"
-          echo "Authenticated as: $(echo "$API_BODY" | grep -o '"login":"[^"]*' | cut -d'"' -f4 || echo 'unknown')"
-        else
-          echo "❌ Token authentication failed (HTTP $HTTP_CODE)"
-          echo "Response: $API_BODY"
-          echo ""
-          echo "Possible issues:"
-          echo "  1. Token has extra whitespace/newlines - make sure to copy ONLY the token"
-          echo "  2. Token was copied incorrectly - check for hidden characters"
-          echo "  3. Token is expired or was revoked"
-          echo "  4. Secret name mismatch - verify it's exactly 'GH_PAT'"
-          echo ""
-          echo "To fix:"
-          echo "  1. Go to GitHub Settings → Developer settings → Personal access tokens"
-          echo "  2. Create a NEW token with 'repo' scope"
-          echo "  3. Copy ONLY the token (no spaces, no newlines)"
-          echo "  4. Go to repository Settings → Secrets → Actions"
-          echo "  5. Update GH_PAT secret with the new token"
-          exit 1
-        fi
-        echo ""
-        
-        # Test repository access via API
-        echo "=== Testing repository access via API ==="
-        # Use Bearer format (or token if Bearer works)
-        REPO_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/papaemmelab/isabl_api)
-        REPO_HTTP_CODE=$(echo "$REPO_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
-        REPO_BODY=$(echo "$REPO_RESPONSE" | sed '/HTTP_CODE/d')
-        
-        if [ "$REPO_HTTP_CODE" = "200" ]; then
-          echo "✅ Repository is accessible via API"
-        else
-          echo "❌ Cannot access repository via API (HTTP $REPO_HTTP_CODE)"
-          echo "Response: $REPO_BODY"
-          echo ""
-          echo "Possible issues:"
-          echo "  1. Token doesn't have 'repo' scope"
-          echo "  2. Token doesn't have access to papaemmelab organization"
-          echo "  3. Repository is private and token lacks permissions"
-        fi
-        echo ""
-        
-        # Configure git to use token for GitHub URLs (use trimmed token)
-        echo "=== Configuring Git ==="
-        # Clear any existing config first
-        git config --global --unset url."https://x-access-token:.*@github.com/".insteadOf 2>/dev/null || true
-        git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-        
-        # Verify git config was set
-        echo "Git config after setup:"
-        git config --global --get-regexp url
-        echo ""
-        
-        # Test access via git
-        echo "=== Testing access via Git ==="
-        echo "Testing access to papaemmelab/isabl_api..."
-        GIT_OUTPUT=$(git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD 2>&1)
-        GIT_EXIT_CODE=$?
-        
-        if [ $GIT_EXIT_CODE -eq 0 ]; then
-          echo "✅ Successfully accessed papaemmelab/isabl_api via git"
-          echo "$GIT_OUTPUT" | head -1
-        else
-          echo "❌ ERROR: Cannot access papaemmelab/isabl_api via git"
-          echo ""
-          echo "Git error output:"
-          echo "$GIT_OUTPUT"
-          echo ""
-          echo "=== Troubleshooting Steps ==="
-          echo "1. Verify GH_PAT secret is set correctly in repository settings"
-          echo "2. Token should have 'repo' scope (full control of private repositories)"
-          echo "3. Token must have access to papaemmelab organization"
-          echo "4. Token should not be expired"
-          echo "5. Repository spelling: papaemmelab/isabl_api (check case sensitivity)"
-          echo ""
-          echo "If API test passed but git fails, try:"
-          echo "  - Regenerating the token"
-          echo "  - Ensuring token has 'repo' scope specifically"
-          exit 1
-        fi
+    - name: Configure git authentication
+      run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
       env:
         TOKEN: ${{ secrets.GH_PAT }}
 
@@ -157,18 +41,6 @@ jobs:
 
     - name: Install dependencies
       run: pip install -r requirements.txt
-
-    - name: Verify git config persists
-      run: |
-        echo "Verifying git config is still active:"
-        git config --global --get-regexp url || echo "⚠️ No URL rewrite found - authentication may fail"
-        echo ""
-        echo "Re-testing repository access:"
-        if git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD > /dev/null 2>&1; then
-          echo "✅ Repository still accessible"
-        else
-          echo "⚠️ Warning: Repository access check failed - tests may fail"
-        fi
 
     - name: Run tests
       run: bash tests/test-with-compose.sh
