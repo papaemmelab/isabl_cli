@@ -20,11 +20,51 @@ jobs:
           exit 1
         fi
         
+        echo "=== Token Validation ==="
         echo "Token length: ${#TOKEN} characters"
+        echo "Token prefix: ${TOKEN:0:4}..." 
         echo "Token type: Classic Personal Access Token"
+        echo ""
+        
+        # First, verify token works with GitHub API
+        echo "=== Testing token with GitHub API ==="
+        API_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/user)
+        HTTP_CODE=$(echo "$API_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
+        API_BODY=$(echo "$API_RESPONSE" | sed '/HTTP_CODE/d')
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Token is valid and authenticated"
+          echo "Authenticated as: $(echo "$API_BODY" | grep -o '"login":"[^"]*' | cut -d'"' -f4 || echo 'unknown')"
+        else
+          echo "❌ Token authentication failed (HTTP $HTTP_CODE)"
+          echo "Response: $API_BODY"
+          echo ""
+          echo "This means the token itself is invalid or expired"
+          exit 1
+        fi
+        echo ""
+        
+        # Test repository access via API
+        echo "=== Testing repository access via API ==="
+        REPO_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/papaemmelab/isabl_api)
+        REPO_HTTP_CODE=$(echo "$REPO_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
+        REPO_BODY=$(echo "$REPO_RESPONSE" | sed '/HTTP_CODE/d')
+        
+        if [ "$REPO_HTTP_CODE" = "200" ]; then
+          echo "✅ Repository is accessible via API"
+        else
+          echo "❌ Cannot access repository via API (HTTP $REPO_HTTP_CODE)"
+          echo "Response: $REPO_BODY"
+          echo ""
+          echo "Possible issues:"
+          echo "  1. Token doesn't have 'repo' scope"
+          echo "  2. Token doesn't have access to papaemmelab organization"
+          echo "  3. Repository is private and token lacks permissions"
+        fi
+        echo ""
         
         # Configure git to use token for GitHub URLs
-        # For classic PATs, use 'x-access-token' as username
+        echo "=== Configuring Git ==="
         git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
         
         # Verify git config was set
@@ -32,27 +72,31 @@ jobs:
         git config --global --get-regexp url
         echo ""
         
-        # Test access to the repository
+        # Test access via git
+        echo "=== Testing access via Git ==="
         echo "Testing access to papaemmelab/isabl_api..."
-        if git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD > /dev/null 2>&1; then
-          echo "✅ Successfully accessed papaemmelab/isabl_api"
-          git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD | head -1
+        GIT_OUTPUT=$(git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD 2>&1)
+        GIT_EXIT_CODE=$?
+        
+        if [ $GIT_EXIT_CODE -eq 0 ]; then
+          echo "✅ Successfully accessed papaemmelab/isabl_api via git"
+          echo "$GIT_OUTPUT" | head -1
         else
-          echo "❌ ERROR: Cannot access papaemmelab/isabl_api repository"
+          echo "❌ ERROR: Cannot access papaemmelab/isabl_api via git"
           echo ""
-          echo "For classic tokens, verify:"
-          echo "  1. The token has 'repo' scope (required for private repos)"
-          echo "  2. The token has access to papaemmelab organization"
-          echo "  3. The token is not expired"
-          echo "  4. The repository exists and spelling is correct"
+          echo "Git error output:"
+          echo "$GIT_OUTPUT"
           echo ""
-          echo "Debug info:"
-          echo "  Token length: ${#TOKEN}"
-          echo "  Git config URL rewrite:"
-          git config --global --get-regexp url || echo "  (no url rewrite found)"
+          echo "=== Troubleshooting Steps ==="
+          echo "1. Verify GH_PAT secret is set correctly in repository settings"
+          echo "2. Token should have 'repo' scope (full control of private repositories)"
+          echo "3. Token must have access to papaemmelab organization"
+          echo "4. Token should not be expired"
+          echo "5. Repository spelling: papaemmelab/isabl_api (check case sensitivity)"
           echo ""
-          echo "Error details:"
-          git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD 2>&1 || true
+          echo "If API test passed but git fails, try:"
+          echo "  - Regenerating the token"
+          echo "  - Ensuring token has 'repo' scope specifically"
           exit 1
         fi
       env:
