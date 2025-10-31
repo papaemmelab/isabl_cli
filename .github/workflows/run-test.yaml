@@ -44,7 +44,8 @@ jobs:
       env:
         # Prefer GH_PAT for private repos (if set), fallback to GITHUB_TOKEN
         GH_PAT: ${{ secrets.GH_TOKEN }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # GITHUB_TOKEN is automatically provided by GitHub Actions (no need to set as secret)
+        GITHUB_TOKEN: ${{ github.token }}
 
     - name: Upload coverage reports to Codecov with GitHub Action
       uses: codecov/codecov-action@v4.2.0

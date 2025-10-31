@@ -46,6 +46,8 @@ fi
 # configure git to use netrc
 export GIT_TERMINAL_PROMPT=0
 export GIT_ASKPASS=echo
+# Ensure git uses .netrc for authentication
+git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
 
 # get path to demo directory
 if [ "$SHELL" = "zsh" ]; then
