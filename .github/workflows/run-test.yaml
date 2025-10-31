@@ -5,6 +5,10 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # If isabl_api is private, you may need to use a PAT (GH_PAT secret) instead of GITHUB_TOKEN
+      # because GITHUB_TOKEN typically can't access private repos outside the current org
 
     steps:
     - name: Configure git authentication

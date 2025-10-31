@@ -53,6 +53,7 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 
 isabl is free for academic and research use. For commercial use, please contact us.
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 <<<<<<< HEAD
@@ -60,6 +61,9 @@ isabl is free for academic and research use. For commercial use, please contact 
 
 >>>>>>> f71c162 (✅ Fix the github action to deploy to Pypi (#73))
 >>>>>>> 6aa84a2 (✅ Fix the github action to deploy to Pypi (#73))
+=======
+
+>>>>>>> 542f2c0 (✅ try again)
 ## Credits
 
 Isabl was created at [Elli Papaemmanuil's lab].
@@ -74,4 +78,8 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
 [gh_actions_badge]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml/badge.svg
+<<<<<<< HEAD
 [gh_actions_base]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml
+=======
+[gh_actions_base]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml
+>>>>>>> 542f2c0 (✅ try again)
