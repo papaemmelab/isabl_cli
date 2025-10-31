@@ -15,8 +15,8 @@ jobs:
       run: | 
         # Check if token is set
         if [ -z "$TOKEN" ]; then
-          echo "❌ ERROR: GH_TOKEN secret is not set"
-          echo "Please add GH_TOKEN secret in repository settings"
+          echo "❌ ERROR: GH_PAT secret is not set"
+          echo "Please add GH_PAT secret in repository settings"
           exit 1
         fi
         
@@ -56,7 +56,7 @@ jobs:
           exit 1
         fi
       env:
-        TOKEN: ${{ secrets.GH_PATH }}
+        TOKEN: ${{ secrets.GH_PAT }}
 
     - name: Checkout code
       uses: actions/checkout@v4
