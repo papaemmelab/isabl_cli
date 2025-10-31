@@ -70,7 +70,11 @@ def get_results(
     # Filter candidates by app pk or name and/ version, and assembly, if provided.
     experiment_results = []
     for i in experiment.results:
-        if application_assembly and i.application["assembly"]["name"] != application_assembly:
+        if (
+            application_assembly
+            and "assembly" in i.application
+            and i.application.get("assembly") != application_assembly
+        ):
             continue
         if application_key:
             if i.application.pk == application_key:
