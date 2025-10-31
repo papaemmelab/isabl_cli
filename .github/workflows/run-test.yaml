@@ -21,14 +21,11 @@ jobs:
         fi
         
         echo "Token length: ${#TOKEN} characters"
-        echo "Token type: Fine-grained Personal Access Token"
+        echo "Token type: Classic Personal Access Token"
         
-        # Try multiple authentication methods for fine-grained tokens
-        # Method 1: URL rewrite with x-access-token (works for both classic and fine-grained)
+        # Configure git to use token for GitHub URLs
+        # For classic PATs, use 'x-access-token' as username
         git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-        
-        # Method 2: Also set up credential helper as backup (for fine-grained tokens)
-        git config --global credential.helper store
         
         # Verify git config was set
         echo "Git config after setup:"
@@ -37,43 +34,29 @@ jobs:
         
         # Test access to the repository
         echo "Testing access to papaemmelab/isabl_api..."
-        echo "Attempt 1: Using URL rewrite..."
-        
         if git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD > /dev/null 2>&1; then
           echo "✅ Successfully accessed papaemmelab/isabl_api"
           git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD | head -1
         else
-          echo "Attempt 1 failed. Trying with direct token in URL..."
-          # Method 2: Try direct URL with token embedded
-          if git ls-remote "https://x-access-token:${TOKEN}@github.com/papaemmelab/isabl_api.git" HEAD > /dev/null 2>&1; then
-            echo "✅ Successfully accessed with direct token URL"
-            # Update git config to use this method
-            git config --global --unset url."https://x-access-token:${TOKEN}@github.com/".insteadOf
-            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-            git ls-remote "https://x-access-token:${TOKEN}@github.com/papaemmelab/isabl_api.git" HEAD | head -1
-          else
-            echo "❌ ERROR: Cannot access papaemmelab/isabl_api repository"
-            echo ""
-            echo "For fine-grained tokens, verify:"
-            echo "  1. The token has 'Repository access' permissions"
-            echo "  2. The token specifically includes 'papaemmelab/isabl_api' repository"
-            echo "  3. The token has 'Contents: Read' permission"
-            echo "  4. The token is not expired"
-            echo ""
-            echo "Debug info:"
-            echo "  Token length: ${#TOKEN}"
-            echo "  Git config URL rewrite:"
-            git config --global --get-regexp url || echo "  (no url rewrite found)"
-            echo ""
-            echo "Attempting to show error:"
-            git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD 2>&1 || true
-            echo ""
-            git ls-remote "https://x-access-token:${TOKEN}@github.com/papaemmelab/isabl_api.git" HEAD 2>&1 || true
-            exit 1
-          fi
+          echo "❌ ERROR: Cannot access papaemmelab/isabl_api repository"
+          echo ""
+          echo "For classic tokens, verify:"
+          echo "  1. The token has 'repo' scope (required for private repos)"
+          echo "  2. The token has access to papaemmelab organization"
+          echo "  3. The token is not expired"
+          echo "  4. The repository exists and spelling is correct"
+          echo ""
+          echo "Debug info:"
+          echo "  Token length: ${#TOKEN}"
+          echo "  Git config URL rewrite:"
+          git config --global --get-regexp url || echo "  (no url rewrite found)"
+          echo ""
+          echo "Error details:"
+          git ls-remote https://github.com/papaemmelab/isabl_api.git HEAD 2>&1 || true
+          exit 1
         fi
       env:
-        TOKEN: ${{ secrets.GH_TOKEN }}
+        TOKEN: ${{ secrets.GH_PATH }}
 
     - name: Checkout code
       uses: actions/checkout@v4
