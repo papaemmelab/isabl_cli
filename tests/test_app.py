@@ -480,8 +480,15 @@ def test_engine(tmpdir):
             experiment=target,
             application_key=application.primary_key,
         )
-
     assert "Result 'invalid_result_key' not found for analysis" in str(error.value)
+
+    # Check assembly works to retrieve results
+    assert application.get_results(
+        result_key="analysis_result_key",
+        experiment=target,
+        application_key=application.primary_key,
+        application_assembly=application.ASSEMBLY,
+    ) == [(1, ran_analyses[1][0].pk)]
 
     # test options
     runner = CliRunner()
