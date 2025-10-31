@@ -39,28 +39,6 @@ if [ "$SKIP_BUILD" = false ]; then
    echo "Branch: $ISABL_BRANCH"
    rm -rf $API_DIR
    
-   # test repo access first with a dry-run
-   echo "Testing repository access..."
-   if git ls-remote https://github.com/papaemmelab/isabl_api.git > /dev/null 2>&1; then
-     echo "Repository access successful"
-   else
-     echo "ERROR: Cannot access repository. This could mean:" >&2
-     echo "  1. The repository is private and GITHUB_TOKEN doesn't have permission" >&2
-     echo "  2. The repository doesn't exist" >&2
-     echo "  3. Authentication failed" >&2
-     echo "" >&2
-     echo "Debug info:" >&2
-     echo "  Token used: ${TOKEN_NAME}" >&2
-     echo "  Token length: ${#TOKEN}" >&2
-     echo "  .netrc exists: $([ -f ~/.netrc ] && echo yes || echo no)" >&2
-     echo "" >&2
-     echo "If the repo is PRIVATE, you likely need to:" >&2
-     echo "  1. Use GH_PAT (Personal Access Token) instead of GITHUB_TOKEN" >&2
-     echo "  2. Set GH_PAT secret in GitHub repository settings" >&2
-     git ls-remote https://github.com/papaemmelab/isabl_api.git 2>&1
-     exit 1
-   fi
-   
    git clone https://github.com/papaemmelab/isabl_api.git $API_DIR
    if [ $? -ne 0 ]; then
      echo "ERROR: git clone failed" >&2
