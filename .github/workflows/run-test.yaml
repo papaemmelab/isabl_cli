@@ -5,6 +5,10 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # If isabl_api is private, you may need to use a PAT (GH_PAT secret) instead of GITHUB_TOKEN
+      # because GITHUB_TOKEN typically can't access private repos outside the current org
 
     steps:
     - name: Checkout code
@@ -38,6 +42,8 @@ jobs:
     - name: Run tests
       run: bash tests/test-with-compose.sh
       env:
+        # Prefer GH_PAT for private repos (if set), fallback to GITHUB_TOKEN
+        GH_PAT: ${{ secrets.GH_PAT }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload coverage reports to Codecov with GitHub Action

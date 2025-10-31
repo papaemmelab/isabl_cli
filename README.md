@@ -2,6 +2,7 @@
 
 > **_Terms of Use: Academic Research_**
 
+[![Run Isabl CLI tests][gh_actions_badge]][gh_actions_base]
 [![pypi badge][pypi_badge]][pypi_base]
 [![codecov badge][codecov_badge]][codecov_base]
 [![code formatting][black_badge]][black_base]
@@ -65,3 +66,5 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [codecov_base]: https://codecov.io/github/papaemmelab/isabl_cli
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
+[gh_actions_badge]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml/badge.svg
+[gh_actions_base]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml
