@@ -1,5 +1,10 @@
 name: Build wheel, release and publish on new tag
-on: [push, pull_request]
+on:
+  push:
+    tags:
+      - '*'
+  release:
+    types: [published]
 jobs:
   build:
     name: Build distribution 📦
@@ -29,7 +34,6 @@ jobs:
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
-    if: startsWith(github.ref, 'refs/tags/')
     needs:
     - build
     runs-on: ubuntu-latest
