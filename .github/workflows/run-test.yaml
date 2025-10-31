@@ -21,16 +21,28 @@ jobs:
         fi
         
         echo "=== Token Validation ==="
+        # Trim whitespace from token (secrets can have newlines/spaces)
+        TOKEN=$(echo "$TOKEN" | tr -d '[:space:]')
         echo "Token length: ${#TOKEN} characters"
         echo "Token prefix: ${TOKEN:0:4}..." 
+        echo "Token suffix: ...${TOKEN: -4}"
         echo "Token type: Classic Personal Access Token"
         echo ""
         
         # First, verify token works with GitHub API
         echo "=== Testing token with GitHub API ==="
-        API_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/user)
+        # Try Bearer format first (newer format)
+        API_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/user)
         HTTP_CODE=$(echo "$API_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
         API_BODY=$(echo "$API_RESPONSE" | sed '/HTTP_CODE/d')
+        
+        # If Bearer fails, try token format (older format)
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Bearer format failed, trying 'token' format..."
+          API_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/user)
+          HTTP_CODE=$(echo "$API_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
+          API_BODY=$(echo "$API_RESPONSE" | sed '/HTTP_CODE/d')
+        fi
         
         if [ "$HTTP_CODE" = "200" ]; then
           echo "✅ Token is valid and authenticated"
@@ -39,14 +51,26 @@ jobs:
           echo "❌ Token authentication failed (HTTP $HTTP_CODE)"
           echo "Response: $API_BODY"
           echo ""
-          echo "This means the token itself is invalid or expired"
+          echo "Possible issues:"
+          echo "  1. Token has extra whitespace/newlines - make sure to copy ONLY the token"
+          echo "  2. Token was copied incorrectly - check for hidden characters"
+          echo "  3. Token is expired or was revoked"
+          echo "  4. Secret name mismatch - verify it's exactly 'GH_PAT'"
+          echo ""
+          echo "To fix:"
+          echo "  1. Go to GitHub Settings → Developer settings → Personal access tokens"
+          echo "  2. Create a NEW token with 'repo' scope"
+          echo "  3. Copy ONLY the token (no spaces, no newlines)"
+          echo "  4. Go to repository Settings → Secrets → Actions"
+          echo "  5. Update GH_PAT secret with the new token"
           exit 1
         fi
         echo ""
         
         # Test repository access via API
         echo "=== Testing repository access via API ==="
-        REPO_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: token ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/papaemmelab/isabl_api)
+        # Use Bearer format (or token if Bearer works)
+        REPO_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/papaemmelab/isabl_api)
         REPO_HTTP_CODE=$(echo "$REPO_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
         REPO_BODY=$(echo "$REPO_RESPONSE" | sed '/HTTP_CODE/d')
         
@@ -63,8 +87,10 @@ jobs:
         fi
         echo ""
         
-        # Configure git to use token for GitHub URLs
+        # Configure git to use token for GitHub URLs (use trimmed token)
         echo "=== Configuring Git ==="
+        # Clear any existing config first
+        git config --global --unset url."https://x-access-token:.*@github.com/".insteadOf 2>/dev/null || true
         git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
         
         # Verify git config was set
