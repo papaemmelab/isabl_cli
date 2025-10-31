@@ -22,8 +22,12 @@ API_DIR=${CLI_DIR}/api
 echo "API directory set to: $API_DIR"
 echo "CLI directory set to: $CLI_DIR"
 
-# get current isabl branch in case this test depends on a particular branch
-GH_BRANCH=${GITHUB_REF#refs/heads/}
+# Use GITHUB_HEAD_REF for pull requests, fallback to git for local development
+if [ -n "$GITHUB_HEAD_REF" ]; then
+    GH_BRANCH="$GITHUB_HEAD_REF"
+else
+    GH_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+fi
 ISABL_BRANCH=${GH_BRANCH:-master}
 echo "ISABL_BRANCH set to $ISABL_BRANCH given Github branch: $GH_BRANCH"
 
