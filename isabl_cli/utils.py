@@ -58,7 +58,7 @@ def get_results(
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
-        status (str): expected analysis status. For multiple, string with `\`.
+        status (str): expected analysis status. For multiple, string with `/`.
 
     Returns:
         list: of tuples (result_value, analysis primary key).

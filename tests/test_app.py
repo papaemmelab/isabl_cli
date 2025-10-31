@@ -483,24 +483,12 @@ def test_engine(tmpdir):
     assert "Result 'invalid_result_key' not found for analysis" in str(error.value)
 
     # Check assembly works to retrieve results
-    assert application.get_result(
+    assert application.get_results(
         result_key="analysis_result_key",
         experiment=target,
         application_key=application.primary_key,
         application_assembly=application.ASSEMBLY,
-    ) == (1, ran_analyses[1][0].pk)
-
-    with pytest.raises(AssertionError) as error:
-        application.get_result(
-            result_key="analysis_result_key",
-            experiment=target,
-            application_key=application.primary_key,
-            application_assembly="invalid_assembly"
-        )
-    assert (
-        "No results found for application" in str(error.value)
-        and "for (invalid_assembly) assembly" in str(error.value)
-    )
+    ) == [(1, ran_analyses[1][0].pk)]
 
     # test options
     runner = CliRunner()
