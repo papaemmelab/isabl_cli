@@ -1,11 +1,11 @@
 # Isabl CLI
 
-> **_Terms of Use: Academic Research_**
-
 [![Run Isabl CLI tests][gh_actions_badge]][gh_actions_base]
 [![pypi badge][pypi_badge]][pypi_base]
 [![codecov badge][codecov_badge]][codecov_base]
 [![code formatting][black_badge]][black_base]
+
+> **_Terms of Use: Academic Research_**
 
 `isabl_cli` is a command line client and SDK for the Isabl Platform infrastructure.
 
@@ -52,18 +52,7 @@ Contributions are welcome and greatly appreciated, check our [contributing guide
 ## License
 
 isabl is free for academic and research use. For commercial use, please contact us.
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-=======
-<<<<<<< HEAD
-=======
-
->>>>>>> f71c162 (✅ Fix the github action to deploy to Pypi (#73))
->>>>>>> 6aa84a2 (✅ Fix the github action to deploy to Pypi (#73))
-=======
-
->>>>>>> 542f2c0 (✅ try again)
 ## Credits
 
 Isabl was created at [Elli Papaemmanuil's lab].
@@ -78,8 +67,4 @@ Isabl was created at [Elli Papaemmanuil's lab].
 [pypi_badge]: https://img.shields.io/pypi/v/isabl_cli.svg
 [pypi_base]: https://pypi.python.org/pypi/isabl_cli
 [gh_actions_badge]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml/badge.svg
-<<<<<<< HEAD
 [gh_actions_base]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml
-=======
-[gh_actions_base]: https://github.com/papaemmelab/isabl_cli/actions/workflows/run-test.yaml
->>>>>>> 542f2c0 (✅ try again)
