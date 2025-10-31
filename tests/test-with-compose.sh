@@ -9,46 +9,6 @@ for arg in "$@"; do
   esac
 done
 
-# require GitHub token (prefer GH_PAT for private repos, fallback to GITHUB_TOKEN)
-if [ -n "$GH_PAT" ]; then
-  TOKEN="$GH_PAT"
-  TOKEN_NAME="GH_PAT"
-  echo "Using GH_PAT for authentication (recommended for private repos)"
-elif [ -n "$GITHUB_TOKEN" ]; then
-  TOKEN="$GITHUB_TOKEN"
-  TOKEN_NAME="GITHUB_TOKEN"
-  echo "Using GITHUB_TOKEN for authentication"
-  echo "NOTE: If cloning a private repo, GITHUB_TOKEN may not work. Use GH_PAT instead."
-else
-  echo "ERROR: Either GH_PAT or GITHUB_TOKEN is required for cloning dependencies." >&2
-  echo "  - GH_PAT: Use this for private repositories (Personal Access Token)" >&2
-  echo "  - GITHUB_TOKEN: Auto-provided by GitHub Actions (limited to same org)" >&2
-  exit 1
-fi
-
-# debug: verify token is set (without exposing it)
-echo "${TOKEN_NAME} is set (length: ${#TOKEN} characters)"
-
-# configure netrc for git authentication
-umask 077
-printf "machine github.com\n  login x-access-token\n  password %s\n" "$TOKEN" > ~/.netrc
-
-# debug: verify netrc was created
-if [ -f ~/.netrc ]; then
-  echo ".netrc file created successfully (permissions: $(stat -c '%a' ~/.netrc 2>/dev/null || stat -f '%OLp' ~/.netrc))"
-  # show first line only (without password) for verification
-  head -1 ~/.netrc | sed 's/password.*/password ***/'
-else
-  echo "ERROR: Failed to create .netrc file" >&2
-  exit 1
-fi
-
-# configure git to use netrc
-export GIT_TERMINAL_PROMPT=0
-export GIT_ASKPASS=echo
-# Ensure git uses .netrc for authentication
-git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-
 # get path to demo directory
 if [ "$SHELL" = "zsh" ]; then
    TEST_DIR="$( cd "$(dirname ${(%):-%N})" ; pwd -P )"
