@@ -44,7 +44,7 @@ if [ "$SKIP_BUILD" = false ]; then
      echo "ERROR: git clone failed" >&2
      exit 1
    fi
-   cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker compose build && docker-compose up -d
+   cd $API_DIR && (git checkout $ISABL_BRANCH || true) && docker compose build && docker compose up -d
 
    # give some time to API to start and test Isabl CLI
    echo "Giving 30 seconds to API to get started..."
@@ -53,5 +53,5 @@ fi
 
 cd $CLI_DIR && pytest -vs tests/ --cov=isabl_cli || (
    # print django logs if tests fail
-   cd $API_DIR && docker-compose logs django && exit 1
+   cd $API_DIR && docker compose logs django && exit 1
 )
