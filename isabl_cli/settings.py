@@ -130,7 +130,7 @@ class UserSettings:
     """A class used to manage user specific configurations."""
 
     settings_path = join(expanduser("~"), ".isabl", "settings.json")
-    api_url = os.environ.get("ISABL_API_URL")
+    api_url = os.environ.get("ISABL_API_URL", "http://localhost:8000/api/v1/")
 
     def __repr__(self):  # pragma: no cover
         """Show all configurations in `settings_path`."""
