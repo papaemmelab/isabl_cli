@@ -130,6 +130,7 @@ class UserSettings:
     """A class used to manage user specific configurations."""
 
     settings_path = join(expanduser("~"), ".isabl", "settings.json")
+    api_url = os.environ.get("ISABL_API_URL", "http://localhost:8000/api/v1/")
 
     def __repr__(self):  # pragma: no cover
         """Show all configurations in `settings_path`."""
@@ -141,7 +142,7 @@ class UserSettings:
 
     def __getattr__(self, name):
         """Get attribute from `settings_path`."""
-        return self._read().get(name, None)
+        return self._read().get(self.api_url, {}).get(name, None)
 
     def _read(self):
         """Read settings.json."""
@@ -157,7 +158,9 @@ class UserSettings:
         data = self._read()
 
         with open(self.settings_path, "w") as f:
-            data[name] = value
+            if self.api_url not in data:
+                data[self.api_url] = {}
+            data[self.api_url][name] = value
             json.dump(data, f, indent=4, sort_keys=True)
 
         os.chmod(self.settings_path, 0o600)
