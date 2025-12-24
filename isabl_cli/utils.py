@@ -328,7 +328,13 @@ def send_analytics(command):  # noqa
     return update_wrapper(wrapper, command)
 
 
-def first_matching_file(directory, pattern, exclude=None, sort_by_newest=True):
+def first_matching_file(
+        directory,
+        pattern,
+        exclude=None,
+        sort_by_newest=True,
+        optional=False,
+    ):
     """
     Recursively search within a directory for the first file that matches the pattern.
     Args:
@@ -336,6 +342,7 @@ def first_matching_file(directory, pattern, exclude=None, sort_by_newest=True):
         pattern (str): a glob pattern (e.g., '*.txt') to match filenames.
         exclude (str, optional): files containing this substring will be skipped.
         sort_by_newest (bool, optional): sort by file's creation time, newer to older.
+        optional (bool): ok if none is found.
 
     Returns:
         str: the path to the first matching file as a string.
@@ -359,4 +366,6 @@ def first_matching_file(directory, pattern, exclude=None, sort_by_newest=True):
     try:
         return str(next(matching_files))
     except StopIteration: # pragma: no cover
+        if optional:
+            return None
         raise FileNotFoundError(f"No file matching pattern '{pattern}' found in '{directory}'")

@@ -1205,9 +1205,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         for name, result_specification in specification.items():
             pattern = result_specification.get("pattern")
             exclude = result_specification.get("exclude")
+            optional = result_specification.get("optional")
             if pattern:
                 results[name] = utils.first_matching_file(
-                    analysis.storage_url, pattern, exclude
+                    directory=analysis.storage_url,
+                    pattern=pattern,
+                    exclude=exclude,
+                    optional=optional,
                 )
         return results
 
