@@ -4,6 +4,11 @@ This module provides functionality to export analysis results from Google Cloud
 Managed Lustre scratch storage to Google Cloud Storage (GCS) after pipeline completion.
 """
 
+import json
+import shutil
+import subprocess
+import time
+
 import click
 
 from isabl_cli.settings import system_settings
@@ -60,135 +65,237 @@ def compute_export_paths(storage_url, lustre_mount_path, gcs_base_uri):
     return lustre_path, gcs_path_uri
 
 
-def build_export_script(analysis, gcp_config):
-    """Build a bash script for exporting data from Lustre to GCS.
-
-    This script:
-    1. Initiates an async export from Lustre to GCS
-    2. Polls for completion
-    3. Optionally deletes scratch data on success
-    4. Exits with error code on failure
+def initiate_export(gcp_config, lustre_path, gcs_path):
+    """Initiate an async export from Lustre to GCS.
 
     Arguments:
-        analysis (dict): Analysis instance with 'pk' and 'storage_url' keys.
         gcp_config (dict): GCP configuration dictionary.
+        lustre_path (str): Lustre path to export (e.g., "/analyses/00/01/123/").
+        gcs_path (str): GCS destination URI (e.g., "gs://bucket/analyses/00/01/123/").
 
     Returns:
-        str: Bash script for export.
-    """
-    storage_url = analysis["storage_url"]
-    lustre_instance = gcp_config["lustre_instance"]
-    location = gcp_config["lustre_location"]
-    project = gcp_config["lustre_project"]
-    lustre_mount_path = gcp_config["lustre_mount_path"]
-    gcs_base_uri = gcp_config["gcs_base_uri"]
-    poll_interval = gcp_config.get("lustre_poll_interval", 30)
-    max_poll_attempts = gcp_config.get("lustre_max_poll_attempts", 360)
-    delete_after_export = gcp_config.get("lustre_delete_after_export", True)
+        str: Operation name for tracking the export.
 
+    Raises:
+        GCPLustreExportError: If export initiation fails.
+    """
+    cmd = [
+        "gcloud",
+        "lustre",
+        "instances",
+        "export-data",
+        gcp_config["lustre_instance"],
+        f"--location={gcp_config['lustre_location']}",
+        f"--gcs-path-uri={gcs_path}",
+        f"--lustre-path={lustre_path}",
+        "--async",
+        f"--project={gcp_config['lustre_project']}",
+        "--format=json",
+    ]
+
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Initiating Lustre export...")
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Lustre path: {lustre_path}")
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCS target: {gcs_path}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GCPLustreExportError(
+            f"Failed to initiate Lustre export: {e.stderr or e.stdout}"
+        )
+
+    # Parse JSON output to extract operation name
+    try:
+        output = json.loads(result.stdout)
+        operation_name = output.get("name")
+        if not operation_name:
+            raise GCPLustreExportError(
+                f"Could not extract operation name from output: {result.stdout}"
+            )
+    except json.JSONDecodeError as e:
+        raise GCPLustreExportError(
+            f"Failed to parse export output as JSON: {result.stdout}"
+        )
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Export initiated. Operation: {operation_name}"
+    )
+    return operation_name
+
+
+def check_export_status(gcp_config, operation_name):
+    """Check the status of an export operation.
+
+    Arguments:
+        gcp_config (dict): GCP configuration dictionary.
+        operation_name (str): Operation name to check.
+
+    Returns:
+        tuple: (done, error) where done is bool and error is str or None.
+
+    Raises:
+        GCPLustreExportError: If status check fails.
+    """
+    cmd = [
+        "gcloud",
+        "lustre",
+        "operations",
+        "describe",
+        operation_name,
+        f"--location={gcp_config['lustre_location']}",
+        f"--project={gcp_config['lustre_project']}",
+        "--format=json",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GCPLustreExportError(
+            f"Failed to check operation status: {e.stderr or e.stdout}"
+        )
+
+    try:
+        output = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise GCPLustreExportError(
+            f"Failed to parse status output as JSON: {result.stdout}"
+        )
+
+    done = output.get("done", False)
+    error = output.get("error")
+
+    if error:
+        error_msg = error.get("message", str(error))
+        return done, error_msg
+
+    return done, None
+
+
+def wait_for_export(gcp_config, operation_name):
+    """Poll until export completes or times out.
+
+    Arguments:
+        gcp_config (dict): GCP configuration dictionary.
+        operation_name (str): Operation name to wait for.
+
+    Raises:
+        GCPLustreExportError: If export fails or times out.
+    """
+    poll_interval = gcp_config.get("lustre_poll_interval", 30)
+    max_attempts = gcp_config.get("lustre_max_poll_attempts", 360)
+
+    for attempt in range(1, max_attempts + 1):
+        time.sleep(poll_interval)
+
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking export status "
+            f"(attempt {attempt}/{max_attempts})..."
+        )
+
+        try:
+            done, error = check_export_status(gcp_config, operation_name)
+        except GCPLustreExportError as e:
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING: {e}, retrying..."
+            )
+            continue
+
+        if done:
+            if error:
+                raise GCPLustreExportError(f"Export operation failed: {error}")
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Export completed successfully!"
+            )
+            return
+
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Export still in progress..."
+        )
+
+    raise GCPLustreExportError(f"Export timed out after {max_attempts} attempts")
+
+
+def run_export(storage_url, delete_after=None):
+    """Run the full export process from Lustre to GCS.
+
+    This is the main entry point for the lustre-export CLI command.
+
+    Arguments:
+        storage_url (str): Full path to analysis output directory on Lustre.
+        delete_after (bool or None): Whether to delete scratch after export.
+            If None, uses config value.
+
+    Raises:
+        GCPLustreExportError: If export fails.
+        SystemExit: On error (for CLI usage).
+    """
+    gcp_config = get_gcp_config()
+
+    if not gcp_config.get("lustre_export_enabled"):
+        raise GCPLustreExportError("GCP Lustre export is not enabled")
+
+    # Validate required settings
+    required = [
+        "lustre_instance",
+        "lustre_location",
+        "lustre_project",
+        "lustre_mount_path",
+        "gcs_base_uri",
+    ]
+    missing = [s for s in required if not gcp_config.get(s)]
+    if missing:
+        raise GCPLustreExportError(f"Missing required GCP settings: {missing}")
+
+    # Compute paths
     lustre_path, gcs_path = compute_export_paths(
-        storage_url, lustre_mount_path, gcs_base_uri
+        storage_url,
+        gcp_config["lustre_mount_path"],
+        gcp_config["gcs_base_uri"],
     )
 
-    script = f'''
-# GCP Lustre Export Script for Analysis {analysis["pk"]}
-echo "[$(date)] Starting GCP Lustre export..."
-echo "[$(date)] Lustre path: {lustre_path}"
-echo "[$(date)] GCS target: {gcs_path}"
+    # Initiate export
+    operation_name = initiate_export(gcp_config, lustre_path, gcs_path)
 
-# Initiate async export
-EXPORT_OUTPUT=$(gcloud lustre instances export-data {lustre_instance} \\
-    --location={location} \\
-    --gcs-path-uri="{gcs_path}" \\
-    --lustre-path="{lustre_path}" \\
-    --async \\
-    --project {project} \\
-    --format=json 2>&1)
+    # Wait for completion
+    wait_for_export(gcp_config, operation_name)
 
-EXPORT_EXIT_CODE=$?
-if [ $EXPORT_EXIT_CODE -ne 0 ]; then
-    echo "[$(date)] ERROR: Failed to initiate Lustre export"
-    echo "$EXPORT_OUTPUT"
-    exit 1
-fi
+    # Delete scratch if configured
+    should_delete = (
+        delete_after
+        if delete_after is not None
+        else gcp_config.get("lustre_delete_after_export", True)
+    )
 
-# Extract operation name from output
-OPERATION_NAME=$(echo "$EXPORT_OUTPUT" | grep -o '"name": "[^"]*"' | head -1 | cut -d'"' -f4)
+    if should_delete:
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Deleting scratch data from Lustre..."
+        )
+        try:
+            shutil.rmtree(storage_url)
+        except Exception as e:
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING: Failed to delete scratch: {e}"
+            )
+        else:
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Scratch data deleted successfully"
+            )
 
-if [ -z "$OPERATION_NAME" ]; then
-    echo "[$(date)] ERROR: Could not extract operation name from export output"
-    echo "$EXPORT_OUTPUT"
-    exit 1
-fi
-
-echo "[$(date)] Export initiated. Operation: $OPERATION_NAME"
-
-# Poll for completion
-POLL_COUNT=0
-MAX_POLLS={max_poll_attempts}
-POLL_INTERVAL={poll_interval}
-
-while [ $POLL_COUNT -lt $MAX_POLLS ]; do
-    sleep $POLL_INTERVAL
-    POLL_COUNT=$((POLL_COUNT + 1))
-
-    echo "[$(date)] Checking export status (attempt $POLL_COUNT/$MAX_POLLS)..."
-
-    STATUS_OUTPUT=$(gcloud lustre operations describe "$OPERATION_NAME" \\
-        --location={location} \\
-        --project {project} \\
-        --format=json 2>&1)
-
-    STATUS_EXIT_CODE=$?
-    if [ $STATUS_EXIT_CODE -ne 0 ]; then
-        echo "[$(date)] WARNING: Failed to get operation status, retrying..."
-        echo "$STATUS_OUTPUT"
-        continue
-    fi
-
-    # Check if operation is done
-    IS_DONE=$(echo "$STATUS_OUTPUT" | grep -o '"done": true')
-
-    if [ -n "$IS_DONE" ]; then
-        # Check for errors
-        HAS_ERROR=$(echo "$STATUS_OUTPUT" | grep '"error":')
-
-        if [ -n "$HAS_ERROR" ]; then
-            echo "[$(date)] ERROR: Export operation failed"
-            echo "$STATUS_OUTPUT"
-            exit 1
-        fi
-
-        echo "[$(date)] Export completed successfully!"
-        break
-    fi
-
-    echo "[$(date)] Export still in progress..."
-done
-
-if [ $POLL_COUNT -ge $MAX_POLLS ]; then
-    echo "[$(date)] ERROR: Export timed out after $MAX_POLLS attempts"
-    exit 1
-fi
-'''
-
-    if delete_after_export:
-        script += f'''
-# Delete scratch data after successful export
-echo "[$(date)] Deleting scratch data from Lustre..."
-rm -rf "{storage_url}"/*
-echo "[$(date)] Scratch data deleted successfully"
-'''
-
-    script += '''
-echo "[$(date)] GCP Lustre export complete"
-'''
-
-    return script
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCP Lustre export complete")
 
 
 def get_export_command_for_script(analysis):
-    """Get the export command string to be embedded in the analysis script.
+    """Get the CLI command string to be embedded in the analysis script.
 
     This is called from AbstractApplication.write_command_script() when
     GCP Lustre export is enabled.
@@ -197,7 +304,7 @@ def get_export_command_for_script(analysis):
         analysis (dict): Analysis instance.
 
     Returns:
-        str: Export command string, or empty string if export disabled.
+        str: CLI command string, or empty string if export disabled.
     """
     gcp_config = get_gcp_config()
 
@@ -222,4 +329,5 @@ def get_export_command_for_script(analysis):
         )
         return ""
 
-    return build_export_script(analysis, gcp_config)
+    storage_url = analysis["storage_url"]
+    return f"isabl lustre-export --storage-url {storage_url}"

@@ -478,3 +478,37 @@ def reject_analysis(key, reason):
     analysis = api.get_instance("analyses", key)
     api.patch_analysis_status(analysis, "REJECTED")
     api.patch_instance("analyses", key, notes=reason)
+
+
+@click.command()
+@click.option(
+    "--storage-url",
+    required=True,
+    help="Analysis storage URL (directory path) to export from Lustre to GCS.",
+)
+@click.option(
+    "--delete-after/--no-delete-after",
+    default=None,
+    help="Delete scratch data after successful export. Defaults to config value.",
+)
+def lustre_export(storage_url, delete_after):
+    """Export analysis directory from Lustre to GCS.
+
+    This command exports data from Google Cloud Managed Lustre to Google Cloud Storage.
+    It initiates an async export, polls for completion, and optionally deletes the
+    scratch data after successful export.
+
+    Requires GCP_CONFIGURATION to be set in the client settings with:
+    - lustre_export_enabled: true
+    - lustre_instance: Lustre instance name
+    - lustre_location: GCP zone
+    - lustre_project: GCP project ID
+    - lustre_mount_path: Lustre mount path prefix
+    - gcs_base_uri: Base GCS bucket URI
+    """
+    from isabl_cli import gcp_lustre
+
+    try:
+        gcp_lustre.run_export(storage_url, delete_after)
+    except gcp_lustre.GCPLustreExportError as e:
+        raise click.ClickException(str(e))

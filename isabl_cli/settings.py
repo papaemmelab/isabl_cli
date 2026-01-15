@@ -57,6 +57,7 @@ _DEFAULTS = {
         "isabl_cli.commands.get_reference",
         "isabl_cli.commands.get_results",
         "isabl_cli.commands.login",
+        "isabl_cli.commands.lustre_export",
         "isabl_cli.commands.merge_individual_analyses",
         "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.patch_status",
