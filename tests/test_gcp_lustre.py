@@ -474,11 +474,65 @@ class TestGetExportCommandForScript:
                 "lustre_location": "us-east4-a",
                 "lustre_project": "test-project",
                 "gcs_base_uri": "gs://my-bucket",
+                "lustre_delete_after_export": True,
             },
         )
 
         result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
-        assert result == "isabl lustre-export --lustre-path /scratch/output --analysis-pk 123"
+        assert result == "isabl lustre-export --lustre-path /scratch/output --analysis-pk 123 --delete-after"
+
+    def test_includes_delete_after_flag_when_true(self, analysis, monkeypatch):
+        """Test that --delete-after flag is included when config is True."""
+        monkeypatch.setattr(
+            "isabl_cli.gcp_lustre.get_gcp_config",
+            lambda: {
+                "lustre_export_enabled": True,
+                "lustre_instance": "test-instance",
+                "lustre_location": "us-east4-a",
+                "lustre_project": "test-project",
+                "gcs_base_uri": "gs://my-bucket",
+                "lustre_delete_after_export": True,
+            },
+        )
+
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
+        assert "--delete-after" in result
+        assert "--no-delete-after" not in result
+
+    def test_includes_no_delete_after_flag_when_false(self, analysis, monkeypatch):
+        """Test that --no-delete-after flag is included when config is False."""
+        monkeypatch.setattr(
+            "isabl_cli.gcp_lustre.get_gcp_config",
+            lambda: {
+                "lustre_export_enabled": True,
+                "lustre_instance": "test-instance",
+                "lustre_location": "us-east4-a",
+                "lustre_project": "test-project",
+                "gcs_base_uri": "gs://my-bucket",
+                "lustre_delete_after_export": False,
+            },
+        )
+
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
+        assert "--no-delete-after" in result
+
+    def test_defaults_to_delete_after_when_not_in_config(self, analysis, monkeypatch):
+        """Test that --delete-after is used when config key is missing (defaults to True)."""
+        monkeypatch.setattr(
+            "isabl_cli.gcp_lustre.get_gcp_config",
+            lambda: {
+                "lustre_export_enabled": True,
+                "lustre_instance": "test-instance",
+                "lustre_location": "us-east4-a",
+                "lustre_project": "test-project",
+                "gcs_base_uri": "gs://my-bucket",
+                # lustre_delete_after_export not set, should default to True
+            },
+        )
+
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
+        assert "--delete-after" in result
+        assert "--no-delete-after" not in result
 
 
 class TestGCPConfiguration:

@@ -356,6 +356,7 @@ def get_export_command_for_script(analysis, lustre_path):
     Arguments:
         analysis (dict): Analysis instance.
         lustre_path (str): Path on Lustre where output files are written.
+            This should be provided by the user via get_lustre_output_path().
 
     Returns:
         str: CLI command string, or empty string if export disabled.
@@ -383,4 +384,12 @@ def get_export_command_for_script(analysis, lustre_path):
         return ""
 
     analysis_pk = analysis["pk"]
-    return f"isabl lustre-export --lustre-path {lustre_path} --analysis-pk {analysis_pk}"
+
+    # Build command with explicit --delete-after flag based on config
+    delete_flag = (
+        "--delete-after"
+        if gcp_config.get("lustre_delete_after_export", True)
+        else "--no-delete-after"
+    )
+
+    return f"isabl lustre-export --lustre-path {lustre_path} --analysis-pk {analysis_pk} {delete_flag}"

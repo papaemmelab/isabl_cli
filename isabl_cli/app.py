@@ -100,6 +100,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # GCP Lustre export configuration. Set to True to enable Lustre export for
     # this specific application when GCP_CONFIGURATION.lustre_export_enabled
     # is True at the system level. Only relevant for isabl setups on Google Cloud.
+    # When enabled, you must implement get_lustre_output_path() to return the
+    # Lustre scratch path where your pipeline writes output files.
     gcp_lustre_export = False
 
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
@@ -247,6 +249,30 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             tuple: (list of analyses dependencies primary keys, inputs dict).
         """
         return [], {}
+
+    def get_lustre_output_path(self, analysis, settings):  # pylint: disable=W0613
+        """
+        Get the Lustre scratch path where pipeline output files are written.
+
+        This method must be implemented when gcp_lustre_export is True.
+        The path returned should be the location on Lustre where your pipeline
+        writes its output files (not the final storage location).
+
+        Arguments:
+            analysis (dict): an analysis object as retrieved from API.
+            settings (object): applications settings.
+
+        Returns:
+            str: Lustre scratch path (e.g., "/scratch/user/analysis_123/").
+
+        Raises:
+            NotImplementedError: If gcp_lustre_export is True but method not implemented.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} has gcp_lustre_export=True but does not "
+            "implement get_lustre_output_path(). You must implement this method "
+            "to return the Lustre scratch path where your pipeline writes output files."
+        )
 
     # --------------------------------------
     # PROJECT LEVEL OPTIONAL IMPLEMENTATIONS
@@ -1115,7 +1141,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # Get GCP Lustre export command if enabled for this application
         export_command = ""
         if self._should_export_to_gcs():
-            export_command = gcp_lustre.get_export_command_for_script(analysis, outdir)
+            lustre_path = self.get_lustre_output_path(analysis, self.settings)
+            export_command = gcp_lustre.get_export_command_for_script(analysis, lustre_path)
 
         # Build command chain with optional export step
         if export_command:
