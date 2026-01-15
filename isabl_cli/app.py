@@ -97,10 +97,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # unique analysis per individual don't support individual level auto-merge.
     unique_analysis_per_individual = False
 
-    # GCP Lustre export configuration. Set to False to disable Lustre export for
-    # this specific application even when GCP_CONFIGURATION.lustre_export_enabled
-    # is True at the system level.
-    gcp_lustre_export = True
+    # GCP Lustre export configuration. Set to True to enable Lustre export for
+    # this specific application when GCP_CONFIGURATION.lustre_export_enabled
+    # is True at the system level. Only relevant for isabl setups on Google Cloud.
+    gcp_lustre_export = False
 
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
@@ -1139,12 +1139,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         Returns True if:
         1. GCP_CONFIGURATION.lustre_export_enabled is True at the system level, AND
-        2. This application has gcp_lustre_export set to True (default)
+        2. This application has gcp_lustre_export set to True
         """
         gcp_config = getattr(system_settings, "GCP_CONFIGURATION", None) or {}
         if not gcp_config.get("lustre_export_enabled"):
             return False
-        return getattr(self, "gcp_lustre_export", True)
+        return getattr(self, "gcp_lustre_export", False)
 
     @staticmethod
     def get_patch_status_command(key, status):
