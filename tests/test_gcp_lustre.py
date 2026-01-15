@@ -10,57 +10,144 @@ from isabl_cli import gcp_lustre
 from isabl_cli.settings import _DEFAULTS
 
 
-class TestComputeExportPaths:
-    """Tests for compute_export_paths function."""
+class TestGetGcsPathFromAnalysis:
+    """Tests for get_gcs_path_from_analysis function."""
 
-    def test_strips_mount_path(self):
-        """Test that mount path is properly stripped."""
-        lustre_path, gcs_path = gcp_lustre.compute_export_paths(
-            storage_url="/lustre/analyses/00/01/123",
-            lustre_mount_path="/lustre",
-            gcs_base_uri="gs://my-bucket",
-        )
-        assert lustre_path == "/analyses/00/01/123/"
-        assert gcs_path == "gs://my-bucket/analyses/00/01/123/"
+    def test_extracts_relative_path_from_storage_url(self):
+        """Test that relative path is extracted from analysis storage_url."""
+        mock_analysis = {"storage_url": "/datalake/analyses/00/01/123"}
 
-    def test_handles_trailing_slashes_in_gcs_uri(self):
+        with patch("isabl_cli.api.get_instance", return_value=mock_analysis):
+            result = gcp_lustre.get_gcs_path_from_analysis(
+                analysis_pk=123,
+                gcs_base_uri="gs://my-bucket",
+                base_storage_directory="/datalake",
+            )
+            assert result == "gs://my-bucket/analyses/00/01/123/"
+
+    def test_handles_trailing_slash_in_gcs_uri(self):
         """Test handling of trailing slashes in GCS URI."""
-        lustre_path, gcs_path = gcp_lustre.compute_export_paths(
-            storage_url="/lustre/analyses/00/01/123",
-            lustre_mount_path="/lustre",
-            gcs_base_uri="gs://my-bucket/",
-        )
-        assert gcs_path == "gs://my-bucket/analyses/00/01/123/"
+        mock_analysis = {"storage_url": "/datalake/analyses/00/01/123"}
+
+        with patch("isabl_cli.api.get_instance", return_value=mock_analysis):
+            result = gcp_lustre.get_gcs_path_from_analysis(
+                analysis_pk=123,
+                gcs_base_uri="gs://my-bucket/",
+                base_storage_directory="/datalake",
+            )
+            assert result == "gs://my-bucket/analyses/00/01/123/"
 
     def test_handles_storage_url_with_trailing_slash(self):
         """Test handling of storage_url with trailing slash."""
-        lustre_path, gcs_path = gcp_lustre.compute_export_paths(
-            storage_url="/lustre/analyses/00/01/123/",
-            lustre_mount_path="/lustre",
-            gcs_base_uri="gs://my-bucket",
-        )
-        assert lustre_path == "/analyses/00/01/123/"
-        assert gcs_path == "gs://my-bucket/analyses/00/01/123/"
+        mock_analysis = {"storage_url": "/datalake/analyses/00/01/123/"}
 
-    def test_handles_storage_url_without_mount_prefix(self):
-        """Test when storage_url doesn't start with mount path."""
-        lustre_path, gcs_path = gcp_lustre.compute_export_paths(
-            storage_url="/other/path/analyses/123",
-            lustre_mount_path="/lustre",
-            gcs_base_uri="gs://my-bucket",
-        )
-        assert lustre_path == "/other/path/analyses/123/"
-        assert gcs_path == "gs://my-bucket/other/path/analyses/123/"
+        with patch("isabl_cli.api.get_instance", return_value=mock_analysis):
+            result = gcp_lustre.get_gcs_path_from_analysis(
+                analysis_pk=123,
+                gcs_base_uri="gs://my-bucket",
+                base_storage_directory="/datalake",
+            )
+            assert result == "gs://my-bucket/analyses/00/01/123/"
 
-    def test_handles_deep_paths(self):
-        """Test with deeply nested paths."""
-        lustre_path, gcs_path = gcp_lustre.compute_export_paths(
-            storage_url="/mnt/lustre/data/project/analyses/ab/cd/12345",
-            lustre_mount_path="/mnt/lustre",
-            gcs_base_uri="gs://gcs-output-bucket",
+    def test_handles_base_storage_with_trailing_slash(self):
+        """Test handling of base_storage_directory with trailing slash."""
+        mock_analysis = {"storage_url": "/datalake/analyses/00/01/123"}
+
+        with patch("isabl_cli.api.get_instance", return_value=mock_analysis):
+            result = gcp_lustre.get_gcs_path_from_analysis(
+                analysis_pk=123,
+                gcs_base_uri="gs://my-bucket",
+                base_storage_directory="/datalake/",
+            )
+            assert result == "gs://my-bucket/analyses/00/01/123/"
+
+    def test_handles_storage_url_not_starting_with_base(self):
+        """Test when storage_url doesn't start with base_storage_directory."""
+        mock_analysis = {"storage_url": "/other/path/analyses/123"}
+
+        with patch("isabl_cli.api.get_instance", return_value=mock_analysis):
+            result = gcp_lustre.get_gcs_path_from_analysis(
+                analysis_pk=123,
+                gcs_base_uri="gs://my-bucket",
+                base_storage_directory="/datalake",
+            )
+            assert result == "gs://my-bucket/other/path/analyses/123/"
+
+    def test_raises_on_api_error(self):
+        """Test that error is raised when API call fails."""
+        with patch("isabl_cli.api.get_instance", side_effect=Exception("API error")):
+            with pytest.raises(gcp_lustre.GCPLustreExportError) as exc_info:
+                gcp_lustre.get_gcs_path_from_analysis(
+                    analysis_pk=123,
+                    gcs_base_uri="gs://my-bucket",
+                    base_storage_directory="/datalake",
+                )
+            assert "Failed to fetch analysis" in str(exc_info.value)
+
+    def test_raises_on_missing_storage_url(self):
+        """Test that error is raised when analysis has no storage_url."""
+        mock_analysis = {"storage_url": None}
+
+        with patch("isabl_cli.api.get_instance", return_value=mock_analysis):
+            with pytest.raises(gcp_lustre.GCPLustreExportError) as exc_info:
+                gcp_lustre.get_gcs_path_from_analysis(
+                    analysis_pk=123,
+                    gcs_base_uri="gs://my-bucket",
+                    base_storage_directory="/datalake",
+                )
+            assert "has no storage_url" in str(exc_info.value)
+
+
+class TestNormalizeLustrePath:
+    """Tests for normalize_lustre_path function."""
+
+    def test_adds_mount_path_prefix(self):
+        """Test that mount path is prepended."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/output",
+            lustre_mount_path="/lustre",
         )
-        assert lustre_path == "/data/project/analyses/ab/cd/12345/"
-        assert gcs_path == "gs://gcs-output-bucket/data/project/analyses/ab/cd/12345/"
+        assert result == "/lustre/scratch/output/"
+
+    def test_handles_path_without_leading_slash(self):
+        """Test handling of path without leading slash."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="scratch/output",
+            lustre_mount_path="/lustre",
+        )
+        assert result == "/lustre/scratch/output/"
+
+    def test_handles_no_mount_path(self):
+        """Test handling when no mount path is provided."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/output",
+            lustre_mount_path=None,
+        )
+        assert result == "/scratch/output/"
+
+    def test_ensures_trailing_slash(self):
+        """Test that trailing slash is added."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/output",
+            lustre_mount_path=None,
+        )
+        assert result.endswith("/")
+
+    def test_does_not_duplicate_mount_path(self):
+        """Test that mount path is not duplicated if already present."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/lustre/scratch/output",
+            lustre_mount_path="/lustre",
+        )
+        assert result == "/lustre/scratch/output/"
+
+    def test_handles_mount_path_with_trailing_slash(self):
+        """Test handling of mount path with trailing slash."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/output",
+            lustre_mount_path="/lustre/",
+        )
+        assert result == "/lustre/scratch/output/"
 
 
 class TestInitiateExport:
@@ -280,7 +367,7 @@ class TestRunExport:
             return_value={"lustre_export_enabled": False},
         ):
             with pytest.raises(gcp_lustre.GCPLustreExportError) as exc_info:
-                gcp_lustre.run_export("/lustre/analyses/123")
+                gcp_lustre.run_export("/scratch/output", 123)
             assert "not enabled" in str(exc_info.value)
 
     def test_raises_when_missing_settings(self):
@@ -290,20 +377,28 @@ class TestRunExport:
             return_value={"lustre_export_enabled": True, "lustre_instance": "test"},
         ):
             with pytest.raises(gcp_lustre.GCPLustreExportError) as exc_info:
-                gcp_lustre.run_export("/lustre/analyses/123")
+                gcp_lustre.run_export("/scratch/output", 123)
             assert "Missing required" in str(exc_info.value)
 
     def test_full_export_workflow(self, full_gcp_config):
         """Test the complete export workflow."""
         with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=full_gcp_config):
             with patch(
-                "isabl_cli.gcp_lustre.initiate_export", return_value="op-123"
-            ) as mock_init:
-                with patch("isabl_cli.gcp_lustre.wait_for_export") as mock_wait:
-                    gcp_lustre.run_export("/lustre/analyses/123")
+                "isabl_cli.gcp_lustre.get_gcs_path_from_analysis",
+                return_value="gs://my-bucket/analyses/00/01/123/",
+            ):
+                with patch(
+                    "isabl_cli.gcp_lustre.initiate_export", return_value="op-123"
+                ) as mock_init:
+                    with patch("isabl_cli.gcp_lustre.wait_for_export") as mock_wait:
+                        gcp_lustre.run_export("/scratch/output", 123)
 
-                    mock_init.assert_called_once()
-                    mock_wait.assert_called_once_with(full_gcp_config, "op-123")
+                        mock_init.assert_called_once()
+                        # Check that lustre path is normalized with mount path
+                        call_args = mock_init.call_args
+                        assert call_args[0][1] == "/lustre/scratch/output/"
+                        assert call_args[0][2] == "gs://my-bucket/analyses/00/01/123/"
+                        mock_wait.assert_called_once_with(full_gcp_config, "op-123")
 
     def test_deletes_scratch_when_configured(self, full_gcp_config, tmp_path):
         """Test that scratch is deleted when configured."""
@@ -316,9 +411,14 @@ class TestRunExport:
         (scratch_dir / "test.txt").write_text("test")
 
         with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=full_gcp_config):
-            with patch("isabl_cli.gcp_lustre.initiate_export", return_value="op-123"):
-                with patch("isabl_cli.gcp_lustre.wait_for_export"):
-                    gcp_lustre.run_export(str(scratch_dir))
+            with patch(
+                "isabl_cli.gcp_lustre.get_gcs_path_from_analysis",
+                return_value="gs://my-bucket/analyses/00/01/123/",
+            ):
+                with patch("isabl_cli.gcp_lustre.initiate_export", return_value="op-123"):
+                    with patch("isabl_cli.gcp_lustre.wait_for_export"):
+                        # Pass path without mount prefix
+                        gcp_lustre.run_export("/analyses/123", 123)
 
         assert not scratch_dir.exists()
 
@@ -332,10 +432,14 @@ class TestRunExport:
         (scratch_dir / "test.txt").write_text("test")
 
         with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=full_gcp_config):
-            with patch("isabl_cli.gcp_lustre.initiate_export", return_value="op-123"):
-                with patch("isabl_cli.gcp_lustre.wait_for_export"):
-                    # Override to not delete
-                    gcp_lustre.run_export(str(scratch_dir), delete_after=False)
+            with patch(
+                "isabl_cli.gcp_lustre.get_gcs_path_from_analysis",
+                return_value="gs://my-bucket/analyses/00/01/123/",
+            ):
+                with patch("isabl_cli.gcp_lustre.initiate_export", return_value="op-123"):
+                    with patch("isabl_cli.gcp_lustre.wait_for_export"):
+                        # Override to not delete
+                        gcp_lustre.run_export("/analyses/123", 123, delete_after=False)
 
         assert scratch_dir.exists()
 
@@ -346,7 +450,7 @@ class TestGetExportCommandForScript:
     @pytest.fixture
     def analysis(self):
         """Sample analysis dict."""
-        return {"pk": 123, "storage_url": "/lustre/analyses/00/01/123"}
+        return {"pk": 123, "storage_url": "/datalake/analyses/00/01/123"}
 
     def test_returns_empty_when_disabled(self, analysis, monkeypatch):
         """Test returns empty string when export is disabled."""
@@ -355,14 +459,14 @@ class TestGetExportCommandForScript:
             lambda: {"lustre_export_enabled": False},
         )
 
-        result = gcp_lustre.get_export_command_for_script(analysis)
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
         assert result == ""
 
     def test_returns_empty_when_config_missing(self, analysis, monkeypatch):
         """Test returns empty string when GCP config is missing."""
         monkeypatch.setattr("isabl_cli.gcp_lustre.get_gcp_config", lambda: {})
 
-        result = gcp_lustre.get_export_command_for_script(analysis)
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
         assert result == ""
 
     def test_returns_empty_when_required_settings_missing(self, analysis, monkeypatch):
@@ -376,7 +480,7 @@ class TestGetExportCommandForScript:
             },
         )
 
-        result = gcp_lustre.get_export_command_for_script(analysis)
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
         assert result == ""
 
     def test_returns_cli_command_when_properly_configured(self, analysis, monkeypatch):
@@ -388,13 +492,12 @@ class TestGetExportCommandForScript:
                 "lustre_instance": "test-instance",
                 "lustre_location": "us-east4-a",
                 "lustre_project": "test-project",
-                "lustre_mount_path": "/lustre",
                 "gcs_base_uri": "gs://my-bucket",
             },
         )
 
-        result = gcp_lustre.get_export_command_for_script(analysis)
-        assert result == "isabl lustre-export --storage-url /lustre/analyses/00/01/123"
+        result = gcp_lustre.get_export_command_for_script(analysis, "/scratch/output")
+        assert result == "isabl lustre-export --lustre-path /scratch/output --analysis-pk 123"
 
 
 class TestGCPConfiguration:

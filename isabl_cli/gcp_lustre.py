@@ -29,40 +29,86 @@ def get_gcp_config():
     return getattr(system_settings, "GCP_CONFIGURATION", None) or {}
 
 
-def compute_export_paths(storage_url, lustre_mount_path, gcs_base_uri):
-    """Compute the Lustre and GCS paths for export.
+def get_gcs_path_from_analysis(analysis_pk, gcs_base_uri, base_storage_directory):
+    """Compute GCS target path from analysis storage_url.
+
+    Fetches the analysis from the API to get its canonical storage_url,
+    extracts the relative path, and combines with gcs_base_uri.
 
     Arguments:
-        storage_url (str): Full path to analysis output directory on Lustre.
-        lustre_mount_path (str): Lustre mount path prefix (e.g., "/lustre").
+        analysis_pk (int): Analysis primary key to fetch from API.
         gcs_base_uri (str): Base GCS bucket URI (e.g., "gs://my-bucket").
+        base_storage_directory (str): Base storage directory (e.g., "/datalake").
 
     Returns:
-        tuple: (lustre_path, gcs_path_uri) for the export command.
+        str: GCS path URI (e.g., "gs://bucket/analyses/00/01/123/").
+
+    Raises:
+        GCPLustreExportError: If analysis cannot be fetched or path cannot be computed.
 
     Example:
-        >>> compute_export_paths("/lustre/analyses/00/01/123", "/lustre", "gs://bucket")
-        ('/analyses/00/01/123/', 'gs://bucket/analyses/00/01/123/')
+        >>> get_gcs_path_from_analysis(123, "gs://bucket", "/datalake")
+        'gs://bucket/analyses/00/01/123/'
     """
-    # Strip the mount path prefix to get the relative Lustre path
-    if storage_url.startswith(lustre_mount_path):
-        lustre_path = storage_url[len(lustre_mount_path) :]
+    from isabl_cli import api
+
+    try:
+        analysis = api.get_instance("analyses", analysis_pk, fields="storage_url")
+    except Exception as e:
+        raise GCPLustreExportError(f"Failed to fetch analysis {analysis_pk}: {e}")
+
+    storage_url = analysis.get("storage_url")
+    if not storage_url:
+        raise GCPLustreExportError(f"Analysis {analysis_pk} has no storage_url")
+
+    # Extract relative path from storage_url by removing base_storage_directory prefix
+    base = base_storage_directory.rstrip("/")
+    if storage_url.startswith(base):
+        relative_path = storage_url[len(base) :]
     else:
-        lustre_path = storage_url
+        # If storage_url doesn't start with base, use the full path
+        relative_path = storage_url
 
-    # Ensure lustre_path starts with /
-    if not lustre_path.startswith("/"):
-        lustre_path = "/" + lustre_path
+    # Ensure relative_path starts with /
+    if not relative_path.startswith("/"):
+        relative_path = "/" + relative_path
 
-    # Ensure paths end with / for directory export
-    if not lustre_path.endswith("/"):
-        lustre_path = lustre_path + "/"
+    # Ensure path ends with / for directory export
+    if not relative_path.endswith("/"):
+        relative_path = relative_path + "/"
 
     # Build GCS target path
     gcs_base = gcs_base_uri.rstrip("/")
-    gcs_path_uri = f"{gcs_base}{lustre_path}"
+    return f"{gcs_base}{relative_path}"
 
-    return lustre_path, gcs_path_uri
+
+def normalize_lustre_path(lustre_path, lustre_mount_path=None):
+    """Normalize the Lustre path for the gcloud command.
+
+    Arguments:
+        lustre_path (str): Path on Lustre (can be with or without mount prefix).
+        lustre_mount_path (str, optional): Mount path prefix to prepend if needed.
+
+    Returns:
+        str: Normalized Lustre path for gcloud command (e.g., "/scratch/output/").
+    """
+    path = lustre_path
+
+    # Prepend mount path if provided and path doesn't already have it
+    if lustre_mount_path:
+        mount = lustre_mount_path.rstrip("/")
+        if not path.startswith(mount):
+            path = mount + ("/" if not path.startswith("/") else "") + path
+
+    # Ensure path starts with /
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Ensure path ends with / for directory export
+    if not path.endswith("/"):
+        path = path + "/"
+
+    return path
 
 
 def initiate_export(gcp_config, lustre_path, gcs_path):
@@ -225,13 +271,14 @@ def wait_for_export(gcp_config, operation_name):
     raise GCPLustreExportError(f"Export timed out after {max_attempts} attempts")
 
 
-def run_export(storage_url, delete_after=None):
+def run_export(lustre_path, analysis_pk, delete_after=None):
     """Run the full export process from Lustre to GCS.
 
     This is the main entry point for the lustre-export CLI command.
 
     Arguments:
-        storage_url (str): Full path to analysis output directory on Lustre.
+        lustre_path (str): Path on Lustre scratch where files are located.
+        analysis_pk (int): Analysis primary key to look up GCS target path.
         delete_after (bool or None): Whether to delete scratch after export.
             If None, uses config value.
 
@@ -249,22 +296,27 @@ def run_export(storage_url, delete_after=None):
         "lustre_instance",
         "lustre_location",
         "lustre_project",
-        "lustre_mount_path",
         "gcs_base_uri",
     ]
     missing = [s for s in required if not gcp_config.get(s)]
     if missing:
         raise GCPLustreExportError(f"Missing required GCP settings: {missing}")
 
-    # Compute paths
-    lustre_path, gcs_path = compute_export_paths(
-        storage_url,
-        gcp_config["lustre_mount_path"],
+    # Compute GCS target path from analysis
+    gcs_path = get_gcs_path_from_analysis(
+        analysis_pk,
         gcp_config["gcs_base_uri"],
+        system_settings.BASE_STORAGE_DIRECTORY,
+    )
+
+    # Normalize Lustre path for gcloud command
+    normalized_lustre_path = normalize_lustre_path(
+        lustre_path,
+        gcp_config.get("lustre_mount_path"),
     )
 
     # Initiate export
-    operation_name = initiate_export(gcp_config, lustre_path, gcs_path)
+    operation_name = initiate_export(gcp_config, normalized_lustre_path, gcs_path)
 
     # Wait for completion
     wait_for_export(gcp_config, operation_name)
@@ -276,12 +328,19 @@ def run_export(storage_url, delete_after=None):
         else gcp_config.get("lustre_delete_after_export", True)
     )
 
+    # Compute full path for deletion (add mount path if configured)
+    full_lustre_path = lustre_path
+    if gcp_config.get("lustre_mount_path"):
+        mount = gcp_config["lustre_mount_path"].rstrip("/")
+        if not lustre_path.startswith(mount):
+            full_lustre_path = mount + ("/" if not lustre_path.startswith("/") else "") + lustre_path
+
     if should_delete:
         click.echo(
             f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Deleting scratch data from Lustre..."
         )
         try:
-            shutil.rmtree(storage_url)
+            shutil.rmtree(full_lustre_path)
         except Exception as e:
             click.echo(
                 f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING: Failed to delete scratch: {e}"
@@ -294,7 +353,7 @@ def run_export(storage_url, delete_after=None):
     click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCP Lustre export complete")
 
 
-def get_export_command_for_script(analysis):
+def get_export_command_for_script(analysis, lustre_path):
     """Get the CLI command string to be embedded in the analysis script.
 
     This is called from AbstractApplication.write_command_script() when
@@ -302,6 +361,7 @@ def get_export_command_for_script(analysis):
 
     Arguments:
         analysis (dict): Analysis instance.
+        lustre_path (str): Path on Lustre where output files are written.
 
     Returns:
         str: CLI command string, or empty string if export disabled.
@@ -316,7 +376,6 @@ def get_export_command_for_script(analysis):
         "lustre_instance",
         "lustre_location",
         "lustre_project",
-        "lustre_mount_path",
         "gcs_base_uri",
     ]
 
@@ -329,5 +388,5 @@ def get_export_command_for_script(analysis):
         )
         return ""
 
-    storage_url = analysis["storage_url"]
-    return f"isabl lustre-export --storage-url {storage_url}"
+    analysis_pk = analysis["pk"]
+    return f"isabl lustre-export --lustre-path {lustre_path} --analysis-pk {analysis_pk}"

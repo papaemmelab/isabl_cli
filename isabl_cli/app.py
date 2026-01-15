@@ -1115,7 +1115,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # Get GCP Lustre export command if enabled for this application
         export_command = ""
         if self._should_export_to_gcs():
-            export_command = gcp_lustre.get_export_command_for_script(analysis)
+            export_command = gcp_lustre.get_export_command_for_script(analysis, outdir)
 
         # Build command chain with optional export step
         if export_command:
