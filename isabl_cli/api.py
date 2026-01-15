@@ -13,6 +13,8 @@ import subprocess
 import sys
 import time
 import traceback
+from getpass import getuser
+
 
 from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -698,7 +700,16 @@ def _set_analysis_permissions(analysis):
     if protect_results:
         utils.check_admin()
 
-        if analysis.ran_by != system_settings.api_username:
+        # gcsfuse is set so only root only owns files, despite the user who runs the analysis
+        # in this case we just need to change the permissions to a-w
+        gcp_config = getattr(system_settings, "GCP_CONFIGURATION", None) or {}
+        gcsfuse_admin_user = getattr("gcsfuse_admin_user", "root")
+        current_user = getuser()
+
+        if current_user == gcsfuse_admin_user:
+            subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
+
+        elif analysis.ran_by != system_settings.api_username:
             src = analysis.storage_url + "__tmp"
             shutil.move(analysis.storage_url, src)
             cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
