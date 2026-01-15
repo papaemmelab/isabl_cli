@@ -700,14 +700,12 @@ def _set_analysis_permissions(analysis):
     if protect_results:
         utils.check_admin()
 
-        # gcsfuse is set so only root only owns files, despite the user who runs the analysis
-        # in this case we just need to change the permissions to a-w
-        # UPDATE: posix permission changes don't actually work on gcsfuse
-        gcsfuse_admin_user = getattr(system_settings, "gcsfuse_admin_user", "root")
-        current_user = getuser()
+        # can't change permissions posix style on gcsfuse, so we just skip
+        datalake_on_gcsfuse = getattr(system_settings, "datalake_on_gcsfuse", False)
 
-        if current_user == gcsfuse_admin_user:
-            subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
+        if datalake_on_gcsfuse:
+            click.secho(f"Skipping permission change on gcsfuse datalake", err=True, fg="yellow")
+            pass
 
         elif analysis.ran_by != system_settings.api_username:
             src = analysis.storage_url + "__tmp"
