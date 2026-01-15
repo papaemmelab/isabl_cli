@@ -97,6 +97,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # unique analysis per individual don't support individual level auto-merge.
     unique_analysis_per_individual = False
 
+    # GCP Lustre export configuration. Set to False to disable Lustre export for
+    # this specific application even when GCP_CONFIGURATION.lustre_export_enabled
+    # is True at the system level.
+    gcp_lustre_export = True
+
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
@@ -1091,6 +1096,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             analysis (dict): an analysis instance.
             command (str): command to be run.
         """
+        from isabl_cli import gcp_lustre
+
         # check status, if not run by admin will be marked as succeeded later
         outdir = analysis["storage_url"]
         utils.makedirs(outdir)
@@ -1104,13 +1111,40 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         failed = self.get_patch_status_command(analysis["pk"], "FAILED")
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
-        command = (
-            f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-            f"{started} && {command} && {finished} && date"
-        )
+
+        # Get GCP Lustre export command if enabled for this application
+        export_command = ""
+        if self._should_export_to_gcs():
+            export_command = gcp_lustre.get_export_command_for_script(analysis)
+
+        # Build command chain with optional export step
+        if export_command:
+            command = (
+                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+                f"{started} && {command} && "
+                f"( {export_command} ) && "
+                f"{finished} && date"
+            )
+        else:
+            command = (
+                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+                f"{started} && {command} && {finished} && date"
+            )
 
         with open(self.get_command_script_path(analysis), "w") as f:
             f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")
+
+    def _should_export_to_gcs(self):
+        """Check if this application should export results to GCS via Lustre.
+
+        Returns True if:
+        1. GCP_CONFIGURATION.lustre_export_enabled is True at the system level, AND
+        2. This application has gcp_lustre_export set to True (default)
+        """
+        gcp_config = getattr(system_settings, "GCP_CONFIGURATION", None) or {}
+        if not gcp_config.get("lustre_export_enabled"):
+            return False
+        return getattr(self, "gcp_lustre_export", True)
 
     @staticmethod
     def get_patch_status_command(key, status):

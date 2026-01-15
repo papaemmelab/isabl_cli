@@ -66,6 +66,17 @@ _DEFAULTS = {
         "isabl_cli.commands.run_web_signals",
     ],
     "EXTRA_RAW_DATA_FORMATS": [],
+    "GCP_CONFIGURATION": {
+        "lustre_export_enabled": False,
+        "lustre_instance": None,
+        "lustre_location": None,
+        "lustre_project": None,
+        "lustre_mount_path": None,
+        "gcs_base_uri": None,
+        "lustre_poll_interval": 30,
+        "lustre_max_poll_attempts": 360,
+        "lustre_delete_after_export": True,
+    },
 }
 
 _IMPORT_STRINGS = {
