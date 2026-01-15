@@ -697,17 +697,17 @@ def _set_analysis_permissions(analysis):
     ):
         protect_results = False
 
+    # can't change permissions posix style on gcsfuse, so we just skip
+    gcp_config = getattr(system_settings, "GCP_CONFIGURATION", {})
+    datalake_on_gcsfuse = gcp_config.get("datalake_on_gcsfuse", False)
+    if datalake_on_gcsfuse:
+        click.secho(f"Skipping permission change on gcsfuse datalake", err=True, fg="yellow")
+        return
+
     if protect_results:
         utils.check_admin()
 
-        # can't change permissions posix style on gcsfuse, so we just skip
-        datalake_on_gcsfuse = getattr(system_settings, "datalake_on_gcsfuse", False)
-
-        if datalake_on_gcsfuse:
-            click.secho(f"Skipping permission change on gcsfuse datalake", err=True, fg="yellow")
-            pass
-
-        elif analysis.ran_by != system_settings.api_username:
+        if analysis.ran_by != system_settings.api_username:
             src = analysis.storage_url + "__tmp"
             shutil.move(analysis.storage_url, src)
             cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
