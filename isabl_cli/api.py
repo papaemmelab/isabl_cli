@@ -702,8 +702,8 @@ def _set_analysis_permissions(analysis):
 
         # gcsfuse is set so only root only owns files, despite the user who runs the analysis
         # in this case we just need to change the permissions to a-w
-        gcp_config = getattr(system_settings, "GCP_CONFIGURATION", None) or {}
-        gcsfuse_admin_user = getattr("gcsfuse_admin_user", "root")
+        # UPDATE: posix permission changes don't actually work on gcsfuse
+        gcsfuse_admin_user = getattr(system_settings, "gcsfuse_admin_user", "root")
         current_user = getuser()
 
         if current_user == gcsfuse_admin_user:
