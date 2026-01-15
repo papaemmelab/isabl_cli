@@ -82,23 +82,19 @@ def get_gcs_path_from_analysis(analysis_pk, gcs_base_uri, base_storage_directory
     return f"{gcs_base}{relative_path}"
 
 
-def normalize_lustre_path(lustre_path, lustre_mount_path=None):
+def normalize_lustre_path(lustre_path):
     """Normalize the Lustre path for the gcloud command.
 
+    The gcloud command expects a path relative to the Lustre filesystem root,
+    not an absolute system path.
+
     Arguments:
-        lustre_path (str): Path on Lustre (can be with or without mount prefix).
-        lustre_mount_path (str, optional): Mount path prefix to prepend if needed.
+        lustre_path (str): Path on Lustre filesystem (e.g., "/havasove/isabl/3").
 
     Returns:
-        str: Normalized Lustre path for gcloud command (e.g., "/scratch/output/").
+        str: Normalized Lustre path for gcloud command (e.g., "/havasove/isabl/3/").
     """
     path = lustre_path
-
-    # Prepend mount path if provided and path doesn't already have it
-    if lustre_mount_path:
-        mount = lustre_mount_path.rstrip("/")
-        if not path.startswith(mount):
-            path = mount + ("/" if not path.startswith("/") else "") + path
 
     # Ensure path starts with /
     if not path.startswith("/"):
@@ -309,11 +305,8 @@ def run_export(lustre_path, analysis_pk, delete_after=None):
         system_settings.BASE_STORAGE_DIRECTORY,
     )
 
-    # Normalize Lustre path for gcloud command
-    normalized_lustre_path = normalize_lustre_path(
-        lustre_path,
-        gcp_config.get("lustre_mount_path"),
-    )
+    # Normalize Lustre path for gcloud command (relative to Lustre filesystem root)
+    normalized_lustre_path = normalize_lustre_path(lustre_path)
 
     # Initiate export
     operation_name = initiate_export(gcp_config, normalized_lustre_path, gcs_path)
@@ -328,12 +321,13 @@ def run_export(lustre_path, analysis_pk, delete_after=None):
         else gcp_config.get("lustre_delete_after_export", True)
     )
 
-    # Compute full path for deletion (add mount path if configured)
+    # Compute full system path for deletion by prepending mount path
     full_lustre_path = lustre_path
     if gcp_config.get("lustre_mount_path"):
         mount = gcp_config["lustre_mount_path"].rstrip("/")
-        if not lustre_path.startswith(mount):
-            full_lustre_path = mount + ("/" if not lustre_path.startswith("/") else "") + lustre_path
+        # lustre_path is relative to mount, so construct full path
+        lustre_relative = lustre_path.lstrip("/")
+        full_lustre_path = f"{mount}/{lustre_relative}"
 
     if should_delete:
         click.echo(

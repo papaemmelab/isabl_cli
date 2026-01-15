@@ -101,53 +101,33 @@ class TestGetGcsPathFromAnalysis:
 class TestNormalizeLustrePath:
     """Tests for normalize_lustre_path function."""
 
-    def test_adds_mount_path_prefix(self):
-        """Test that mount path is prepended."""
+    def test_normalizes_path_with_leading_slash(self):
+        """Test that path with leading slash is normalized."""
         result = gcp_lustre.normalize_lustre_path(
-            lustre_path="/scratch/output",
-            lustre_mount_path="/lustre",
+            lustre_path="/havasove/isabl/3",
         )
-        assert result == "/lustre/scratch/output/"
+        assert result == "/havasove/isabl/3/"
 
     def test_handles_path_without_leading_slash(self):
         """Test handling of path without leading slash."""
         result = gcp_lustre.normalize_lustre_path(
-            lustre_path="scratch/output",
-            lustre_mount_path="/lustre",
+            lustre_path="havasove/isabl/3",
         )
-        assert result == "/lustre/scratch/output/"
-
-    def test_handles_no_mount_path(self):
-        """Test handling when no mount path is provided."""
-        result = gcp_lustre.normalize_lustre_path(
-            lustre_path="/scratch/output",
-            lustre_mount_path=None,
-        )
-        assert result == "/scratch/output/"
+        assert result == "/havasove/isabl/3/"
 
     def test_ensures_trailing_slash(self):
         """Test that trailing slash is added."""
         result = gcp_lustre.normalize_lustre_path(
             lustre_path="/scratch/output",
-            lustre_mount_path=None,
         )
         assert result.endswith("/")
 
-    def test_does_not_duplicate_mount_path(self):
-        """Test that mount path is not duplicated if already present."""
+    def test_preserves_trailing_slash_if_present(self):
+        """Test that existing trailing slash is preserved."""
         result = gcp_lustre.normalize_lustre_path(
-            lustre_path="/lustre/scratch/output",
-            lustre_mount_path="/lustre",
+            lustre_path="/havasove/isabl/3/",
         )
-        assert result == "/lustre/scratch/output/"
-
-    def test_handles_mount_path_with_trailing_slash(self):
-        """Test handling of mount path with trailing slash."""
-        result = gcp_lustre.normalize_lustre_path(
-            lustre_path="/scratch/output",
-            lustre_mount_path="/lustre/",
-        )
-        assert result == "/lustre/scratch/output/"
+        assert result == "/havasove/isabl/3/"
 
 
 class TestInitiateExport:
@@ -391,12 +371,13 @@ class TestRunExport:
                     "isabl_cli.gcp_lustre.initiate_export", return_value="op-123"
                 ) as mock_init:
                     with patch("isabl_cli.gcp_lustre.wait_for_export") as mock_wait:
-                        gcp_lustre.run_export("/scratch/output", 123)
+                        # Pass path relative to Lustre filesystem root
+                        gcp_lustre.run_export("/havasove/isabl/3", 123)
 
                         mock_init.assert_called_once()
-                        # Check that lustre path is normalized with mount path
+                        # Check that lustre path is normalized (relative path, not absolute)
                         call_args = mock_init.call_args
-                        assert call_args[0][1] == "/lustre/scratch/output/"
+                        assert call_args[0][1] == "/havasove/isabl/3/"
                         assert call_args[0][2] == "gs://my-bucket/analyses/00/01/123/"
                         mock_wait.assert_called_once_with(full_gcp_config, "op-123")
 
@@ -406,7 +387,7 @@ class TestRunExport:
         full_gcp_config["lustre_mount_path"] = str(tmp_path)
 
         # Create a temp directory to delete
-        scratch_dir = tmp_path / "analyses" / "123"
+        scratch_dir = tmp_path / "havasove" / "isabl" / "3"
         scratch_dir.mkdir(parents=True)
         (scratch_dir / "test.txt").write_text("test")
 
@@ -417,8 +398,8 @@ class TestRunExport:
             ):
                 with patch("isabl_cli.gcp_lustre.initiate_export", return_value="op-123"):
                     with patch("isabl_cli.gcp_lustre.wait_for_export"):
-                        # Pass path without mount prefix
-                        gcp_lustre.run_export("/analyses/123", 123)
+                        # Pass path relative to Lustre filesystem (without mount prefix)
+                        gcp_lustre.run_export("/havasove/isabl/3", 123)
 
         assert not scratch_dir.exists()
 
@@ -427,7 +408,7 @@ class TestRunExport:
         full_gcp_config["lustre_delete_after_export"] = True
         full_gcp_config["lustre_mount_path"] = str(tmp_path)
 
-        scratch_dir = tmp_path / "analyses" / "123"
+        scratch_dir = tmp_path / "havasove" / "isabl" / "3"
         scratch_dir.mkdir(parents=True)
         (scratch_dir / "test.txt").write_text("test")
 
@@ -439,7 +420,7 @@ class TestRunExport:
                 with patch("isabl_cli.gcp_lustre.initiate_export", return_value="op-123"):
                     with patch("isabl_cli.gcp_lustre.wait_for_export"):
                         # Override to not delete
-                        gcp_lustre.run_export("/analyses/123", 123, delete_after=False)
+                        gcp_lustre.run_export("/havasove/isabl/3", 123, delete_after=False)
 
         assert scratch_dir.exists()
 
