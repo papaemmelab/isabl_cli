@@ -1,7 +1,10 @@
-"""GCP Lustre export functionality for isabl_cli.
+"""GCP Lustre import/export functionality for isabl_cli.
 
-This module provides functionality to export analysis results from Google Cloud
-Managed Lustre scratch storage to Google Cloud Storage (GCS) after pipeline completion.
+This module provides functionality to:
+- Import input data from Google Cloud Storage (GCS) to Lustre scratch before pipeline runs
+- Export analysis results from Lustre scratch to GCS after pipeline completion
+
+This enables high-performance computing on GCP Slurm clusters using Lustre scratch storage.
 """
 
 import json
@@ -16,6 +19,12 @@ from isabl_cli.settings import system_settings
 
 class GCPLustreExportError(Exception):
     """Exception raised when GCP Lustre export fails."""
+
+    pass
+
+
+class GCPLustreImportError(Exception):
+    """Exception raised when GCP Lustre import fails."""
 
     pass
 
@@ -393,3 +402,249 @@ def get_export_command_for_script(analysis, lustre_path):
     )
 
     return f"isabl lustre-export --lustre-path {lustre_path} --analysis-pk {analysis_pk} {delete_flag}"
+
+
+# ============================================================================
+# IMPORT FUNCTIONS
+# ============================================================================
+
+
+def initiate_import(gcp_config, gcs_path, lustre_path):
+    """Initiate an async import from GCS to Lustre.
+
+    Arguments:
+        gcp_config (dict): GCP configuration dictionary.
+        gcs_path (str): GCS source URI (e.g., "gs://bucket/data/file.fastq").
+        lustre_path (str): Lustre destination path (e.g., "/123/inputs/file.fastq").
+
+    Returns:
+        str: Operation name for tracking the import.
+
+    Raises:
+        GCPLustreImportError: If import initiation fails.
+    """
+    cmd = [
+        "gcloud",
+        "lustre",
+        "instances",
+        "import-data",
+        gcp_config["lustre_instance"],
+        f"--location={gcp_config['lustre_location']}",
+        f"--gcs-path-uri={gcs_path}",
+        f"--lustre-path={lustre_path}",
+        "--async",
+        f"--project={gcp_config['lustre_project']}",
+        "--format=json",
+    ]
+
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Initiating Lustre import...")
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCS source: {gcs_path}")
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Lustre target: {lustre_path}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GCPLustreImportError(
+            f"Failed to initiate Lustre import: {e.stderr or e.stdout}"
+        )
+
+    # Parse JSON output to extract operation name
+    try:
+        output = json.loads(result.stdout)
+        operation_name = output.get("name")
+        if not operation_name:
+            raise GCPLustreImportError(
+                f"Could not extract operation name from output: {result.stdout}"
+            )
+    except json.JSONDecodeError as e:
+        raise GCPLustreImportError(
+            f"Failed to parse import output as JSON: {result.stdout}"
+        )
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Import initiated. Operation: {operation_name}"
+    )
+    return operation_name
+
+
+def check_import_status(gcp_config, operation_name):
+    """Check the status of an import operation.
+
+    Arguments:
+        gcp_config (dict): GCP configuration dictionary.
+        operation_name (str): Operation name to check.
+
+    Returns:
+        tuple: (done, error) where done is bool and error is str or None.
+
+    Raises:
+        GCPLustreImportError: If status check fails.
+    """
+    cmd = [
+        "gcloud",
+        "lustre",
+        "operations",
+        "describe",
+        operation_name,
+        f"--location={gcp_config['lustre_location']}",
+        f"--project={gcp_config['lustre_project']}",
+        "--format=json",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GCPLustreImportError(
+            f"Failed to check operation status: {e.stderr or e.stdout}"
+        )
+
+    try:
+        output = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise GCPLustreImportError(
+            f"Failed to parse status output as JSON: {result.stdout}"
+        )
+
+    done = output.get("done", False)
+    error = output.get("error")
+
+    if error:
+        error_msg = error.get("message", str(error))
+        return done, error_msg
+
+    return done, None
+
+
+def wait_for_imports(gcp_config, operations):
+    """Poll until all import operations complete or timeout.
+
+    Arguments:
+        gcp_config (dict): GCP configuration dictionary.
+        operations (list): List of operation names to wait for.
+
+    Raises:
+        GCPLustreImportError: If any import fails or times out.
+    """
+    if not operations:
+        return
+
+    poll_interval = gcp_config.get("lustre_poll_interval", 30)
+    max_attempts = gcp_config.get("lustre_max_poll_attempts", 360)
+
+    pending = set(operations)
+    failed = []
+
+    for attempt in range(1, max_attempts + 1):
+        time.sleep(poll_interval)
+
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking import status "
+            f"(attempt {attempt}/{max_attempts}, {len(pending)} pending)..."
+        )
+
+        still_pending = set()
+        for operation_name in pending:
+            try:
+                done, error = check_import_status(gcp_config, operation_name)
+            except GCPLustreImportError as e:
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING: {e}, retrying..."
+                )
+                still_pending.add(operation_name)
+                continue
+
+            if done:
+                if error:
+                    failed.append((operation_name, error))
+                    click.echo(
+                        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Import FAILED: {operation_name}: {error}"
+                    )
+                else:
+                    click.echo(
+                        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Import completed: {operation_name}"
+                    )
+            else:
+                still_pending.add(operation_name)
+
+        pending = still_pending
+
+        if not pending:
+            break
+
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {len(pending)} imports still in progress..."
+        )
+
+    if failed:
+        errors = "; ".join(f"{op}: {err}" for op, err in failed)
+        raise GCPLustreImportError(f"Import operation(s) failed: {errors}")
+
+    if pending:
+        raise GCPLustreImportError(
+            f"Import timed out after {max_attempts} attempts. "
+            f"Still pending: {list(pending)}"
+        )
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] All imports completed successfully!"
+    )
+
+
+def run_batch_import(import_specs):
+    """Import multiple files from GCS to Lustre in parallel.
+
+    This is the main entry point for the lustre-import CLI command.
+
+    Arguments:
+        import_specs (list): List of [gcs_path, lustre_path] pairs.
+
+    Raises:
+        GCPLustreImportError: If any import fails.
+    """
+    gcp_config = get_gcp_config()
+
+    if not gcp_config.get("lustre_import_enabled"):
+        raise GCPLustreImportError("GCP Lustre import is not enabled")
+
+    # Validate required settings
+    required = [
+        "lustre_instance",
+        "lustre_location",
+        "lustre_project",
+    ]
+    missing = [s for s in required if not gcp_config.get(s)]
+    if missing:
+        raise GCPLustreImportError(f"Missing required GCP settings: {missing}")
+
+    if not import_specs:
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] No files to import, skipping."
+        )
+        return
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting batch import of {len(import_specs)} file(s)..."
+    )
+
+    # Initiate all imports
+    operations = []
+    for gcs_path, lustre_path in import_specs:
+        # Normalize lustre path for gcloud command
+        normalized_path = normalize_lustre_path(lustre_path)
+        operation_name = initiate_import(gcp_config, gcs_path, normalized_path)
+        operations.append(operation_name)
+
+    # Wait for all to complete
+    wait_for_imports(gcp_config, operations)
+
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCP Lustre batch import complete")

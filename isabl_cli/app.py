@@ -1138,14 +1138,33 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
 
+        # Get GCP Lustre import command if LustreInputs was used in get_command()
+        import_command = ""
+        if hasattr(self, "_lustre_inputs") and self._lustre_inputs:
+            import_command = self._lustre_inputs.get_import_command()
+
         # Get GCP Lustre export command if enabled for this application
         export_command = ""
         if self._should_export_to_gcs():
             lustre_path = self.get_lustre_output_path(analysis, self.settings)
             export_command = gcp_lustre.get_export_command_for_script(analysis, lustre_path)
 
-        # Build command chain with optional export step
-        if export_command:
+        # Build command chain: import -> started -> command -> export -> finished
+        if import_command and export_command:
+            command = (
+                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+                f"( {import_command} ) && "
+                f"{started} && {command} && "
+                f"( {export_command} ) && "
+                f"{finished} && date"
+            )
+        elif import_command:
+            command = (
+                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+                f"( {import_command} ) && "
+                f"{started} && {command} && {finished} && date"
+            )
+        elif export_command:
             command = (
                 f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
                 f"{started} && {command} && "

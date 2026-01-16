@@ -519,3 +519,37 @@ def lustre_export(lustre_path, analysis_pk, delete_after):
         gcp_lustre.run_export(lustre_path, analysis_pk, delete_after)
     except gcp_lustre.GCPLustreExportError as e:
         raise click.ClickException(str(e))
+
+
+@click.command()
+@click.option(
+    "--specs",
+    required=True,
+    help="JSON list of [gcs_path, lustre_path] pairs to import.",
+)
+def lustre_import(specs):
+    """Import files from GCS to Lustre.
+
+    This command imports data from Google Cloud Storage to Google Cloud Managed Lustre.
+    It initiates multiple import operations in parallel and waits for all to complete.
+
+    The --specs argument should be a JSON array of [gcs_path, lustre_path] pairs.
+
+    Example:
+        isabl lustre-import --specs '[["gs://bucket/file.fastq", "/123/inputs/file.fastq"]]'
+
+    Requires GCP_CONFIGURATION to be set in the client settings with:
+    - lustre_import_enabled: true
+    - lustre_instance: Lustre instance name
+    - lustre_location: GCP zone
+    - lustre_project: GCP project ID
+    """
+    from isabl_cli import gcp_lustre
+
+    try:
+        import_specs = json.loads(specs)
+        gcp_lustre.run_batch_import(import_specs)
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"Invalid JSON in --specs: {e}")
+    except gcp_lustre.GCPLustreImportError as e:
+        raise click.ClickException(str(e))

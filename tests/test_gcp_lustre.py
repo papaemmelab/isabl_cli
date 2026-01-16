@@ -1,4 +1,4 @@
-"""Tests for GCP Lustre export functionality."""
+"""Tests for GCP Lustre import/export functionality."""
 
 import json
 import subprocess
@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from isabl_cli import gcp_lustre
+from isabl_cli.lustre_inputs import LustreInputs
 from isabl_cli.settings import _DEFAULTS
 
 
@@ -574,3 +575,407 @@ class TestGCPConfiguration:
         """Test default delete after export value."""
         gcp_config = _DEFAULTS.get("GCP_CONFIGURATION", {})
         assert gcp_config.get("lustre_delete_after_export") is True
+
+    def test_default_import_disabled(self):
+        """Test that default GCP config has import disabled."""
+        gcp_config = _DEFAULTS.get("GCP_CONFIGURATION", {})
+        assert gcp_config.get("lustre_import_enabled") is False
+
+    def test_default_config_has_import_keys(self):
+        """Test that default GCP config has import-related keys."""
+        gcp_config = _DEFAULTS.get("GCP_CONFIGURATION", {})
+        assert "lustre_import_enabled" in gcp_config
+        assert "gcs_input_uri" in gcp_config
+        assert "gcsfuse_mount_path" in gcp_config
+
+
+# ============================================================================
+# IMPORT TESTS
+# ============================================================================
+
+
+class TestInitiateImport:
+    """Tests for initiate_import function."""
+
+    @pytest.fixture
+    def gcp_config(self):
+        """Sample GCP configuration."""
+        return {
+            "lustre_instance": "test-instance",
+            "lustre_location": "us-east4-a",
+            "lustre_project": "test-project",
+        }
+
+    def test_builds_correct_command(self, gcp_config):
+        """Test that the correct gcloud command is built."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({"name": "operations/test-op-123"})
+
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            result = gcp_lustre.initiate_import(
+                gcp_config, "gs://bucket/file.fastq", "/123/inputs/file.fastq"
+            )
+
+            mock_run.assert_called_once()
+            cmd = mock_run.call_args[0][0]
+            assert cmd[0] == "gcloud"
+            assert cmd[1] == "lustre"
+            assert cmd[2] == "instances"
+            assert cmd[3] == "import-data"
+            assert cmd[4] == "test-instance"
+            assert "--async" in cmd
+            assert "--format=json" in cmd
+            assert "--location=us-east4-a" in cmd
+            assert "--project=test-project" in cmd
+            assert "--gcs-path-uri=gs://bucket/file.fastq" in cmd
+            assert "--lustre-path=/123/inputs/file.fastq" in cmd
+
+    def test_returns_operation_name(self, gcp_config):
+        """Test that operation name is extracted from output."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({"name": "operations/my-import-op"})
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = gcp_lustre.initiate_import(
+                gcp_config, "gs://bucket/file.fastq", "/123/inputs/file.fastq"
+            )
+            assert result == "operations/my-import-op"
+
+    def test_raises_on_subprocess_error(self, gcp_config):
+        """Test that GCPLustreImportError is raised on subprocess failure."""
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, "gcloud", stderr="error"),
+        ):
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                gcp_lustre.initiate_import(
+                    gcp_config, "gs://bucket/file.fastq", "/123/inputs/file.fastq"
+                )
+            assert "Failed to initiate" in str(exc_info.value)
+
+    def test_raises_on_missing_operation_name(self, gcp_config):
+        """Test that error is raised when operation name is missing."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({"other": "data"})
+
+        with patch("subprocess.run", return_value=mock_result):
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                gcp_lustre.initiate_import(
+                    gcp_config, "gs://bucket/file.fastq", "/123/inputs/file.fastq"
+                )
+            assert "Could not extract operation name" in str(exc_info.value)
+
+
+class TestCheckImportStatus:
+    """Tests for check_import_status function."""
+
+    @pytest.fixture
+    def gcp_config(self):
+        """Sample GCP configuration."""
+        return {
+            "lustre_location": "us-east4-a",
+            "lustre_project": "test-project",
+        }
+
+    def test_returns_done_true_on_completion(self, gcp_config):
+        """Test that done=True is returned when operation completes."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({"done": True})
+
+        with patch("subprocess.run", return_value=mock_result):
+            done, error = gcp_lustre.check_import_status(gcp_config, "op-123")
+            assert done is True
+            assert error is None
+
+    def test_returns_done_false_when_in_progress(self, gcp_config):
+        """Test that done=False is returned when still in progress."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({"done": False})
+
+        with patch("subprocess.run", return_value=mock_result):
+            done, error = gcp_lustre.check_import_status(gcp_config, "op-123")
+            assert done is False
+            assert error is None
+
+    def test_returns_error_on_failure(self, gcp_config):
+        """Test that error message is returned when operation fails."""
+        mock_result = MagicMock()
+        mock_result.stdout = json.dumps({
+            "done": True,
+            "error": {"message": "Import failed: permission denied"}
+        })
+
+        with patch("subprocess.run", return_value=mock_result):
+            done, error = gcp_lustre.check_import_status(gcp_config, "op-123")
+            assert done is True
+            assert error == "Import failed: permission denied"
+
+
+class TestWaitForImports:
+    """Tests for wait_for_imports function."""
+
+    @pytest.fixture
+    def gcp_config(self):
+        """Sample GCP configuration with short intervals for testing."""
+        return {
+            "lustre_location": "us-east4-a",
+            "lustre_project": "test-project",
+            "lustre_poll_interval": 0.01,  # Very short for testing
+            "lustre_max_poll_attempts": 3,
+        }
+
+    def test_returns_on_all_success(self, gcp_config):
+        """Test that function returns when all imports succeed."""
+        with patch(
+            "isabl_cli.gcp_lustre.check_import_status", return_value=(True, None)
+        ):
+            with patch("time.sleep"):
+                # Should not raise
+                gcp_lustre.wait_for_imports(gcp_config, ["op-1", "op-2"])
+
+    def test_raises_on_import_error(self, gcp_config):
+        """Test that error is raised when any import fails."""
+        with patch(
+            "isabl_cli.gcp_lustre.check_import_status",
+            return_value=(True, "Permission denied"),
+        ):
+            with patch("time.sleep"):
+                with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                    gcp_lustre.wait_for_imports(gcp_config, ["op-123"])
+                assert "Permission denied" in str(exc_info.value)
+
+    def test_raises_on_timeout(self, gcp_config):
+        """Test that error is raised when polling times out."""
+        with patch(
+            "isabl_cli.gcp_lustre.check_import_status", return_value=(False, None)
+        ):
+            with patch("time.sleep"):
+                with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                    gcp_lustre.wait_for_imports(gcp_config, ["op-123"])
+                assert "timed out" in str(exc_info.value)
+
+    def test_handles_empty_operations_list(self, gcp_config):
+        """Test that empty operations list returns immediately."""
+        gcp_lustre.wait_for_imports(gcp_config, [])  # Should not raise
+
+
+class TestRunBatchImport:
+    """Tests for run_batch_import function."""
+
+    @pytest.fixture
+    def full_gcp_config(self):
+        """Complete GCP configuration."""
+        return {
+            "lustre_import_enabled": True,
+            "lustre_instance": "test-instance",
+            "lustre_location": "us-east4-a",
+            "lustre_project": "test-project",
+            "lustre_poll_interval": 0.01,
+            "lustre_max_poll_attempts": 3,
+        }
+
+    def test_raises_when_not_enabled(self):
+        """Test that error is raised when import is not enabled."""
+        with patch(
+            "isabl_cli.gcp_lustre.get_gcp_config",
+            return_value={"lustre_import_enabled": False},
+        ):
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                gcp_lustre.run_batch_import([["gs://bucket/file", "/path/file"]])
+            assert "not enabled" in str(exc_info.value)
+
+    def test_raises_when_missing_settings(self):
+        """Test that error is raised when required settings are missing."""
+        with patch(
+            "isabl_cli.gcp_lustre.get_gcp_config",
+            return_value={"lustre_import_enabled": True, "lustre_instance": "test"},
+        ):
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                gcp_lustre.run_batch_import([["gs://bucket/file", "/path/file"]])
+            assert "Missing required" in str(exc_info.value)
+
+    def test_handles_empty_specs(self, full_gcp_config):
+        """Test that empty import specs returns without error."""
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=full_gcp_config):
+            # Should not raise
+            gcp_lustre.run_batch_import([])
+
+    def test_full_import_workflow(self, full_gcp_config):
+        """Test the complete import workflow."""
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=full_gcp_config):
+            with patch(
+                "isabl_cli.gcp_lustre.initiate_import", return_value="op-123"
+            ) as mock_init:
+                with patch("isabl_cli.gcp_lustre.wait_for_imports") as mock_wait:
+                    gcp_lustre.run_batch_import([
+                        ["gs://bucket/file1.fastq", "/123/inputs/file1.fastq"],
+                        ["gs://bucket/file2.fastq", "/123/inputs/file2.fastq"],
+                    ])
+
+                    assert mock_init.call_count == 2
+                    mock_wait.assert_called_once()
+                    # Check operations were passed to wait_for_imports
+                    wait_call_args = mock_wait.call_args
+                    assert len(wait_call_args[0][1]) == 2  # Two operations
+
+
+class TestLustreInputs:
+    """Tests for LustreInputs helper class."""
+
+    @pytest.fixture
+    def gcp_config(self):
+        """Sample GCP configuration."""
+        return {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_mount_path": "/mnt/gcsfuse",
+            "gcs_input_uri": "gs://input-bucket",
+        }
+
+    @pytest.fixture
+    def analysis(self):
+        """Sample analysis dict."""
+        return {"pk": 123, "storage_url": "/datalake/analyses/00/01/123"}
+
+    def test_add_and_get_path(self, gcp_config, analysis):
+        """Test adding and getting a path."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/data/file.bam")
+
+            result = lustre.get("/mnt/gcsfuse/data/file.bam")
+            assert result == "/scratch/123/inputs/file.bam"
+
+    def test_add_returns_lustre_path(self, gcp_config, analysis):
+        """Test that add() returns the Lustre path."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            result = lustre.add("/mnt/gcsfuse/data/file.bam")
+
+            assert result == "/scratch/123/inputs/file.bam"
+
+    def test_gcsfuse_to_gcs_uri_conversion(self, gcp_config, analysis):
+        """Test conversion of gcsfuse path to GCS URI."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            gcs_uri = lustre._gcsfuse_to_gcs_uri("/mnt/gcsfuse/data/file.fastq")
+
+            assert gcs_uri == "gs://input-bucket/data/file.fastq"
+
+    def test_gcs_uri_passthrough(self, gcp_config, analysis):
+        """Test that GCS URIs are passed through unchanged."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            gcs_uri = lustre._gcsfuse_to_gcs_uri("gs://bucket/data/file.fastq")
+
+            assert gcs_uri == "gs://bucket/data/file.fastq"
+
+    def test_raises_on_invalid_path(self, gcp_config, analysis):
+        """Test that error is raised for invalid paths."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                lustre._gcsfuse_to_gcs_uri("/other/path/file.bam")
+            assert "doesn't start with gcsfuse mount" in str(exc_info.value)
+
+    def test_raises_on_missing_config(self, analysis):
+        """Test that error is raised when gcsfuse config is missing."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value={
+            "lustre_import_enabled": True,
+        }):
+            lustre = LustreInputs(analysis)
+
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                lustre._gcsfuse_to_gcs_uri("/mnt/gcsfuse/file.bam")
+            assert "must be configured" in str(exc_info.value)
+
+    def test_get_raises_on_unregistered_path(self, gcp_config, analysis):
+        """Test that get() raises for unregistered paths."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            with pytest.raises(ValueError) as exc_info:
+                lustre.get("/mnt/gcsfuse/data/unknown.bam")
+            assert "not registered" in str(exc_info.value)
+
+    def test_handles_duplicate_filenames(self, gcp_config, analysis):
+        """Test that duplicate filenames get unique paths."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            path1 = lustre.add("/mnt/gcsfuse/dir1/file.bam")
+            path2 = lustre.add("/mnt/gcsfuse/dir2/file.bam")
+
+            # Both should have unique paths
+            assert path1 != path2
+            assert "file.bam" in path1
+            assert "file" in path2  # Has hash suffix
+
+    def test_get_import_specs(self, gcp_config, analysis):
+        """Test get_import_specs returns correct format."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/data/file.bam")
+
+            specs = lustre.get_import_specs()
+            assert len(specs) == 1
+            assert specs[0][0] == "gs://input-bucket/data/file.bam"
+            assert specs[0][1] == "/123/inputs/file.bam"
+
+    def test_get_import_command(self, gcp_config, analysis):
+        """Test get_import_command generates correct CLI command."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/data/file.bam")
+
+            cmd = lustre.get_import_command()
+            assert "isabl lustre-import" in cmd
+            assert "--specs" in cmd
+            assert "gs://input-bucket/data/file.bam" in cmd
+
+    def test_get_import_command_empty_when_no_files(self, gcp_config, analysis):
+        """Test get_import_command returns empty string when no files."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            cmd = lustre.get_import_command()
+            assert cmd == ""
+
+    def test_disabled_returns_original_paths(self, analysis):
+        """Test that when import is disabled, original paths are returned."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value={
+            "lustre_import_enabled": False,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_mount_path": "/mnt/gcsfuse",
+            "gcs_input_uri": "gs://input-bucket",
+        }):
+            lustre = LustreInputs(analysis)
+
+            original_path = "/mnt/gcsfuse/data/file.bam"
+            result = lustre.add(original_path)
+
+            # When disabled, should return original path
+            assert result == original_path
+            assert lustre.get(original_path) == original_path
+
+    def test_len(self, gcp_config, analysis):
+        """Test __len__ returns number of registered files."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            assert len(lustre) == 0
+            lustre.add("/mnt/gcsfuse/file1.bam")
+            assert len(lustre) == 1
+            lustre.add("/mnt/gcsfuse/file2.bam")
+            assert len(lustre) == 2
+
+    def test_repr(self, gcp_config, analysis):
+        """Test __repr__ returns useful information."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/file.bam")
+
+            repr_str = repr(lustre)
+            assert "123" in repr_str  # analysis pk
+            assert "1" in repr_str  # number of files

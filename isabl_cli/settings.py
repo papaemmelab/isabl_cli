@@ -58,6 +58,7 @@ _DEFAULTS = {
         "isabl_cli.commands.get_results",
         "isabl_cli.commands.login",
         "isabl_cli.commands.lustre_export",
+        "isabl_cli.commands.lustre_import",
         "isabl_cli.commands.merge_individual_analyses",
         "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.patch_status",
@@ -68,14 +69,22 @@ _DEFAULTS = {
     ],
     "EXTRA_RAW_DATA_FORMATS": [],
     "GCP_CONFIGURATION": {
+        # Enable Lustre integration
         "lustre_export_enabled": False,
+        "lustre_import_enabled": False,
+        # GCP Lustre instance details
         "lustre_instance": None,
         "lustre_location": None,
         "lustre_project": None,
         "lustre_mount_path": None,
-        "gcs_base_uri": None,
+        # GCS bucket URIs
+        "gcs_base_uri": None,  # For export: e.g., "gs://output-bucket"
+        "gcs_input_uri": None,  # For import: e.g., "gs://input-bucket"
+        "gcsfuse_mount_path": None,  # Local gcsfuse mount: e.g., "/mnt/gcsfuse"
+        # Polling settings
         "lustre_poll_interval": 30,
         "lustre_max_poll_attempts": 360,
+        # Cleanup
         "lustre_delete_after_export": True,
     },
 }
