@@ -601,12 +601,13 @@ def wait_for_imports(gcp_config, operations):
 
 
 def run_batch_import(import_specs):
-    """Import multiple files from GCS to Lustre in parallel.
+    """Import multiple directories from GCS to Lustre in parallel.
 
     This is the main entry point for the lustre-import CLI command.
+    Note: gcloud lustre import-data only supports directory-level imports.
 
     Arguments:
-        import_specs (list): List of [gcs_path, lustre_path] pairs.
+        import_specs (list): List of [gcs_dir, lustre_dir] pairs (directories, not files).
 
     Raises:
         GCPLustreImportError: If any import fails.
@@ -628,17 +629,20 @@ def run_batch_import(import_specs):
 
     if not import_specs:
         click.echo(
-            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] No files to import, skipping."
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] No directories to import, skipping."
         )
         return
 
     click.echo(
-        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting batch import of {len(import_specs)} file(s)..."
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting batch import of {len(import_specs)} directory(ies)..."
     )
 
     # Initiate all imports
     operations = []
     for gcs_path, lustre_path in import_specs:
+        # Ensure GCS path ends with / for directory import
+        if not gcs_path.endswith("/"):
+            gcs_path = gcs_path + "/"
         # Normalize lustre path for gcloud command
         normalized_path = normalize_lustre_path(lustre_path)
         operation_name = initiate_import(gcp_config, gcs_path, normalized_path)

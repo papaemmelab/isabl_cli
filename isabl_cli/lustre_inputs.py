@@ -2,6 +2,9 @@
 
 This module provides a convenient API for isabl applications to register input files
 that need to be imported from GCS to Lustre scratch storage before pipeline execution.
+
+Note: The gcloud lustre import-data command only supports directory-level imports,
+so this class groups files by their parent directory and imports entire directories.
 """
 
 import hashlib
@@ -17,10 +20,15 @@ class LustreInputs:
     Input paths in isabl are stored as local gcsfuse mount paths (e.g., /mnt/gcsfuse/...).
     This class converts them to GCS URIs for import and provides Lustre-local paths.
 
+    Since gcloud lustre import-data only supports directory imports, files are grouped
+    by their parent directory. Each unique GCS directory is imported once, and files
+    are accessed at their original relative paths within the imported directory.
+
     Usage in get_command():
         lustre = LustreInputs(analysis, settings)
-        lustre.add("/mnt/gcsfuse/data/file.bam")  # gcsfuse path
-        local_path = lustre.get("/mnt/gcsfuse/data/file.bam")  # returns /scratch/123/inputs/file.bam
+        lustre.add("/mnt/gcsfuse/data/sample1/file.bam")  # gcsfuse path
+        local_path = lustre.get("/mnt/gcsfuse/data/sample1/file.bam")
+        # returns /scratch/123/inputs/data_sample1_a1b2/file.bam
 
     Example:
         def get_command(self, analysis, inputs, settings):
@@ -52,8 +60,12 @@ class LustreInputs:
         """
         self.analysis = analysis
         self.settings = settings
-        self._original_to_lustre = {}  # Maps original path -> Lustre relative path
-        self._import_specs = []  # List of (gcs_uri, lustre_path) for batch import
+
+        # Maps GCS parent directory -> Lustre subdirectory name (relative to input_dir)
+        self._gcs_dirs = {}
+
+        # Maps original file path -> (gcs_parent_dir, filename)
+        self._file_to_info = {}
 
         # Get config for path conversion
         gcp_config = get_gcp_config()
@@ -100,12 +112,47 @@ class LustreInputs:
             relative = "/" + relative
         return f"{self.gcs_input_uri.rstrip('/')}{relative}"
 
+    def _generate_lustre_subdir_name(self, gcs_dir):
+        """Generate a unique Lustre subdirectory name for a GCS directory.
+
+        Uses the last 2 path components plus a 4-character hash suffix for uniqueness.
+
+        Arguments:
+            gcs_dir (str): GCS directory URI (e.g., gs://bucket/exp1/raw_data/).
+
+        Returns:
+            str: Subdirectory name (e.g., exp1_raw_data_a1b2).
+        """
+        # Remove gs://bucket prefix and trailing slash
+        path = gcs_dir.split("://", 1)[-1]  # Remove gs://
+        if "/" in path:
+            path = path.split("/", 1)[-1]  # Remove bucket name
+        path = path.rstrip("/")
+
+        # Get last 2 path components
+        parts = path.split("/")
+        if len(parts) >= 2:
+            name_parts = parts[-2:]
+        else:
+            name_parts = parts
+
+        # Create base name from path components
+        base_name = "_".join(name_parts)
+
+        # Add hash suffix for uniqueness (in case different paths have same last components)
+        hash_suffix = hashlib.md5(gcs_dir.encode()).hexdigest()[:4]
+
+        return f"{base_name}_{hash_suffix}"
+
     def add(self, path):
         """Register a file path to be imported to Lustre.
 
+        Files are grouped by their parent directory since gcloud lustre import-data
+        only supports directory-level imports.
+
         Arguments:
-            path (str): Local gcsfuse path (e.g., /mnt/gcsfuse/data/file.bam)
-                        or GCS URI (e.g., gs://bucket/data/file.bam).
+            path (str): Local gcsfuse path (e.g., /mnt/gcsfuse/data/sample1/file.bam)
+                        or GCS URI (e.g., gs://bucket/data/sample1/file.bam).
 
         Returns:
             str: The Lustre-local path where the file will be available.
@@ -114,27 +161,32 @@ class LustreInputs:
             # When import is disabled, return the original path
             return path
 
-        if path in self._original_to_lustre:
-            # Already registered, return existing Lustre path
-            return f"{self.lustre_mount}{self._original_to_lustre[path]}"
+        if path in self._file_to_info:
+            # Already registered, compute and return existing Lustre path
+            gcs_parent_dir, filename = self._file_to_info[path]
+            lustre_subdir = self._gcs_dirs[gcs_parent_dir]
+            return f"{self.lustre_mount}{self.input_dir}/{lustre_subdir}/{filename}"
 
-        # Convert to GCS URI for import command
+        # Convert to GCS URI
         gcs_uri = self._gcsfuse_to_gcs_uri(path)
 
-        # Compute Lustre destination (preserve filename)
-        filename = os.path.basename(path)
-        lustre_relative = f"{self.input_dir}/{filename}"
+        # Extract parent directory and filename
+        filename = os.path.basename(gcs_uri.rstrip("/"))
+        gcs_parent_dir = os.path.dirname(gcs_uri)
+        if not gcs_parent_dir.endswith("/"):
+            gcs_parent_dir += "/"
 
-        # Handle duplicates by adding hash suffix
-        if lustre_relative in self._original_to_lustre.values():
-            hash_suffix = hashlib.md5(path.encode()).hexdigest()[:8]
-            base, ext = os.path.splitext(filename)
-            lustre_relative = f"{self.input_dir}/{base}_{hash_suffix}{ext}"
+        # Register the directory if not already tracked
+        if gcs_parent_dir not in self._gcs_dirs:
+            lustre_subdir = self._generate_lustre_subdir_name(gcs_parent_dir)
+            self._gcs_dirs[gcs_parent_dir] = lustre_subdir
+        else:
+            lustre_subdir = self._gcs_dirs[gcs_parent_dir]
 
-        self._original_to_lustre[path] = lustre_relative
-        self._import_specs.append((gcs_uri, lustre_relative))
+        # Track the file
+        self._file_to_info[path] = (gcs_parent_dir, filename)
 
-        return f"{self.lustre_mount}{lustre_relative}"
+        return f"{self.lustre_mount}{self.input_dir}/{lustre_subdir}/{filename}"
 
     def get(self, path):
         """Get the Lustre-local path for a registered file.
@@ -143,7 +195,7 @@ class LustreInputs:
             path (str): The original path passed to add().
 
         Returns:
-            str: Full Lustre path (e.g., /scratch/123/inputs/file.bam).
+            str: Full Lustre path (e.g., /scratch/123/inputs/exp1_raw_data_a1b2/file.bam).
 
         Raises:
             ValueError: If path was not previously registered with add().
@@ -152,18 +204,24 @@ class LustreInputs:
             # When import is disabled, return the original path
             return path
 
-        if path not in self._original_to_lustre:
+        if path not in self._file_to_info:
             raise ValueError(f"Path not registered: {path}. Call add() first.")
-        # Return full path including mount
-        return f"{self.lustre_mount}{self._original_to_lustre[path]}"
+
+        gcs_parent_dir, filename = self._file_to_info[path]
+        lustre_subdir = self._gcs_dirs[gcs_parent_dir]
+        return f"{self.lustre_mount}{self.input_dir}/{lustre_subdir}/{filename}"
 
     def get_import_specs(self):
-        """Get the list of import specifications.
+        """Get the list of directory import specifications.
 
         Returns:
-            list: List of (gcs_path, lustre_path) tuples.
+            list: List of (gcs_dir, lustre_dir) tuples for directory imports.
         """
-        return list(self._import_specs)
+        specs = []
+        for gcs_dir, lustre_subdir in self._gcs_dirs.items():
+            lustre_path = f"{self.input_dir}/{lustre_subdir}/"
+            specs.append((gcs_dir, lustre_path))
+        return specs
 
     def get_import_command(self):
         """Get CLI command to run imports (for embedding in script).
@@ -171,21 +229,32 @@ class LustreInputs:
         Returns:
             str: CLI command string, or empty string if no imports needed.
         """
-        if not self._import_specs or not self.import_enabled:
+        if not self._gcs_dirs or not self.import_enabled:
             return ""
 
-        specs_json = json.dumps(self._import_specs)
+        specs = self.get_import_specs()
+        specs_json = json.dumps(specs)
         # Use single quotes around JSON and escape any single quotes within
         escaped_json = specs_json.replace("'", "'\"'\"'")
         return f"isabl lustre-import --specs '{escaped_json}'"
 
+    def get_directories(self):
+        """Get the list of unique GCS directories to import.
+
+        Returns:
+            list: List of GCS directory URIs.
+        """
+        return list(self._gcs_dirs.keys())
+
     def __len__(self):
         """Return the number of registered files."""
-        return len(self._import_specs)
+        return len(self._file_to_info)
 
     def __repr__(self):
         """String representation of LustreInputs."""
         return (
             f"LustreInputs(analysis_pk={self.analysis['pk']}, "
-            f"files={len(self._import_specs)}, enabled={self.import_enabled})"
+            f"files={len(self._file_to_info)}, "
+            f"directories={len(self._gcs_dirs)}, "
+            f"enabled={self.import_enabled})"
         )

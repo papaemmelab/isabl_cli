@@ -1,6 +1,7 @@
 """Tests for GCP Lustre import/export functionality."""
 
 import json
+import os
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -837,22 +838,26 @@ class TestLustreInputs:
         """Sample analysis dict."""
         return {"pk": 123, "storage_url": "/datalake/analyses/00/01/123"}
 
-    def test_add_and_get_path(self, gcp_config, analysis):
-        """Test adding and getting a path."""
+    def test_add_and_get_path_uses_directory_structure(self, gcp_config, analysis):
+        """Test adding and getting a path uses directory-based structure."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
-            lustre.add("/mnt/gcsfuse/data/file.bam")
+            lustre.add("/mnt/gcsfuse/experiments/sample1/file.bam")
 
-            result = lustre.get("/mnt/gcsfuse/data/file.bam")
-            assert result == "/scratch/123/inputs/file.bam"
+            result = lustre.get("/mnt/gcsfuse/experiments/sample1/file.bam")
+            # Path should include directory name with hash suffix and filename
+            assert result.startswith("/scratch/123/inputs/")
+            assert "experiments_sample1_" in result
+            assert result.endswith("/file.bam")
 
     def test_add_returns_lustre_path(self, gcp_config, analysis):
         """Test that add() returns the Lustre path."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
-            result = lustre.add("/mnt/gcsfuse/data/file.bam")
+            result = lustre.add("/mnt/gcsfuse/data/sample/file.bam")
 
-            assert result == "/scratch/123/inputs/file.bam"
+            assert result.startswith("/scratch/123/inputs/")
+            assert result.endswith("/file.bam")
 
     def test_gcsfuse_to_gcs_uri_conversion(self, gcp_config, analysis):
         """Test conversion of gcsfuse path to GCS URI."""
@@ -899,40 +904,67 @@ class TestLustreInputs:
                 lustre.get("/mnt/gcsfuse/data/unknown.bam")
             assert "not registered" in str(exc_info.value)
 
-    def test_handles_duplicate_filenames(self, gcp_config, analysis):
-        """Test that duplicate filenames get unique paths."""
+    def test_files_from_same_directory_grouped(self, gcp_config, analysis):
+        """Test that files from the same directory are grouped together."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
 
-            path1 = lustre.add("/mnt/gcsfuse/dir1/file.bam")
-            path2 = lustre.add("/mnt/gcsfuse/dir2/file.bam")
+            path1 = lustre.add("/mnt/gcsfuse/sample1/R1.fastq")
+            path2 = lustre.add("/mnt/gcsfuse/sample1/R2.fastq")
 
-            # Both should have unique paths
-            assert path1 != path2
-            assert "file.bam" in path1
-            assert "file" in path2  # Has hash suffix
+            # Both files should be in the same Lustre directory
+            dir1 = os.path.dirname(path1)
+            dir2 = os.path.dirname(path2)
+            assert dir1 == dir2
 
-    def test_get_import_specs(self, gcp_config, analysis):
-        """Test get_import_specs returns correct format."""
+            # Only one directory import should be registered
+            specs = lustre.get_import_specs()
+            assert len(specs) == 1
+
+    def test_files_from_different_directories_separate(self, gcp_config, analysis):
+        """Test that files from different directories get separate imports."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
-            lustre.add("/mnt/gcsfuse/data/file.bam")
+
+            path1 = lustre.add("/mnt/gcsfuse/sample1/file.bam")
+            path2 = lustre.add("/mnt/gcsfuse/sample2/file.bam")
+
+            # Files should be in different Lustre directories
+            dir1 = os.path.dirname(path1)
+            dir2 = os.path.dirname(path2)
+            assert dir1 != dir2
+
+            # Two directory imports should be registered
+            specs = lustre.get_import_specs()
+            assert len(specs) == 2
+
+    def test_get_import_specs_returns_directories(self, gcp_config, analysis):
+        """Test get_import_specs returns directory-based format."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/experiments/exp1/raw_data/file.bam")
 
             specs = lustre.get_import_specs()
             assert len(specs) == 1
-            assert specs[0][0] == "gs://input-bucket/data/file.bam"
-            assert specs[0][1] == "/123/inputs/file.bam"
+
+            gcs_dir, lustre_dir = specs[0]
+            # GCS path should be a directory ending with /
+            assert gcs_dir == "gs://input-bucket/experiments/exp1/raw_data/"
+            # Lustre path should also be a directory
+            assert lustre_dir.startswith("/123/inputs/")
+            assert lustre_dir.endswith("/")
 
     def test_get_import_command(self, gcp_config, analysis):
         """Test get_import_command generates correct CLI command."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
-            lustre.add("/mnt/gcsfuse/data/file.bam")
+            lustre.add("/mnt/gcsfuse/data/sample/file.bam")
 
             cmd = lustre.get_import_command()
             assert "isabl lustre-import" in cmd
             assert "--specs" in cmd
-            assert "gs://input-bucket/data/file.bam" in cmd
+            # Should contain directory path, not file path
+            assert "gs://input-bucket/data/sample/" in cmd
 
     def test_get_import_command_empty_when_no_files(self, gcp_config, analysis):
         """Test get_import_command returns empty string when no files."""
@@ -959,23 +991,62 @@ class TestLustreInputs:
             assert result == original_path
             assert lustre.get(original_path) == original_path
 
-    def test_len(self, gcp_config, analysis):
+    def test_len_returns_number_of_files(self, gcp_config, analysis):
         """Test __len__ returns number of registered files."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
 
             assert len(lustre) == 0
-            lustre.add("/mnt/gcsfuse/file1.bam")
+            lustre.add("/mnt/gcsfuse/sample1/file1.bam")
             assert len(lustre) == 1
-            lustre.add("/mnt/gcsfuse/file2.bam")
+            lustre.add("/mnt/gcsfuse/sample1/file2.bam")  # Same dir
             assert len(lustre) == 2
+            lustre.add("/mnt/gcsfuse/sample2/file3.bam")  # Different dir
+            assert len(lustre) == 3
+
+    def test_get_directories(self, gcp_config, analysis):
+        """Test get_directories returns unique GCS directories."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            lustre.add("/mnt/gcsfuse/sample1/R1.fastq")
+            lustre.add("/mnt/gcsfuse/sample1/R2.fastq")
+            lustre.add("/mnt/gcsfuse/sample2/file.bam")
+
+            dirs = lustre.get_directories()
+            assert len(dirs) == 2
+            assert "gs://input-bucket/sample1/" in dirs
+            assert "gs://input-bucket/sample2/" in dirs
 
     def test_repr(self, gcp_config, analysis):
         """Test __repr__ returns useful information."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
-            lustre.add("/mnt/gcsfuse/file.bam")
+            lustre.add("/mnt/gcsfuse/sample/file.bam")
 
             repr_str = repr(lustre)
             assert "123" in repr_str  # analysis pk
-            assert "1" in repr_str  # number of files
+            assert "files=1" in repr_str
+            assert "directories=1" in repr_str
+
+    def test_generate_lustre_subdir_name(self, gcp_config, analysis):
+        """Test _generate_lustre_subdir_name uses last 2 path components."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            # Test with typical path
+            name = lustre._generate_lustre_subdir_name("gs://bucket/experiments/exp1/raw_data/")
+            assert "exp1_raw_data_" in name
+            # Should have 4-char hash suffix
+            assert len(name.split("_")[-1]) == 4
+
+    def test_duplicate_add_returns_same_path(self, gcp_config, analysis):
+        """Test that adding the same file twice returns the same path."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            path1 = lustre.add("/mnt/gcsfuse/sample/file.bam")
+            path2 = lustre.add("/mnt/gcsfuse/sample/file.bam")
+
+            assert path1 == path2
+            assert len(lustre) == 1  # Only counted once
