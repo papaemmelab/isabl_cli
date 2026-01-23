@@ -1173,6 +1173,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             str: Directory path for pipeline execution.
         """
         scratch_url = analysis.get("_scratch_storage_url")
+
+        # Debug output to diagnose scratch directory issues
+        if system_settings.SCRATCH_STORAGE_DIRECTORY:
+            click.echo(f"DEBUG: SCRATCH_STORAGE_DIRECTORY is set to: {system_settings.SCRATCH_STORAGE_DIRECTORY}")
+            click.echo(f"DEBUG: scratch_url from analysis: {scratch_url}")
+            if scratch_url:
+                click.echo(f"DEBUG: scratch_url exists: {os.path.isdir(scratch_url)}")
+
         if scratch_url and os.path.isdir(scratch_url):
             return scratch_url
         return analysis["storage_url"]
