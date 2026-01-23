@@ -31,6 +31,7 @@ _DEFAULTS = {
     "YAML_DATA_IMPORTER": "isabl_cli.data.LocalYamlDataImporter",
     "BED_IMPORTER": "isabl_cli.data.LocalBedImporter",
     "BASE_STORAGE_DIRECTORY": join(expanduser("~"), "isabl_storage"),
+    "SCRATCH_STORAGE_DIRECTORY": None,  # Set to enable scratch storage (e.g., "/scratch")
     "FASTQ_READ_SUFFIX": "",
     "ADMIN_USER": getpass.getuser(),
     "CLIENT_NAME": None,
@@ -84,6 +85,7 @@ _DEFAULTS = {
         # Polling settings
         "lustre_poll_interval": 30,
         "lustre_max_poll_attempts": 360,
+        "lustre_export_timeout_hours": 3,  # Maximum time to wait for export completion
         # Cleanup
         "lustre_delete_after_export": True,
     },
@@ -108,7 +110,7 @@ _IMPORT_STRINGS = {
     "TRASH_ANALYSIS_STORAGE",
 }
 
-_PATH_STRINGS = {"BASE_STORAGE_DIRECTORY"}
+_PATH_STRINGS = {"BASE_STORAGE_DIRECTORY", "SCRATCH_STORAGE_DIRECTORY"}
 
 
 def import_valid_applications(val, setting_name):

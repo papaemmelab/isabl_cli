@@ -116,6 +116,39 @@ def normalize_lustre_path(lustre_path):
     return path
 
 
+def _retry_with_exponential_backoff(func, max_retries=5, base_delay=10, operation_name="operation"):
+    """Retry a function with exponential backoff.
+
+    Arguments:
+        func (callable): Function to retry. Should raise exception on failure.
+        max_retries (int): Maximum number of attempts (default: 5).
+        base_delay (int): Initial delay in seconds (default: 10).
+        operation_name (str): Name for logging.
+
+    Returns:
+        Any: Return value of func on success.
+
+    Raises:
+        GCPLustreExportError: If all retries exhausted.
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_retries:
+                raise GCPLustreExportError(
+                    f"{operation_name} failed after {max_retries} attempts: {e}"
+                )
+
+            delay = base_delay * (2 ** (attempt - 1))  # Exponential: 10s, 20s, 40s, 80s, 160s
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"{operation_name} attempt {attempt} failed: {e}. "
+                f"Retrying in {delay}s..."
+            )
+            time.sleep(delay)
+
+
 def initiate_export(gcp_config, lustre_path, gcs_path):
     """Initiate an async export from Lustre to GCS.
 
@@ -148,30 +181,42 @@ def initiate_export(gcp_config, lustre_path, gcs_path):
     click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Lustre path: {lustre_path}")
     click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCS target: {gcs_path}")
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise GCPLustreExportError(
-            f"Failed to initiate Lustre export: {e.stderr or e.stdout}"
-        )
-
-    # Parse JSON output to extract operation name
-    try:
-        output = json.loads(result.stdout)
-        operation_name = output.get("name")
-        if not operation_name:
-            raise GCPLustreExportError(
-                f"Could not extract operation name from output: {result.stdout}"
+    def _run_export_command():
+        """Inner function for retry logic."""
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
             )
-    except json.JSONDecodeError as e:
-        raise GCPLustreExportError(
-            f"Failed to parse export output as JSON: {result.stdout}"
-        )
+        except subprocess.CalledProcessError as e:
+            raise GCPLustreExportError(
+                f"Failed to initiate Lustre export: {e.stderr or e.stdout}"
+            )
+
+        # Parse JSON output to extract operation name
+        try:
+            output = json.loads(result.stdout)
+            operation_name = output.get("name")
+            if not operation_name:
+                raise GCPLustreExportError(
+                    f"Could not extract operation name from output: {result.stdout}"
+                )
+        except json.JSONDecodeError as e:
+            raise GCPLustreExportError(
+                f"Failed to parse export output as JSON: {result.stdout}"
+            )
+
+        return operation_name
+
+    # Retry with exponential backoff: 10s, 20s, 40s, 80s, 160s
+    operation_name = _retry_with_exponential_backoff(
+        _run_export_command,
+        max_retries=5,
+        base_delay=10,
+        operation_name="Lustre export initiation"
+    )
 
     click.echo(
         f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Export initiated. Operation: {operation_name}"

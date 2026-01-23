@@ -671,6 +671,13 @@ def send_error_email(recipients, subject, message):
 
 
 def _set_analysis_permissions(analysis):
+    # can't change permissions posix style on gcsfuse, so we just skip
+    gcp_config = getattr(system_settings, "GCP_CONFIGURATION", {})
+    datalake_on_gcsfuse = gcp_config.get("datalake_on_gcsfuse", False)
+    if datalake_on_gcsfuse:
+        click.secho(f"Skipping permission change on gcsfuse datalake", err=True, fg="yellow")
+        return
+
     protect_results = analysis.status == "SUCCEEDED"
     unique_analysis_per_individual = False
     application_protect_results = True
@@ -696,13 +703,6 @@ def _set_analysis_permissions(analysis):
         or not application_protect_results
     ):
         protect_results = False
-
-    # can't change permissions posix style on gcsfuse, so we just skip
-    gcp_config = getattr(system_settings, "GCP_CONFIGURATION", {})
-    datalake_on_gcsfuse = gcp_config.get("datalake_on_gcsfuse", False)
-    if datalake_on_gcsfuse:
-        click.secho(f"Skipping permission change on gcsfuse datalake", err=True, fg="yellow")
-        return
 
     if protect_results:
         utils.check_admin()

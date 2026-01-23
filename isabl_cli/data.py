@@ -247,14 +247,57 @@ def _make_storage_directory(root, base, identifier, use_hash=False):
     return storage_directory
 
 
-def get_storage_url(endpoint, identifier, use_hash=False):
-    """Make storage directory and return patched instance."""
+def get_scratch_storage_url(endpoint, identifier, use_hash=False):
+    """Get scratch storage directory path if configured.
+
+    Arguments:
+        endpoint (str): API endpoint name (e.g., 'analyses').
+        identifier (int/str): Instance primary key.
+        use_hash (bool): Whether to use hash-based subdirectories.
+
+    Returns:
+        str or None: Scratch storage path, or None if not configured.
+    """
+    scratch_root = system_settings.SCRATCH_STORAGE_DIRECTORY
+    if not scratch_root:
+        return None
+
+    return system_settings.MAKE_STORAGE_DIRECTORY(
+        root=scratch_root,
+        base=endpoint,
+        identifier=identifier,
+        use_hash=use_hash,
+    )
+
+
+def get_final_storage_url(endpoint, identifier, use_hash=False):
+    """Get final (permanent) storage directory path.
+
+    This is the existing get_storage_url functionality, renamed for clarity.
+
+    Arguments:
+        endpoint (str): API endpoint name (e.g., 'analyses').
+        identifier (int/str): Instance primary key.
+        use_hash (bool): Whether to use hash-based subdirectories.
+
+    Returns:
+        str: Final storage path.
+    """
     return system_settings.MAKE_STORAGE_DIRECTORY(
         root=system_settings.BASE_STORAGE_DIRECTORY,
         base=endpoint,
         identifier=identifier,
         use_hash=use_hash,
     )
+
+
+def get_storage_url(endpoint, identifier, use_hash=False):
+    """Make storage directory and return patched instance.
+
+    For backward compatibility, this returns the final storage URL.
+    Use get_final_storage_url() or get_scratch_storage_url() explicitly.
+    """
+    return get_final_storage_url(endpoint, identifier, use_hash)
 
 
 def update_storage_url(endpoint, identifier, use_hash=False, **data):

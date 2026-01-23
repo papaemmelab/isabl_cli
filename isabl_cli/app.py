@@ -104,6 +104,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # Lustre scratch path where your pipeline writes output files.
     gcp_lustre_export = False
 
+    # Scratch copy strategy configuration. Set to one of:
+    # - "rsync" (default): Use rsync to copy from scratch to final storage
+    # - "lustre-export": Use GCP Lustre export for high-performance copying
+    # Only relevant when SCRATCH_STORAGE_DIRECTORY is configured at system level.
+    # If "lustre-export" is selected, GCP_CONFIGURATION.lustre_export_enabled
+    # must also be True at the system level.
+    scratch_copy_strategy = "rsync"
+
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
@@ -1001,7 +1009,24 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 # trash analysis and create outdir again
                 elif force and i["status"] not in {"SUCCEEDED", "FINISHED", "REJECTED"}:
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
+
+                    # Add scratch if now configured but not in analysis
+                    if not i.get("_scratch_storage_url") and system_settings.SCRATCH_STORAGE_DIRECTORY:
+                        i["_scratch_storage_url"] = data.get_scratch_storage_url(
+                            endpoint="analyses", identifier=i["pk"], use_hash=True
+                        )
+
                     utils.makedirs(i["storage_url"])
+                    scratch_url = i.get("_scratch_storage_url")
+                    if scratch_url:
+                        utils.makedirs(scratch_url)
+                        # Recreate symlinks
+                        for filename in ["head_job.sh", "head_job.log", "head_job.err"]:
+                            final_path = join(i["storage_url"], filename)
+                            scratch_path = join(scratch_url, filename)
+                            if os.path.exists(final_path) or os.path.islink(final_path):
+                                os.remove(final_path)
+                            os.symlink(scratch_path, final_path)
 
                 # only restart failed analyses
                 elif (
@@ -1026,7 +1051,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                         self._get_dependencies(i.targets, i.references),
                     )
 
-                    command = self.get_command(i, inputs, self.settings)
+                    # Pass scratch path to application via storage_url
+                    analysis_for_command = dict(i)
+                    scratch_url = i.get("_scratch_storage_url")
+                    if scratch_url:
+                        analysis_for_command["storage_url"] = scratch_url
+
+                    command = self.get_command(analysis_for_command, inputs, self.settings)
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
                 except self.skip_exceptions as error:  # pragma: no cover
@@ -1104,15 +1135,102 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_command_script_path(self, analysis):
         """Get path to analysis command script."""
-        return join(analysis["storage_url"], "head_job.sh")
+        outdir = self._get_execution_directory(analysis)
+        return join(outdir, "head_job.sh")
 
     def get_command_log_path(self, analysis):
         """Get path to analysis log file."""
-        return join(analysis["storage_url"], "head_job.log")
+        outdir = self._get_execution_directory(analysis)
+        return join(outdir, "head_job.log")
 
     def get_command_err_path(self, analysis):
         """Get path to analysis err file."""
-        return join(analysis["storage_url"], "head_job.err")
+        outdir = self._get_execution_directory(analysis)
+        return join(outdir, "head_job.err")
+
+    def _get_execution_directory(self, analysis):
+        """Get the directory where pipeline should execute.
+
+        Returns scratch directory if configured, otherwise final directory.
+
+        Arguments:
+            analysis (dict): Analysis instance.
+
+        Returns:
+            str: Directory path for pipeline execution.
+        """
+        scratch_url = analysis.get("_scratch_storage_url")
+        if scratch_url and os.path.isdir(scratch_url):
+            return scratch_url
+        return analysis["storage_url"]
+
+    def _should_use_lustre_export_for_scratch(self):
+        """Determine if lustre-export should be used for scratch copy.
+
+        Returns True if:
+        1. Application requests lustre-export via scratch_copy_strategy, AND
+        2. System allows lustre-export (GCP_CONFIGURATION.lustre_export_enabled=True)
+
+        Follows the same pattern as _should_export_to_gcs().
+
+        Returns:
+            bool: True if lustre-export should be used, False otherwise.
+        """
+        # Check application preference
+        strategy = getattr(self, "scratch_copy_strategy", "rsync")
+        if strategy != "lustre-export":
+            return False
+
+        # Check if system allows lustre-export
+        gcp_config = getattr(system_settings, "GCP_CONFIGURATION", None) or {}
+        return gcp_config.get("lustre_export_enabled", False)
+
+    def _get_scratch_to_final_copy_command(self, analysis):
+        """Generate command to copy from scratch to final storage.
+
+        Uses application-level scratch_copy_strategy to determine copy method.
+
+        Arguments:
+            analysis (dict): Analysis instance.
+
+        Returns:
+            str: Copy command, or empty string if no scratch configured.
+        """
+        scratch_url = analysis.get("_scratch_storage_url")
+        final_url = analysis["storage_url"]
+
+        if not scratch_url:
+            return ""
+
+        # Use application-level setting with system validation
+        use_lustre_export = self._should_use_lustre_export_for_scratch()
+
+        if use_lustre_export:
+            # Use Lustre export (requires GCP configuration)
+            return f"isabl lustre-export --lustre-path {scratch_url} --analysis-pk {analysis['pk']} --no-delete-after"
+        else:
+            # Use rsync (default)
+            # Ensure final directory exists and use rsync to copy contents
+            return (
+                f"mkdir -p {final_url} && "
+                f"rsync -av --delete --partial --partial-dir=.rsync-partial {scratch_url}/ {final_url}/"
+            )
+
+    def _get_scratch_cleanup_command(self, analysis):
+        """Generate command to cleanup scratch directory after successful copy.
+
+        Arguments:
+            analysis (dict): Analysis instance.
+
+        Returns:
+            str: Cleanup command, or empty string if no scratch configured.
+        """
+        scratch_url = analysis.get("_scratch_storage_url")
+
+        if not scratch_url:
+            return ""
+
+        return f"rm -rf {scratch_url}"
 
     def write_command_script(self, analysis, command):
         """
@@ -1124,8 +1242,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """
         from isabl_cli import gcp_lustre
 
-        # check status, if not run by admin will be marked as succeeded later
-        outdir = analysis["storage_url"]
+        # Determine execution directory (scratch if available, else final)
+        outdir = self._get_execution_directory(analysis)
         utils.makedirs(outdir)
         status = self._get_after_completion_status(analysis)
 
@@ -1138,31 +1256,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
 
-        # Get GCP Lustre import command if LustreInputs was used in get_command()
-        import_command = ""
-        if hasattr(self, "_lustre_inputs") and self._lustre_inputs:
-            import_command = self._lustre_inputs.get_import_command()
-
         # Get GCP Lustre export command if enabled for this application
         export_command = ""
         if self._should_export_to_gcs():
             lustre_path = self.get_lustre_output_path(analysis, self.settings)
             export_command = gcp_lustre.get_export_command_for_script(analysis, lustre_path)
 
-        # Build command chain: import -> started -> command -> export -> finished
-        if import_command and export_command:
+        # Get copy and cleanup commands for scratch storage
+        copy_command = self._get_scratch_to_final_copy_command(analysis)
+        cleanup_command = self._get_scratch_cleanup_command(analysis)
+
+        # Build command chain: started -> command -> export -> copy -> finished -> cleanup
+        if export_command and copy_command:
             command = (
                 f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-                f"( {import_command} ) && "
                 f"{started} && {command} && "
                 f"( {export_command} ) && "
-                f"{finished} && date"
-            )
-        elif import_command:
-            command = (
-                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-                f"( {import_command} ) && "
-                f"{started} && {command} && {finished} && date"
+                f"( {copy_command} ) && "
+                f"{finished} && "
+                f"( {cleanup_command} ) && date"
             )
         elif export_command:
             command = (
@@ -1170,6 +1282,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f"{started} && {command} && "
                 f"( {export_command} ) && "
                 f"{finished} && date"
+            )
+        elif copy_command:
+            command = (
+                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
+                f"{started} && {command} && "
+                f"( {copy_command} ) && "
+                f"{finished} && "
+                f"( {cleanup_command} ) && date"
             )
         else:
             command = (
@@ -1757,9 +1877,35 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return list(existing.values()), [i for i in tuples if i[-1].pk not in existing]
 
     def _patch_analysis(self, analysis):
-        analysis["storage_url"] = data.get_storage_url(
+        # Get final (permanent) storage location
+        final_url = data.get_final_storage_url(
             endpoint="analyses", identifier=analysis["pk"], use_hash=True
         )
+
+        # Get scratch storage location if configured
+        scratch_url = data.get_scratch_storage_url(
+            endpoint="analyses", identifier=analysis["pk"], use_hash=True
+        )
+
+        # Store both URLs in analysis object for later use
+        analysis["storage_url"] = final_url
+        analysis["_scratch_storage_url"] = scratch_url
+
+        # Create both directories
+        utils.makedirs(final_url)
+        if scratch_url:
+            utils.makedirs(scratch_url)
+
+            # Create symlinks in final location pointing to scratch for log files
+            # This allows users to monitor logs during execution
+            for filename in ["head_job.sh", "head_job.log", "head_job.err"]:
+                final_path = join(final_url, filename)
+                scratch_path = join(scratch_url, filename)
+                # Remove existing symlink/file if present
+                if os.path.exists(final_path) or os.path.islink(final_path):
+                    os.remove(final_path)
+                # Create symlink
+                os.symlink(scratch_path, final_path)
 
         return api.patch_instance(
             "analyses",
