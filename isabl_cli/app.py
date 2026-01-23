@@ -1008,16 +1008,25 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
                 # trash analysis and create outdir again
                 elif force and i["status"] not in {"SUCCEEDED", "FINISHED", "REJECTED"}:
+                    # Trash scratch directory if it exists
+                    scratch_url = i.get("_scratch_storage_url")
+                    if scratch_url and isdir(scratch_url):
+                        click.echo(f"Removing scratch directory: {scratch_url}")
+                        import shutil
+                        shutil.rmtree(scratch_url)
+
+                    # Trash final directory
                     system_settings.TRASH_ANALYSIS_STORAGE(i)
 
                     # Add scratch if now configured but not in analysis
-                    if not i.get("_scratch_storage_url") and system_settings.SCRATCH_STORAGE_DIRECTORY:
+                    if not scratch_url and system_settings.SCRATCH_STORAGE_DIRECTORY:
                         i["_scratch_storage_url"] = data.get_scratch_storage_url(
                             endpoint="analyses", identifier=i["pk"], use_hash=True
                         )
+                        scratch_url = i["_scratch_storage_url"]
 
+                    # Recreate directories
                     utils.makedirs(i["storage_url"])
-                    scratch_url = i.get("_scratch_storage_url")
                     if scratch_url:
                         utils.makedirs(scratch_url)
                         # Recreate symlinks
