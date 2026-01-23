@@ -1052,12 +1052,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     )
 
                     # Pass scratch path to application via storage_url
-                    analysis_for_command = dict(i)
+                    # Temporarily override storage_url for get_command
                     scratch_url = i.get("_scratch_storage_url")
                     if scratch_url:
-                        analysis_for_command["storage_url"] = scratch_url
+                        original_storage_url = i.storage_url
+                        i.storage_url = scratch_url
+                        command = self.get_command(i, inputs, self.settings)
+                        i.storage_url = original_storage_url  # Restore original
+                    else:
+                        command = self.get_command(i, inputs, self.settings)
 
-                    command = self.get_command(analysis_for_command, inputs, self.settings)
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
                 except self.skip_exceptions as error:  # pragma: no cover
