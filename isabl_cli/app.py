@@ -1231,10 +1231,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             return f"isabl lustre-export --lustre-path {scratch_url} --analysis-pk {analysis['pk']} --no-delete-after"
         else:
             # Use rsync (default)
-            # Ensure final directory exists and use rsync to copy contents
+            # Flags optimized for gcsfuse compatibility:
+            # --no-perms: Don't try to preserve permissions (gcsfuse doesn't support)
+            # --no-owner --no-group: Don't try to preserve ownership
+            # --inplace: Update files in-place instead of using temp files (avoids mkstemp)
+            # -v: Verbose output
+            # --delete: Remove files in destination that don't exist in source
             return (
                 f"mkdir -p {final_url} && "
-                f"rsync -av --delete --partial --partial-dir=.rsync-partial {scratch_url}/ {final_url}/"
+                f"rsync -rv --inplace --no-perms --no-owner --no-group --delete {scratch_url}/ {final_url}/"
             )
 
     def _get_scratch_cleanup_command(self, analysis):
