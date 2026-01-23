@@ -1763,6 +1763,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 fg="yellow",
             )
 
+        # populate scratch storage URL for existing analyses if configured
+        for i in existing_analyses:
+            if not i.get("_scratch_storage_url") and system_settings.SCRATCH_STORAGE_DIRECTORY:
+                i["_scratch_storage_url"] = data.get_scratch_storage_url(
+                    endpoint="analyses", identifier=i["pk"], use_hash=True
+                )
+
         # validate existing analyses
         with click.progressbar(
             existing_analyses,
