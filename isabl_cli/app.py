@@ -933,6 +933,13 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             if not i.storage_url:  # pragma: no cover
                 self._patch_analysis(i)
 
+        # ensure scratch storage URL is set for all analyses if scratch is configured
+        for i in analyses:
+            if not i.get("_scratch_storage_url") and system_settings.SCRATCH_STORAGE_DIRECTORY:
+                i["_scratch_storage_url"] = data.get_scratch_storage_url(
+                    endpoint="analyses", identifier=i["pk"], use_hash=True
+                )
+
         # run analyses
         run_tuples, skipped_tuples, invalid_run_tuples = self.run_analyses(
             analyses=analyses, commit=commit, force=force, restart=restart, local=local
