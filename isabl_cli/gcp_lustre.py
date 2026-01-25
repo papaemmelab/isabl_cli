@@ -129,13 +129,16 @@ def normalize_lustre_path(lustre_path, lustre_mount_path=None):
     return path
 
 
-def _retry_with_exponential_backoff(func, max_retries=5, base_delay=10, operation_name="operation"):
-    """Retry a function with exponential backoff.
+def _retry_with_fixed_interval(func, max_retries=180, retry_interval=60, operation_name="operation"):
+    """Retry a function with fixed interval.
+
+    Used for waiting on resources that may be busy (e.g., only one Lustre export
+    allowed at a time). Retries at a fixed interval until success or max retries.
 
     Arguments:
         func (callable): Function to retry. Should raise exception on failure.
-        max_retries (int): Maximum number of attempts (default: 5).
-        base_delay (int): Initial delay in seconds (default: 10).
+        max_retries (int): Maximum number of attempts (default: 180 = 3 hours at 60s interval).
+        retry_interval (int): Delay between retries in seconds (default: 60).
         operation_name (str): Name for logging.
 
     Returns:
@@ -153,13 +156,12 @@ def _retry_with_exponential_backoff(func, max_retries=5, base_delay=10, operatio
                     f"{operation_name} failed after {max_retries} attempts: {e}"
                 )
 
-            delay = base_delay * (2 ** (attempt - 1))  # Exponential: 10s, 20s, 40s, 80s, 160s
             click.echo(
                 f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-                f"{operation_name} attempt {attempt} failed: {e}. "
-                f"Retrying in {delay}s..."
+                f"{operation_name} attempt {attempt}/{max_retries} failed: {e}. "
+                f"Retrying in {retry_interval}s..."
             )
-            time.sleep(delay)
+            time.sleep(retry_interval)
 
 
 def initiate_export(gcp_config, lustre_path, gcs_path):
@@ -223,11 +225,15 @@ def initiate_export(gcp_config, lustre_path, gcs_path):
 
         return operation_name
 
-    # Retry with exponential backoff: 10s, 20s, 40s, 80s, 160s
-    operation_name = _retry_with_exponential_backoff(
+    # Retry with fixed interval (default: every 60s for 3 hours)
+    # Only one Lustre export can run at a time, so we wait for any in-progress export
+    max_retries = gcp_config.get("lustre_export_max_retries", 180)
+    retry_interval = gcp_config.get("lustre_export_retry_interval", 60)
+
+    operation_name = _retry_with_fixed_interval(
         _run_export_command,
-        max_retries=5,
-        base_delay=10,
+        max_retries=max_retries,
+        retry_interval=retry_interval,
         operation_name="Lustre export initiation"
     )
 
