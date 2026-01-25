@@ -91,19 +91,32 @@ def get_gcs_path_from_analysis(analysis_pk, gcs_base_uri, base_storage_directory
     return f"{gcs_base}{relative_path}"
 
 
-def normalize_lustre_path(lustre_path):
+def normalize_lustre_path(lustre_path, lustre_mount_path=None):
     """Normalize the Lustre path for the gcloud command.
 
     The gcloud command expects a path relative to the Lustre filesystem root,
-    not an absolute system path.
+    not an absolute system path. This function strips the mount path prefix
+    if provided.
 
     Arguments:
-        lustre_path (str): Path on Lustre filesystem (e.g., "/havasove/isabl/3").
+        lustre_path (str): Path on Lustre filesystem (e.g., "/scratch/isabl/data/analyses/00/01/1").
+        lustre_mount_path (str, optional): The Lustre mount point (e.g., "/scratch").
+            If provided, this prefix will be stripped from lustre_path.
 
     Returns:
-        str: Normalized Lustre path for gcloud command (e.g., "/havasove/isabl/3/").
+        str: Normalized Lustre path for gcloud command (e.g., "/isabl/data/analyses/00/01/1/").
+
+    Example:
+        >>> normalize_lustre_path("/scratch/isabl/data/analyses/00/01/1", "/scratch")
+        '/isabl/data/analyses/00/01/1/'
     """
     path = lustre_path
+
+    # Strip the mount path prefix if provided
+    if lustre_mount_path:
+        mount = lustre_mount_path.rstrip("/")
+        if path.startswith(mount):
+            path = path[len(mount):]
 
     # Ensure path starts with /
     if not path.startswith("/"):
@@ -360,7 +373,9 @@ def run_export(lustre_path, analysis_pk, delete_after=None):
     )
 
     # Normalize Lustre path for gcloud command (relative to Lustre filesystem root)
-    normalized_lustre_path = normalize_lustre_path(lustre_path)
+    normalized_lustre_path = normalize_lustre_path(
+        lustre_path, gcp_config.get("lustre_mount_path")
+    )
 
     # Initiate export
     operation_name = initiate_export(gcp_config, normalized_lustre_path, gcs_path)
@@ -689,7 +704,9 @@ def run_batch_import(import_specs):
         if not gcs_path.endswith("/"):
             gcs_path = gcs_path + "/"
         # Normalize lustre path for gcloud command
-        normalized_path = normalize_lustre_path(lustre_path)
+        normalized_path = normalize_lustre_path(
+            lustre_path, gcp_config.get("lustre_mount_path")
+        )
         operation_name = initiate_import(gcp_config, gcs_path, normalized_path)
         operations.append(operation_name)
 

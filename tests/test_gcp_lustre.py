@@ -131,6 +131,38 @@ class TestNormalizeLustrePath:
         )
         assert result == "/havasove/isabl/3/"
 
+    def test_strips_mount_path_prefix(self):
+        """Test that lustre mount path prefix is stripped."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/isabl/data/analyses/00/01/1",
+            lustre_mount_path="/scratch",
+        )
+        assert result == "/isabl/data/analyses/00/01/1/"
+
+    def test_strips_mount_path_with_trailing_slash(self):
+        """Test mount path with trailing slash is handled."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/isabl/data/analyses/00/01/1",
+            lustre_mount_path="/scratch/",
+        )
+        assert result == "/isabl/data/analyses/00/01/1/"
+
+    def test_no_mount_path_leaves_path_unchanged(self):
+        """Test that path without mount_path arg is unchanged."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/scratch/isabl/data/analyses/00/01/1",
+            lustre_mount_path=None,
+        )
+        assert result == "/scratch/isabl/data/analyses/00/01/1/"
+
+    def test_mount_path_not_matching_leaves_path_unchanged(self):
+        """Test that non-matching mount path leaves path unchanged."""
+        result = gcp_lustre.normalize_lustre_path(
+            lustre_path="/other/isabl/data/analyses/00/01/1",
+            lustre_mount_path="/scratch",
+        )
+        assert result == "/other/isabl/data/analyses/00/01/1/"
+
 
 class TestInitiateExport:
     """Tests for initiate_export function."""
