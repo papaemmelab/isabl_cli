@@ -10,6 +10,7 @@ This enables high-performance computing on GCP Slurm clusters using Lustre scrat
 import json
 import shutil
 import subprocess
+import sys
 import time
 
 import click
@@ -310,12 +311,20 @@ def wait_for_export(gcp_config, operation_name):
     max_attempts = gcp_config.get("lustre_max_poll_attempts", 360)
 
     for attempt in range(1, max_attempts + 1):
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Sleeping {poll_interval}s before check..."
+        )
+        sys.stdout.flush()
+        sys.stderr.flush()
+
         time.sleep(poll_interval)
 
         click.echo(
             f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking export status "
             f"(attempt {attempt}/{max_attempts})..."
         )
+        sys.stdout.flush()
+        sys.stderr.flush()
 
         try:
             done, error = check_export_status(gcp_config, operation_name)
@@ -323,6 +332,8 @@ def wait_for_export(gcp_config, operation_name):
             click.echo(
                 f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING: {e}, retrying..."
             )
+            sys.stdout.flush()
+            sys.stderr.flush()
             continue
 
         if done:
@@ -331,11 +342,15 @@ def wait_for_export(gcp_config, operation_name):
             click.echo(
                 f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Export completed successfully!"
             )
+            sys.stdout.flush()
+            sys.stderr.flush()
             return
 
         click.echo(
             f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Export still in progress..."
         )
+        sys.stdout.flush()
+        sys.stderr.flush()
 
     raise GCPLustreExportError(f"Export timed out after {max_attempts} attempts")
 
