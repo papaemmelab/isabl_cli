@@ -1494,3 +1494,67 @@ class TestLustreInputs:
             gcs_uri = lustre._gcsfuse_to_gcs_uri("/mnt/gcsfuse/data/file.bam")
 
             assert gcs_uri == "gs://input-bucket/data/file.bam"
+
+    def test_symlink_resolution(self, analysis):
+        """Test that symlinked paths are resolved correctly.
+
+        This simulates a setup where:
+        - /isabl/data/analyses is symlinked to /data_output/isabl/analyses
+        - /isabl/data/experiments is symlinked to /data_input/isabl/experiments
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create gcsfuse mount directories
+            data_output = os.path.join(tmpdir, "data_output", "isabl", "analyses", "00", "01")
+            data_input = os.path.join(tmpdir, "data_input", "isabl", "experiments", "exp1")
+            os.makedirs(data_output)
+            os.makedirs(data_input)
+
+            # Create NFS base directory with symlinks
+            isabl_data = os.path.join(tmpdir, "isabl", "data")
+            os.makedirs(isabl_data)
+            os.symlink(
+                os.path.join(tmpdir, "data_output", "isabl", "analyses"),
+                os.path.join(isabl_data, "analyses"),
+            )
+            os.symlink(
+                os.path.join(tmpdir, "data_input", "isabl", "experiments"),
+                os.path.join(isabl_data, "experiments"),
+            )
+
+            # Create test files
+            with open(os.path.join(data_output, "test.bam"), "w") as f:
+                f.write("test")
+            with open(os.path.join(data_input, "test.fastq"), "w") as f:
+                f.write("test")
+
+            config = {
+                "lustre_import_enabled": True,
+                "lustre_mount_path": "/scratch",
+                "gcsfuse_mount_path": os.path.join(tmpdir, "data_input"),
+                "gcs_input_uri": "gs://input-bucket",
+                "gcsfuse_output_mount_path": os.path.join(tmpdir, "data_output"),
+                "gcs_base_uri": "gs://output-bucket",
+                "shared_inputs_path": "/shared_inputs",
+            }
+
+            with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=config):
+                lustre = LustreInputs(analysis)
+
+                # Test symlink to output mount
+                symlink_path = os.path.join(isabl_data, "analyses", "00", "01", "test.bam")
+                gcs_uri = lustre._gcsfuse_to_gcs_uri(symlink_path)
+                assert "gs://output-bucket/" in gcs_uri
+                assert "/isabl/analyses/00/01/test.bam" in gcs_uri
+
+                # Test symlink to input mount
+                symlink_path = os.path.join(isabl_data, "experiments", "exp1", "test.fastq")
+                gcs_uri = lustre._gcsfuse_to_gcs_uri(symlink_path)
+                assert "gs://input-bucket/" in gcs_uri
+                assert "/isabl/experiments/exp1/test.fastq" in gcs_uri
+
+                # Test add() works with symlinked paths
+                result = lustre.add(os.path.join(isabl_data, "analyses", "00", "01", "test.bam"))
+                assert result.startswith("/scratch/shared_inputs/")
+                assert result.endswith("/test.bam")

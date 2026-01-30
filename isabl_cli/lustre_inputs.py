@@ -75,9 +75,13 @@ class LustreInputs:
         # Get config for path conversion
         gcp_config = get_gcp_config()
         self.lustre_mount = gcp_config.get("lustre_mount_path", "/scratch")
-        self.gcsfuse_mount = gcp_config.get("gcsfuse_mount_path")  # e.g., "/mnt/gcsfuse"
+        # Store original config values for error messages
+        self._gcsfuse_mount_config = gcp_config.get("gcsfuse_mount_path")
+        self._gcsfuse_output_mount_config = gcp_config.get("gcsfuse_output_mount_path")
+        # Resolve symlinks in mount paths for consistent comparison
+        self.gcsfuse_mount = os.path.realpath(self._gcsfuse_mount_config) if self._gcsfuse_mount_config else None
         self.gcs_input_uri = gcp_config.get("gcs_input_uri")  # e.g., "gs://input-bucket"
-        self.gcsfuse_output_mount = gcp_config.get("gcsfuse_output_mount_path")  # e.g., "/isabl/data"
+        self.gcsfuse_output_mount = os.path.realpath(self._gcsfuse_output_mount_config) if self._gcsfuse_output_mount_config else None
         self.gcs_base_uri = gcp_config.get("gcs_base_uri")  # e.g., "gs://output-bucket"
         self.import_enabled = gcp_config.get("lustre_import_enabled", False)
         self.shared_base = gcp_config.get("shared_inputs_path", "/shared_inputs")
@@ -86,7 +90,9 @@ class LustreInputs:
         """Convert gcsfuse mount path to GCS URI.
 
         Supports both input data paths (from gcsfuse_mount_path) and analysis output
-        paths (from gcsfuse_output_mount_path).
+        paths (from gcsfuse_output_mount_path). Symlinks are resolved to handle cases
+        where paths go through symlinked directories (e.g., /isabl/data/analyses ->
+        /data_output/isabl/analyses).
 
         Arguments:
             gcsfuse_path (str): Local gcsfuse path (e.g., /mnt/gcsfuse/data/file.fastq
@@ -107,28 +113,31 @@ class LustreInputs:
         if gcsfuse_path.startswith("gs://"):
             return gcsfuse_path
 
+        # Resolve symlinks to get the real path (e.g., /isabl/data/analyses/... -> /data_output/isabl/analyses/...)
+        resolved_path = os.path.realpath(gcsfuse_path)
+
         # Try input mount path first
         if self.gcsfuse_mount and self.gcs_input_uri:
-            if gcsfuse_path.startswith(self.gcsfuse_mount):
-                relative = gcsfuse_path[len(self.gcsfuse_mount):]
+            if resolved_path.startswith(self.gcsfuse_mount):
+                relative = resolved_path[len(self.gcsfuse_mount):]
                 if not relative.startswith("/"):
                     relative = "/" + relative
                 return f"{self.gcs_input_uri.rstrip('/')}{relative}"
 
         # Try output mount path (for analysis dependencies)
         if self.gcsfuse_output_mount and self.gcs_base_uri:
-            if gcsfuse_path.startswith(self.gcsfuse_output_mount):
-                relative = gcsfuse_path[len(self.gcsfuse_output_mount):]
+            if resolved_path.startswith(self.gcsfuse_output_mount):
+                relative = resolved_path[len(self.gcsfuse_output_mount):]
                 if not relative.startswith("/"):
                     relative = "/" + relative
                 return f"{self.gcs_base_uri.rstrip('/')}{relative}"
 
-        # Build helpful error message
+        # Build helpful error message using original config values
         configured_mounts = []
-        if self.gcsfuse_mount:
-            configured_mounts.append(f"input: {self.gcsfuse_mount}")
-        if self.gcsfuse_output_mount:
-            configured_mounts.append(f"output: {self.gcsfuse_output_mount}")
+        if self._gcsfuse_mount_config:
+            configured_mounts.append(f"input: {self._gcsfuse_mount_config}")
+        if self._gcsfuse_output_mount_config:
+            configured_mounts.append(f"output: {self._gcsfuse_output_mount_config}")
 
         if not configured_mounts:
             raise GCPLustreImportError(
@@ -138,7 +147,7 @@ class LustreInputs:
 
         raise GCPLustreImportError(
             f"Path doesn't start with any configured gcsfuse mount "
-            f"({', '.join(configured_mounts)}): {gcsfuse_path}"
+            f"({', '.join(configured_mounts)}): {gcsfuse_path} (resolved: {resolved_path})"
         )
 
     def _get_shared_dir_key(self, gcs_dir):
