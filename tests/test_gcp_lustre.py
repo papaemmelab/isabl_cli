@@ -1,8 +1,10 @@
 """Tests for GCP Lustre import/export functionality."""
 
+import hashlib
 import json
 import os
 import subprocess
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -174,6 +176,8 @@ class TestInitiateExport:
             "lustre_instance": "test-instance",
             "lustre_location": "us-east4-a",
             "lustre_project": "test-project",
+            "lustre_export_max_retries": 1,
+            "lustre_export_retry_interval": 0,
         }
 
     def test_builds_correct_command(self, gcp_config):
@@ -590,6 +594,8 @@ class TestGCPConfiguration:
             "lustre_poll_interval",
             "lustre_max_poll_attempts",
             "lustre_delete_after_export",
+            "shared_inputs_path",
+            "lustre_cleanup_on_failure",
         ]
         for key in expected_keys:
             assert key in gcp_config, f"Missing key: {key}"
@@ -620,6 +626,16 @@ class TestGCPConfiguration:
         assert "lustre_import_enabled" in gcp_config
         assert "gcs_input_uri" in gcp_config
         assert "gcsfuse_mount_path" in gcp_config
+
+    def test_default_shared_inputs_path(self):
+        """Test default shared_inputs_path value."""
+        gcp_config = _DEFAULTS.get("GCP_CONFIGURATION", {})
+        assert gcp_config.get("shared_inputs_path") == "/shared_inputs"
+
+    def test_default_cleanup_on_failure(self):
+        """Test default lustre_cleanup_on_failure value."""
+        gcp_config = _DEFAULTS.get("GCP_CONFIGURATION", {})
+        assert gcp_config.get("lustre_cleanup_on_failure") is True
 
 
 # ============================================================================
@@ -852,6 +868,242 @@ class TestRunBatchImport:
                     assert len(wait_call_args[0][1]) == 2  # Two operations
 
 
+# ============================================================================
+# SHARED IMPORT/CLEANUP TESTS
+# ============================================================================
+
+
+class TestRunSharedImport:
+    """Tests for run_shared_import function."""
+
+    @pytest.fixture
+    def gcp_config(self):
+        """Sample GCP configuration for shared imports."""
+        return {
+            "lustre_import_enabled": True,
+            "lustre_instance": "test-instance",
+            "lustre_location": "us-east4-a",
+            "lustre_project": "test-project",
+            "lustre_mount_path": None,  # Will be set per test with tmp_path
+        }
+
+    def test_first_analysis_imports_data(self, tmp_path):
+        """Test that the first analysis triggers an actual import."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": str(tmp_path),
+        }
+        specs = [["gs://bucket/data/sample1/", "/shared_inputs/abc123/"]]
+
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+            with patch("isabl_cli.gcp_lustre._rsync_import") as mock_rsync:
+                gcp_lustre.run_shared_import(100, specs, strategy="rsync")
+
+                # Should have called rsync
+                mock_rsync.assert_called_once()
+
+        # Check ref file was created
+        refs_dir = tmp_path / "shared_inputs" / "abc123.refs"
+        assert refs_dir.exists()
+        assert (refs_dir / "100").exists()
+
+        # Check marker file
+        data_dir = tmp_path / "shared_inputs" / "abc123"
+        assert (data_dir / ".import_complete").exists()
+
+    def test_second_analysis_skips_import(self, tmp_path):
+        """Test that the second analysis skips import when data already exists."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": str(tmp_path),
+        }
+        specs = [["gs://bucket/data/sample1/", "/shared_inputs/abc123/"]]
+
+        # Pre-create data dir with marker (simulating first analysis already imported)
+        data_dir = tmp_path / "shared_inputs" / "abc123"
+        data_dir.mkdir(parents=True)
+        (data_dir / ".import_complete").write_text("gs://bucket/data/sample1/")
+        refs_dir = tmp_path / "shared_inputs" / "abc123.refs"
+        refs_dir.mkdir(parents=True)
+        (refs_dir / "100").write_text("")
+
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+            with patch("isabl_cli.gcp_lustre._rsync_import") as mock_rsync:
+                gcp_lustre.run_shared_import(200, specs, strategy="rsync")
+
+                # Should NOT have called rsync (data exists)
+                mock_rsync.assert_not_called()
+
+        # Check new ref file was added
+        assert (refs_dir / "200").exists()
+        # Original ref still exists
+        assert (refs_dir / "100").exists()
+
+    def test_lustre_import_strategy(self, tmp_path):
+        """Test that lustre-import strategy calls _lustre_import_single."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": str(tmp_path),
+        }
+        specs = [["gs://bucket/data/", "/shared_inputs/def456/"]]
+
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+            with patch("isabl_cli.gcp_lustre._lustre_import_single") as mock_lustre:
+                gcp_lustre.run_shared_import(100, specs, strategy="lustre-import")
+
+                mock_lustre.assert_called_once()
+
+    def test_raises_when_not_enabled(self):
+        """Test that error is raised when import is not enabled."""
+        with patch(
+            "isabl_cli.gcp_lustre.get_gcp_config",
+            return_value={"lustre_import_enabled": False},
+        ):
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                gcp_lustre.run_shared_import(100, [["gs://b/d/", "/p/"]])
+            assert "not enabled" in str(exc_info.value)
+
+
+class TestRunSharedCleanup:
+    """Tests for run_shared_cleanup function."""
+
+    def test_removes_ref_and_keeps_data_when_other_refs_exist(self, tmp_path):
+        """Test that data persists when other analyses still reference it."""
+        config = {"lustre_mount_path": str(tmp_path)}
+
+        # Setup: data dir with two refs
+        data_dir = tmp_path / "shared_inputs" / "abc123"
+        data_dir.mkdir(parents=True)
+        (data_dir / "file.bam").write_text("data")
+        (data_dir / ".import_complete").write_text("gs://b/d/")
+
+        refs_dir = tmp_path / "shared_inputs" / "abc123.refs"
+        refs_dir.mkdir(parents=True)
+        (refs_dir / "100").write_text("")
+        (refs_dir / "200").write_text("")
+
+        specs = [["gs://b/d/", "/shared_inputs/abc123/"]]
+
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+            gcp_lustre.run_shared_cleanup(100, specs)
+
+        # Ref for 100 should be gone
+        assert not (refs_dir / "100").exists()
+        # Ref for 200 should remain
+        assert (refs_dir / "200").exists()
+        # Data should still exist
+        assert data_dir.exists()
+        assert (data_dir / "file.bam").exists()
+
+    def test_deletes_data_when_last_ref_removed(self, tmp_path):
+        """Test that data is deleted when the last ref is removed."""
+        config = {"lustre_mount_path": str(tmp_path)}
+
+        # Setup: data dir with one ref
+        data_dir = tmp_path / "shared_inputs" / "abc123"
+        data_dir.mkdir(parents=True)
+        (data_dir / "file.bam").write_text("data")
+        (data_dir / ".import_complete").write_text("gs://b/d/")
+
+        refs_dir = tmp_path / "shared_inputs" / "abc123.refs"
+        refs_dir.mkdir(parents=True)
+        (refs_dir / "100").write_text("")
+
+        # Create lock file
+        lock_file = tmp_path / "shared_inputs" / "abc123.lock"
+        lock_file.write_text("")
+
+        specs = [["gs://b/d/", "/shared_inputs/abc123/"]]
+
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+            gcp_lustre.run_shared_cleanup(100, specs)
+
+        # Both data and refs should be gone
+        assert not data_dir.exists()
+        assert not refs_dir.exists()
+        # Lock file should be cleaned up too
+        assert not lock_file.exists()
+
+    def test_skips_when_no_refs_dir(self, tmp_path):
+        """Test that cleanup is skipped when refs dir doesn't exist."""
+        config = {"lustre_mount_path": str(tmp_path)}
+        specs = [["gs://b/d/", "/shared_inputs/abc123/"]]
+
+        with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+            # Should not raise
+            gcp_lustre.run_shared_cleanup(100, specs)
+
+    def test_concurrent_cleanup_is_safe(self, tmp_path):
+        """Test that concurrent cleanup from two threads is safe."""
+        config = {"lustre_mount_path": str(tmp_path)}
+
+        # Setup: data dir with two refs
+        data_dir = tmp_path / "shared_inputs" / "abc123"
+        data_dir.mkdir(parents=True)
+        (data_dir / "file.bam").write_text("data")
+        (data_dir / ".import_complete").write_text("gs://b/d/")
+
+        refs_dir = tmp_path / "shared_inputs" / "abc123.refs"
+        refs_dir.mkdir(parents=True)
+        (refs_dir / "100").write_text("")
+        (refs_dir / "200").write_text("")
+
+        specs = [["gs://b/d/", "/shared_inputs/abc123/"]]
+
+        errors = []
+
+        def cleanup_thread(pk):
+            try:
+                with patch("isabl_cli.gcp_lustre.get_gcp_config", return_value=config):
+                    gcp_lustre.run_shared_cleanup(pk, specs)
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=cleanup_thread, args=(100,))
+        t2 = threading.Thread(target=cleanup_thread, args=(200,))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        assert not errors, f"Concurrent cleanup errors: {errors}"
+        # Both refs should be gone, data should be deleted
+        assert not refs_dir.exists()
+        assert not data_dir.exists()
+
+
+class TestRsyncImport:
+    """Tests for _rsync_import function."""
+
+    def test_calls_gsutil_rsync(self, tmp_path):
+        """Test that gsutil rsync command is called correctly."""
+        with patch("subprocess.run") as mock_run:
+            gcp_lustre._rsync_import("gs://bucket/data/", str(tmp_path / "dest"))
+
+            mock_run.assert_called_once()
+            cmd = mock_run.call_args[0][0]
+            assert cmd[0] == "gsutil"
+            assert "-m" in cmd
+            assert "rsync" in cmd
+            assert "-r" in cmd
+            assert "gs://bucket/data/" in cmd
+
+    def test_raises_on_failure(self, tmp_path):
+        """Test that GCPLustreImportError is raised on gsutil failure."""
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, "gsutil", stderr="error"),
+        ):
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                gcp_lustre._rsync_import("gs://bucket/data/", str(tmp_path / "dest"))
+            assert "gsutil rsync failed" in str(exc_info.value)
+
+
+# ============================================================================
+# LUSTRE INPUTS TESTS
+# ============================================================================
+
+
 class TestLustreInputs:
     """Tests for LustreInputs helper class."""
 
@@ -863,6 +1115,7 @@ class TestLustreInputs:
             "lustre_mount_path": "/scratch",
             "gcsfuse_mount_path": "/mnt/gcsfuse",
             "gcs_input_uri": "gs://input-bucket",
+            "shared_inputs_path": "/shared_inputs",
         }
 
     @pytest.fixture
@@ -870,17 +1123,18 @@ class TestLustreInputs:
         """Sample analysis dict."""
         return {"pk": 123, "storage_url": "/datalake/analyses/00/01/123"}
 
-    def test_add_and_get_path_uses_directory_structure(self, gcp_config, analysis):
-        """Test adding and getting a path uses directory-based structure."""
+    def test_add_and_get_path_uses_shared_structure(self, gcp_config, analysis):
+        """Test adding and getting a path uses shared directory structure."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
             lustre.add("/mnt/gcsfuse/experiments/sample1/file.bam")
 
             result = lustre.get("/mnt/gcsfuse/experiments/sample1/file.bam")
-            # Path should include directory name with hash suffix and filename
-            assert result.startswith("/scratch/123/inputs/")
-            assert "experiments_sample1_" in result
+            # Path should use shared_inputs with md5 hash
+            assert result.startswith("/scratch/shared_inputs/")
             assert result.endswith("/file.bam")
+            # Should NOT contain analysis pk
+            assert "/123/" not in result
 
     def test_add_returns_lustre_path(self, gcp_config, analysis):
         """Test that add() returns the Lustre path."""
@@ -888,8 +1142,31 @@ class TestLustreInputs:
             lustre = LustreInputs(analysis)
             result = lustre.add("/mnt/gcsfuse/data/sample/file.bam")
 
-            assert result.startswith("/scratch/123/inputs/")
+            assert result.startswith("/scratch/shared_inputs/")
             assert result.endswith("/file.bam")
+
+    def test_shared_path_is_deterministic(self, gcp_config, analysis):
+        """Test that the same GCS dir always maps to the same shared path."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre1 = LustreInputs(analysis)
+            path1 = lustre1.add("/mnt/gcsfuse/data/sample/file.bam")
+
+            lustre2 = LustreInputs({"pk": 456, "storage_url": "/datalake/analyses/00/04/456"})
+            path2 = lustre2.add("/mnt/gcsfuse/data/sample/file.bam")
+
+            # Both analyses should resolve to the same shared path
+            assert path1 == path2
+
+    def test_shared_path_uses_md5(self, gcp_config, analysis):
+        """Test that shared path uses MD5 hash of GCS directory."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/data/sample/file.bam")
+
+            # The hash should be of the GCS parent dir
+            expected_hash = hashlib.md5("gs://input-bucket/data/sample/".encode()).hexdigest()
+            result = lustre.get("/mnt/gcsfuse/data/sample/file.bam")
+            assert expected_hash in result
 
     def test_gcsfuse_to_gcs_uri_conversion(self, gcp_config, analysis):
         """Test conversion of gcsfuse path to GCS URI."""
@@ -970,8 +1247,8 @@ class TestLustreInputs:
             specs = lustre.get_import_specs()
             assert len(specs) == 2
 
-    def test_get_import_specs_returns_directories(self, gcp_config, analysis):
-        """Test get_import_specs returns directory-based format."""
+    def test_get_import_specs_returns_shared_dirs(self, gcp_config, analysis):
+        """Test get_import_specs returns shared directory paths."""
         with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
             lustre = LustreInputs(analysis)
             lustre.add("/mnt/gcsfuse/experiments/exp1/raw_data/file.bam")
@@ -980,10 +1257,8 @@ class TestLustreInputs:
             assert len(specs) == 1
 
             gcs_dir, lustre_dir = specs[0]
-            # GCS path should be a directory ending with /
             assert gcs_dir == "gs://input-bucket/experiments/exp1/raw_data/"
-            # Lustre path should also be a directory
-            assert lustre_dir.startswith("/123/inputs/")
+            assert lustre_dir.startswith("/shared_inputs/")
             assert lustre_dir.endswith("/")
 
     def test_get_import_command(self, gcp_config, analysis):
@@ -993,10 +1268,19 @@ class TestLustreInputs:
             lustre.add("/mnt/gcsfuse/data/sample/file.bam")
 
             cmd = lustre.get_import_command()
-            assert "isabl lustre-import" in cmd
+            assert "isabl lustre-shared-import" in cmd
+            assert "--analysis-pk 123" in cmd
+            assert "--strategy lustre-import" in cmd
             assert "--specs" in cmd
-            # Should contain directory path, not file path
-            assert "gs://input-bucket/data/sample/" in cmd
+
+    def test_get_import_command_with_rsync_strategy(self, gcp_config, analysis):
+        """Test get_import_command with rsync strategy."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/data/sample/file.bam")
+
+            cmd = lustre.get_import_command(strategy="rsync")
+            assert "--strategy rsync" in cmd
 
     def test_get_import_command_empty_when_no_files(self, gcp_config, analysis):
         """Test get_import_command returns empty string when no files."""
@@ -1004,6 +1288,25 @@ class TestLustreInputs:
             lustre = LustreInputs(analysis)
 
             cmd = lustre.get_import_command()
+            assert cmd == ""
+
+    def test_get_cleanup_command(self, gcp_config, analysis):
+        """Test get_cleanup_command generates correct CLI command."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            lustre.add("/mnt/gcsfuse/data/sample/file.bam")
+
+            cmd = lustre.get_cleanup_command()
+            assert "isabl lustre-shared-cleanup" in cmd
+            assert "--analysis-pk 123" in cmd
+            assert "--specs" in cmd
+
+    def test_get_cleanup_command_empty_when_no_files(self, gcp_config, analysis):
+        """Test get_cleanup_command returns empty string when no files."""
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+
+            cmd = lustre.get_cleanup_command()
             assert cmd == ""
 
     def test_disabled_returns_original_paths(self, analysis):
@@ -1060,17 +1363,6 @@ class TestLustreInputs:
             assert "123" in repr_str  # analysis pk
             assert "files=1" in repr_str
             assert "directories=1" in repr_str
-
-    def test_generate_lustre_subdir_name(self, gcp_config, analysis):
-        """Test _generate_lustre_subdir_name uses last 2 path components."""
-        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
-            lustre = LustreInputs(analysis)
-
-            # Test with typical path
-            name = lustre._generate_lustre_subdir_name("gs://bucket/experiments/exp1/raw_data/")
-            assert "exp1_raw_data_" in name
-            # Should have 4-char hash suffix
-            assert len(name.split("_")[-1]) == 4
 
     def test_duplicate_add_returns_same_path(self, gcp_config, analysis):
         """Test that adding the same file twice returns the same path."""

@@ -7,7 +7,9 @@ This module provides functionality to:
 This enables high-performance computing on GCP Slurm clusters using Lustre scratch storage.
 """
 
+import fcntl
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -735,3 +737,235 @@ def run_batch_import(import_specs):
     wait_for_imports(gcp_config, operations)
 
     click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCP Lustre batch import complete")
+
+
+# ============================================================================
+# SHARED IMPORT/CLEANUP FUNCTIONS (with reference counting and flock locking)
+# ============================================================================
+
+
+def run_shared_import(analysis_pk, import_specs, strategy="lustre-import"):
+    """Import shared inputs with reference counting and flock locking.
+
+    For each (gcs_dir, lustre_dir) in import_specs:
+    1. Acquire exclusive flock on {lustre_dir}.lock
+    2. Check if data already exists (.import_complete marker)
+    3. If not, import data via the chosen strategy
+    4. Add ref file: {lustre_dir}.refs/{analysis_pk}
+    5. Release lock
+
+    Arguments:
+        analysis_pk (int): Analysis primary key (for ref file naming).
+        import_specs (list): List of [gcs_dir, lustre_dir] pairs.
+            lustre_dir is relative to the lustre mount point.
+        strategy (str): Import strategy - "lustre-import" or "rsync".
+
+    Raises:
+        GCPLustreImportError: If import fails.
+    """
+    gcp_config = get_gcp_config()
+
+    if not gcp_config.get("lustre_import_enabled"):
+        raise GCPLustreImportError("GCP Lustre import is not enabled")
+
+    lustre_mount = gcp_config.get("lustre_mount_path", "/scratch")
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting shared import for "
+        f"analysis {analysis_pk} ({len(import_specs)} directories, strategy={strategy})"
+    )
+
+    for gcs_path, lustre_rel_path in import_specs:
+        full_data_dir = f"{lustre_mount}/{lustre_rel_path.strip('/')}"
+        refs_dir = f"{full_data_dir}.refs"
+        lock_file = f"{full_data_dir}.lock"
+        marker_file = os.path.join(full_data_dir, ".import_complete")
+
+        # Ensure parent directories exist
+        os.makedirs(os.path.dirname(full_data_dir), exist_ok=True)
+        os.makedirs(refs_dir, exist_ok=True)
+
+        click.echo(
+            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"Acquiring lock for {lustre_rel_path}..."
+        )
+
+        lock_fd = open(lock_file, "w")
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Lock acquired."
+            )
+
+            # Check if data already imported
+            if os.path.exists(marker_file):
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"Data already imported at {full_data_dir}, skipping import."
+                )
+            else:
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"Importing {gcs_path} -> {full_data_dir} (strategy={strategy})"
+                )
+
+                if strategy == "rsync":
+                    _rsync_import(gcs_path, full_data_dir)
+                else:
+                    _lustre_import_single(gcp_config, gcs_path, lustre_rel_path)
+
+                # Write completion marker
+                os.makedirs(full_data_dir, exist_ok=True)
+                with open(marker_file, "w") as f:
+                    f.write(gcs_path)
+
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Import complete."
+                )
+
+            # Add reference file (always, even if data already existed)
+            ref_file = os.path.join(refs_dir, str(analysis_pk))
+            with open(ref_file, "w") as f:
+                f.write("")
+
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"Added ref for analysis {analysis_pk}."
+            )
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+        f"Shared import complete for analysis {analysis_pk}."
+    )
+
+
+def run_shared_cleanup(analysis_pk, import_specs):
+    """Release reference and optionally delete shared import data.
+
+    For each (gcs_dir, lustre_dir) in import_specs:
+    1. Acquire exclusive flock on {lustre_dir}.lock
+    2. Remove ref file: {lustre_dir}.refs/{analysis_pk}
+    3. If refs dir is empty, delete data directory and refs directory
+    4. Release lock
+
+    Arguments:
+        analysis_pk (int): Analysis primary key.
+        import_specs (list): List of [gcs_dir, lustre_dir] pairs.
+
+    Raises:
+        GCPLustreImportError: If cleanup encounters a critical error.
+    """
+    gcp_config = get_gcp_config()
+    lustre_mount = gcp_config.get("lustre_mount_path", "/scratch")
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Starting shared cleanup for "
+        f"analysis {analysis_pk} ({len(import_specs)} directories)"
+    )
+
+    for gcs_path, lustre_rel_path in import_specs:
+        full_data_dir = f"{lustre_mount}/{lustre_rel_path.strip('/')}"
+        refs_dir = f"{full_data_dir}.refs"
+        lock_file = f"{full_data_dir}.lock"
+
+        if not os.path.exists(refs_dir):
+            click.echo(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                f"No refs dir found for {lustre_rel_path}, skipping."
+            )
+            continue
+
+        lock_fd = open(lock_file, "w")
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+            # Remove our ref
+            ref_file = os.path.join(refs_dir, str(analysis_pk))
+            if os.path.exists(ref_file):
+                os.remove(ref_file)
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"Removed ref for analysis {analysis_pk} from {lustre_rel_path}."
+                )
+
+            # Check if any refs remain
+            remaining = os.listdir(refs_dir)
+            if not remaining:
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"No more refs, deleting shared data at {full_data_dir}."
+                )
+                shutil.rmtree(full_data_dir, ignore_errors=True)
+                shutil.rmtree(refs_dir, ignore_errors=True)
+            else:
+                click.echo(
+                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+                    f"{len(remaining)} ref(s) remaining for {lustre_rel_path}, keeping data."
+                )
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
+
+            # Remove lock file if data was deleted (no refs remain)
+            if not os.path.exists(refs_dir):
+                try:
+                    os.remove(lock_file)
+                except OSError:
+                    pass
+
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
+        f"Shared cleanup complete for analysis {analysis_pk}."
+    )
+
+
+def _rsync_import(gcs_path, local_dest):
+    """Import from GCS to local path using gsutil rsync.
+
+    Arguments:
+        gcs_path (str): GCS URI (e.g., gs://bucket/data/dir/).
+        local_dest (str): Local destination directory.
+
+    Raises:
+        GCPLustreImportError: If gsutil rsync fails.
+    """
+    os.makedirs(local_dest, exist_ok=True)
+    cmd = [
+        "gsutil", "-m", "rsync", "-r",
+        gcs_path.rstrip("/") + "/",
+        local_dest,
+    ]
+    click.echo(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Running: {' '.join(cmd)}"
+    )
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise GCPLustreImportError(
+            f"gsutil rsync failed: {e.stderr or e.stdout}"
+        )
+
+
+def _lustre_import_single(gcp_config, gcs_path, lustre_rel_path):
+    """Import a single directory using gcloud lustre instances import-data.
+
+    Wraps initiate_import + wait_for_imports for a single directory.
+
+    Arguments:
+        gcp_config (dict): GCP configuration dictionary.
+        gcs_path (str): GCS source URI.
+        lustre_rel_path (str): Lustre path relative to mount point.
+
+    Raises:
+        GCPLustreImportError: If import fails.
+    """
+    if not gcs_path.endswith("/"):
+        gcs_path = gcs_path + "/"
+    normalized_path = normalize_lustre_path(
+        lustre_rel_path, gcp_config.get("lustre_mount_path")
+    )
+    operation_name = initiate_import(gcp_config, gcs_path, normalized_path)
+    wait_for_imports(gcp_config, [operation_name])

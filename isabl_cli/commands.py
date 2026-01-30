@@ -553,3 +553,76 @@ def lustre_import(specs):
         raise click.ClickException(f"Invalid JSON in --specs: {e}")
     except gcp_lustre.GCPLustreImportError as e:
         raise click.ClickException(str(e))
+
+
+@click.command()
+@click.option(
+    "--analysis-pk",
+    required=True,
+    type=int,
+    help="Analysis primary key for reference tracking.",
+)
+@click.option(
+    "--strategy",
+    default="lustre-import",
+    type=click.Choice(["lustre-import", "rsync"]),
+    help="Import strategy: 'lustre-import' (gcloud) or 'rsync' (gsutil).",
+)
+@click.option(
+    "--specs",
+    required=True,
+    help="JSON list of [gcs_path, lustre_path] pairs to import.",
+)
+def lustre_shared_import(analysis_pk, strategy, specs):
+    """Import shared inputs from GCS to Lustre with reference counting.
+
+    Acquires a reference for the given analysis PK, imports data if not
+    already present, and records the reference. Uses flock for atomicity.
+
+    Example:
+        isabl lustre-shared-import --analysis-pk 123 --strategy rsync \\
+            --specs '[["gs://bucket/data/", "/shared_inputs/abc123/"]]'
+    """
+    from isabl_cli import gcp_lustre
+
+    try:
+        import_specs = json.loads(specs)
+        gcp_lustre.run_shared_import(analysis_pk, import_specs, strategy=strategy)
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"Invalid JSON in --specs: {e}")
+    except gcp_lustre.GCPLustreImportError as e:
+        raise click.ClickException(str(e))
+
+
+@click.command()
+@click.option(
+    "--analysis-pk",
+    required=True,
+    type=int,
+    help="Analysis primary key for reference tracking.",
+)
+@click.option(
+    "--specs",
+    required=True,
+    help="JSON list of [gcs_path, lustre_path] pairs to clean up.",
+)
+def lustre_shared_cleanup(analysis_pk, specs):
+    """Release shared input references and clean up if no references remain.
+
+    Removes the reference file for the given analysis PK. If no other
+    analyses reference the data, deletes the imported data from Lustre.
+
+    Example:
+        isabl lustre-shared-cleanup --analysis-pk 123 \\
+            --specs '[["gs://bucket/data/", "/shared_inputs/abc123/"]]'
+    """
+    from isabl_cli import gcp_lustre
+
+    try:
+        import_specs = json.loads(specs)
+        gcp_lustre.run_shared_cleanup(analysis_pk, import_specs)
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"Invalid JSON in --specs: {e}")
+    except Exception as e:
+        # Cleanup failures should warn but not crash the job
+        click.echo(f"WARNING: Shared input cleanup failed: {e}", err=True)

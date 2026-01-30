@@ -112,6 +112,12 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
     # must also be True at the system level.
     scratch_copy_strategy = "rsync"
 
+    # Input import strategy for shared Lustre inputs. Set to one of:
+    # - "lustre-import" (default): Use gcloud lustre instances import-data
+    # - "rsync": Use gsutil rsync from GCS to Lustre shared path
+    # Only relevant when GCP_CONFIGURATION.lustre_import_enabled is True.
+    input_import_strategy = "lustre-import"
+
     # Analyses in these status won't be prepared for submission. To re-rerun SUCCEEDED
     # analyses see unique_analysis_per_individual. To re-rerun failed analyses use
     # either --force or --restart.
@@ -1079,7 +1085,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                         command = self.get_command(i, inputs, self.settings)
 
                     command_tuples.append((i, command))
-                    self.write_command_script(i, command)
+
+                    # Retrieve LustreInputs if set by app in get_command()
+                    lustre_inputs = getattr(self, "_lustre_inputs", None)
+                    self.write_command_script(i, command, lustre_inputs=lustre_inputs)
+                    self._lustre_inputs = None  # Reset for next analysis
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
@@ -1265,13 +1275,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
         return f"rm -rf {scratch_url}"
 
-    def write_command_script(self, analysis, command):
+    def write_command_script(self, analysis, command, lustre_inputs=None):
         """
         Write analysis command to bash script and get path to it.
 
         Arguments:
             analysis (dict): an analysis instance.
             command (str): command to be run.
+            lustre_inputs (LustreInputs, optional): shared input helper from get_command().
         """
         from isabl_cli import gcp_lustre
 
@@ -1289,6 +1300,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         started = self.get_patch_status_command(analysis["pk"], "STARTED")
         finished = self.get_patch_status_command(analysis["pk"], status)
 
+        # Get shared input import command (prepended before pipeline)
+        import_command = ""
+        input_cleanup_command = ""
+        if lustre_inputs is not None and len(lustre_inputs) > 0:
+            strategy = getattr(self, "input_import_strategy", "lustre-import")
+            import_command = lustre_inputs.get_import_command(strategy=strategy)
+            input_cleanup_command = lustre_inputs.get_cleanup_command()
+
         # Get GCP Lustre export command if enabled for this application
         export_command = ""
         if self._should_export_to_gcs():
@@ -1299,39 +1318,43 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         copy_command = self._get_scratch_to_final_copy_command(analysis)
         cleanup_command = self._get_scratch_cleanup_command(analysis)
 
-        # Build command chain: started -> command -> export -> copy -> finished -> cleanup
-        if export_command and copy_command:
-            command = (
-                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-                f"{started} && {command} && "
-                f"( {export_command} ) && "
-                f"( {copy_command} ) && "
-                f"{finished} && "
-                f"( {cleanup_command} ) && date"
-            )
-        elif export_command:
-            command = (
-                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-                f"{started} && {command} && "
-                f"( {export_command} ) && "
-                f"{finished} && date"
-            )
-        elif copy_command:
-            command = (
-                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-                f"{started} && {command} && "
-                f"( {copy_command} ) && "
-                f"{finished} && "
-                f"( {cleanup_command} ) && date"
-            )
+        # Build command chain using parts:
+        # import -> started -> pipeline -> export -> copy -> finished -> input_cleanup -> scratch_cleanup
+        parts = [f"umask g+wrx && date && cd {outdir} && {tmpdir}"]
+
+        if import_command:
+            parts.append(f"( {import_command} )")
+
+        parts.append(started)
+        parts.append(command)
+
+        if export_command:
+            parts.append(f"( {export_command} )")
+        if copy_command:
+            parts.append(f"( {copy_command} )")
+
+        parts.append(finished)
+
+        if input_cleanup_command:
+            parts.append(f"( {input_cleanup_command} )")
+        if cleanup_command:
+            parts.append(f"( {cleanup_command} )")
+
+        parts.append("date")
+
+        full_command = " && ".join(parts)
+
+        # Build failure block: patch FAILED status, optionally cleanup shared inputs
+        gcp_config = getattr(system_settings, "GCP_CONFIGURATION", None) or {}
+        cleanup_on_failure = gcp_config.get("lustre_cleanup_on_failure", True)
+
+        if input_cleanup_command and cleanup_on_failure:
+            failed_block = f"{failed} ; ( {input_cleanup_command} )"
         else:
-            command = (
-                f"umask g+wrx && date && cd {outdir} && {tmpdir} && "
-                f"{started} && {command} && {finished} && date"
-            )
+            failed_block = failed
 
         with open(self.get_command_script_path(analysis), "w") as f:
-            f.write(f"{{\n\n    {command}\n\n}} || {{\n\n    {failed}\n\n}}")
+            f.write(f"{{\n\n    {full_command}\n\n}} || {{\n\n    {failed_block}\n\n}}")
 
     def _should_export_to_gcs(self):
         """Check if this application should export results to GCS via Lustre.

@@ -60,6 +60,8 @@ _DEFAULTS = {
         "isabl_cli.commands.login",
         "isabl_cli.commands.lustre_export",
         "isabl_cli.commands.lustre_import",
+        "isabl_cli.commands.lustre_shared_import",
+        "isabl_cli.commands.lustre_shared_cleanup",
         "isabl_cli.commands.merge_individual_analyses",
         "isabl_cli.commands.merge_project_analyses",
         "isabl_cli.commands.patch_status",
@@ -88,6 +90,12 @@ _DEFAULTS = {
         "lustre_export_timeout_hours": 3,  # Maximum time to wait for export completion
         # Cleanup
         "lustre_delete_after_export": True,
+        # Shared inputs
+        "shared_inputs_path": "/shared_inputs",  # Base dir on lustre for shared inputs
+        "lustre_cleanup_on_failure": True,  # Release shared input refs on pipeline failure
+        # Retry settings for export initiation
+        "lustre_export_max_retries": 180,
+        "lustre_export_retry_interval": 60,
     },
 }
 
