@@ -1191,7 +1191,7 @@ class TestLustreInputs:
 
             with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
                 lustre._gcsfuse_to_gcs_uri("/other/path/file.bam")
-            assert "doesn't start with gcsfuse mount" in str(exc_info.value)
+            assert "doesn't start with any configured gcsfuse mount" in str(exc_info.value)
 
     def test_raises_on_missing_config(self, analysis):
         """Test that error is raised when gcsfuse config is missing."""
@@ -1202,7 +1202,7 @@ class TestLustreInputs:
 
             with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
                 lustre._gcsfuse_to_gcs_uri("/mnt/gcsfuse/file.bam")
-            assert "must be configured" in str(exc_info.value)
+            assert "No gcsfuse mount paths configured" in str(exc_info.value)
 
     def test_get_raises_on_unregistered_path(self, gcp_config, analysis):
         """Test that get() raises for unregistered paths."""
@@ -1374,3 +1374,123 @@ class TestLustreInputs:
 
             assert path1 == path2
             assert len(lustre) == 1  # Only counted once
+
+    def test_output_path_conversion_to_gcs_base_uri(self, analysis):
+        """Test conversion of output mount path to gcs_base_uri."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_mount_path": "/mnt/gcsfuse",
+            "gcs_input_uri": "gs://input-bucket",
+            "gcsfuse_output_mount_path": "/isabl/data",
+            "gcs_base_uri": "gs://output-bucket",
+            "shared_inputs_path": "/shared_inputs",
+        }
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=config):
+            lustre = LustreInputs(analysis)
+            gcs_uri = lustre._gcsfuse_to_gcs_uri("/isabl/data/analyses/00/60/60/file.bam")
+
+            assert gcs_uri == "gs://output-bucket/analyses/00/60/60/file.bam"
+
+    def test_add_output_path_works(self, analysis):
+        """Test that add() works with output mount paths."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_mount_path": "/mnt/gcsfuse",
+            "gcs_input_uri": "gs://input-bucket",
+            "gcsfuse_output_mount_path": "/isabl/data",
+            "gcs_base_uri": "gs://output-bucket",
+            "shared_inputs_path": "/shared_inputs",
+        }
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=config):
+            lustre = LustreInputs(analysis)
+            result = lustre.add("/isabl/data/analyses/00/60/60/file.bam")
+
+            # Should use shared_inputs structure
+            assert result.startswith("/scratch/shared_inputs/")
+            assert result.endswith("/file.bam")
+
+            # Hash should be based on gcs_base_uri path
+            expected_hash = hashlib.md5("gs://output-bucket/analyses/00/60/60/".encode()).hexdigest()
+            assert expected_hash in result
+
+    def test_mixed_input_and_output_paths(self, analysis):
+        """Test that both input and output paths work in the same LustreInputs instance."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_mount_path": "/mnt/gcsfuse",
+            "gcs_input_uri": "gs://input-bucket",
+            "gcsfuse_output_mount_path": "/isabl/data",
+            "gcs_base_uri": "gs://output-bucket",
+            "shared_inputs_path": "/shared_inputs",
+        }
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=config):
+            lustre = LustreInputs(analysis)
+
+            # Add input path (raw data)
+            input_result = lustre.add("/mnt/gcsfuse/raw_data/sample1/R1.fastq")
+
+            # Add output path (analysis dependency)
+            output_result = lustre.add("/isabl/data/analyses/00/01/100/result.bam")
+
+            # Both should be converted to shared paths
+            assert input_result.startswith("/scratch/shared_inputs/")
+            assert output_result.startswith("/scratch/shared_inputs/")
+
+            # But should use different hashes (different GCS buckets)
+            assert input_result != output_result
+
+            # Two directory imports should be registered
+            specs = lustre.get_import_specs()
+            assert len(specs) == 2
+
+            # Verify the GCS URIs
+            gcs_dirs = [spec[0] for spec in specs]
+            assert any("gs://input-bucket/" in d for d in gcs_dirs)
+            assert any("gs://output-bucket/" in d for d in gcs_dirs)
+
+    def test_error_when_path_matches_neither_mount(self, analysis):
+        """Test that error is raised when path doesn't match any configured mount."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_mount_path": "/mnt/gcsfuse",
+            "gcs_input_uri": "gs://input-bucket",
+            "gcsfuse_output_mount_path": "/isabl/data",
+            "gcs_base_uri": "gs://output-bucket",
+            "shared_inputs_path": "/shared_inputs",
+        }
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=config):
+            lustre = LustreInputs(analysis)
+
+            with pytest.raises(gcp_lustre.GCPLustreImportError) as exc_info:
+                lustre._gcsfuse_to_gcs_uri("/unknown/path/file.bam")
+            assert "doesn't start with any configured gcsfuse mount" in str(exc_info.value)
+            assert "input: /mnt/gcsfuse" in str(exc_info.value)
+            assert "output: /isabl/data" in str(exc_info.value)
+
+    def test_output_only_config_works(self, analysis):
+        """Test that only output mount configured still works."""
+        config = {
+            "lustre_import_enabled": True,
+            "lustre_mount_path": "/scratch",
+            "gcsfuse_output_mount_path": "/isabl/data",
+            "gcs_base_uri": "gs://output-bucket",
+            "shared_inputs_path": "/shared_inputs",
+        }
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=config):
+            lustre = LustreInputs(analysis)
+            gcs_uri = lustre._gcsfuse_to_gcs_uri("/isabl/data/analyses/file.bam")
+
+            assert gcs_uri == "gs://output-bucket/analyses/file.bam"
+
+    def test_input_only_config_still_works(self, gcp_config, analysis):
+        """Test backward compatibility - input only config still works."""
+        # gcp_config fixture only has input mount configured
+        with patch("isabl_cli.lustre_inputs.get_gcp_config", return_value=gcp_config):
+            lustre = LustreInputs(analysis)
+            gcs_uri = lustre._gcsfuse_to_gcs_uri("/mnt/gcsfuse/data/file.bam")
+
+            assert gcs_uri == "gs://input-bucket/data/file.bam"

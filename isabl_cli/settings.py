@@ -83,7 +83,8 @@ _DEFAULTS = {
         # GCS bucket URIs
         "gcs_base_uri": None,  # For export: e.g., "gs://output-bucket"
         "gcs_input_uri": None,  # For import: e.g., "gs://input-bucket"
-        "gcsfuse_mount_path": None,  # Local gcsfuse mount: e.g., "/mnt/gcsfuse"
+        "gcsfuse_mount_path": None,  # Local gcsfuse mount for inputs: e.g., "/mnt/gcsfuse"
+        "gcsfuse_output_mount_path": None,  # Local gcsfuse mount for outputs: e.g., "/isabl/data"
         # Polling settings
         "lustre_poll_interval": 30,
         "lustre_max_poll_attempts": 360,

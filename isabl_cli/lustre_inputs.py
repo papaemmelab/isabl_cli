@@ -77,43 +77,69 @@ class LustreInputs:
         self.lustre_mount = gcp_config.get("lustre_mount_path", "/scratch")
         self.gcsfuse_mount = gcp_config.get("gcsfuse_mount_path")  # e.g., "/mnt/gcsfuse"
         self.gcs_input_uri = gcp_config.get("gcs_input_uri")  # e.g., "gs://input-bucket"
+        self.gcsfuse_output_mount = gcp_config.get("gcsfuse_output_mount_path")  # e.g., "/isabl/data"
+        self.gcs_base_uri = gcp_config.get("gcs_base_uri")  # e.g., "gs://output-bucket"
         self.import_enabled = gcp_config.get("lustre_import_enabled", False)
         self.shared_base = gcp_config.get("shared_inputs_path", "/shared_inputs")
 
     def _gcsfuse_to_gcs_uri(self, gcsfuse_path):
         """Convert gcsfuse mount path to GCS URI.
 
+        Supports both input data paths (from gcsfuse_mount_path) and analysis output
+        paths (from gcsfuse_output_mount_path).
+
         Arguments:
-            gcsfuse_path (str): Local gcsfuse path (e.g., /mnt/gcsfuse/data/file.fastq).
+            gcsfuse_path (str): Local gcsfuse path (e.g., /mnt/gcsfuse/data/file.fastq
+                or /isabl/data/analyses/00/01/123/file.bam).
 
         Returns:
-            str: GCS URI (e.g., gs://input-bucket/data/file.fastq).
+            str: GCS URI (e.g., gs://input-bucket/data/file.fastq or
+                gs://output-bucket/analyses/00/01/123/file.bam).
 
         Raises:
             GCPLustreImportError: If path conversion fails.
 
         Example:
             /mnt/gcsfuse/data/file.fastq -> gs://input-bucket/data/file.fastq
+            /isabl/data/analyses/00/01/123/file.bam -> gs://output-bucket/analyses/00/01/123/file.bam
         """
         # If already a GCS URI, return as-is
         if gcsfuse_path.startswith("gs://"):
             return gcsfuse_path
 
-        if not self.gcsfuse_mount or not self.gcs_input_uri:
+        # Try input mount path first
+        if self.gcsfuse_mount and self.gcs_input_uri:
+            if gcsfuse_path.startswith(self.gcsfuse_mount):
+                relative = gcsfuse_path[len(self.gcsfuse_mount):]
+                if not relative.startswith("/"):
+                    relative = "/" + relative
+                return f"{self.gcs_input_uri.rstrip('/')}{relative}"
+
+        # Try output mount path (for analysis dependencies)
+        if self.gcsfuse_output_mount and self.gcs_base_uri:
+            if gcsfuse_path.startswith(self.gcsfuse_output_mount):
+                relative = gcsfuse_path[len(self.gcsfuse_output_mount):]
+                if not relative.startswith("/"):
+                    relative = "/" + relative
+                return f"{self.gcs_base_uri.rstrip('/')}{relative}"
+
+        # Build helpful error message
+        configured_mounts = []
+        if self.gcsfuse_mount:
+            configured_mounts.append(f"input: {self.gcsfuse_mount}")
+        if self.gcsfuse_output_mount:
+            configured_mounts.append(f"output: {self.gcsfuse_output_mount}")
+
+        if not configured_mounts:
             raise GCPLustreImportError(
-                "gcsfuse_mount_path and gcs_input_uri must be configured in GCP_CONFIGURATION"
+                "No gcsfuse mount paths configured. Set gcsfuse_mount_path and/or "
+                "gcsfuse_output_mount_path in GCP_CONFIGURATION"
             )
 
-        if not gcsfuse_path.startswith(self.gcsfuse_mount):
-            raise GCPLustreImportError(
-                f"Path doesn't start with gcsfuse mount ({self.gcsfuse_mount}): {gcsfuse_path}"
-            )
-
-        # Extract relative path and build GCS URI
-        relative = gcsfuse_path[len(self.gcsfuse_mount) :]
-        if not relative.startswith("/"):
-            relative = "/" + relative
-        return f"{self.gcs_input_uri.rstrip('/')}{relative}"
+        raise GCPLustreImportError(
+            f"Path doesn't start with any configured gcsfuse mount "
+            f"({', '.join(configured_mounts)}): {gcsfuse_path}"
+        )
 
     def _get_shared_dir_key(self, gcs_dir):
         """Generate deterministic hash for a GCS directory.
