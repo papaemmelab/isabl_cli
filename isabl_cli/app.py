@@ -1247,17 +1247,23 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             # Use Lustre export (requires GCP configuration)
             return f"isabl lustre-export --lustre-path {scratch_url} --analysis-pk {analysis['pk']} --no-delete-after"
         else:
-            # Use rsync (default)
-            # Flags optimized for gcsfuse compatibility:
-            # --no-perms: Don't try to preserve permissions (gcsfuse doesn't support)
-            # --no-owner --no-group: Don't try to preserve ownership
-            # --inplace: Update files in-place instead of using temp files (avoids mkstemp)
-            # -v: Verbose output
-            # --delete: Remove files in destination that don't exist in source
-            return (
-                f"mkdir -p {final_url} && "
-                f"rsync -rv --inplace --no-perms --no-owner --no-group --delete {scratch_url}/ {final_url}/"
-            )
+            # Use gsutil rsync to copy from scratch (Lustre) to GCS
+            from isabl_cli.gcp_lustre import get_gcp_config
+            gcp_config = get_gcp_config()
+            gcsfuse_output_mount = gcp_config.get("gcsfuse_output_mount_path")
+            gcs_base_uri = gcp_config.get("gcs_base_uri")
+
+            if gcsfuse_output_mount and gcs_base_uri:
+                resolved = os.path.realpath(final_url)
+                resolved_mount = os.path.realpath(gcsfuse_output_mount)
+                if resolved.startswith(resolved_mount):
+                    relative = resolved[len(resolved_mount):]
+                    if not relative.startswith("/"):
+                        relative = "/" + relative
+                    gcs_dest = f"{gcs_base_uri.rstrip('/')}{relative}"
+                    return f"gsutil -m rsync -r {scratch_url}/ {gcs_dest.rstrip('/')}/"
+            # Fallback to gsutil with local path if GCS URI conversion fails
+            return f"gsutil -m rsync -r {scratch_url}/ {final_url}/"
 
     def _get_scratch_cleanup_command(self, analysis):
         """Generate command to cleanup scratch directory after successful copy.
