@@ -1261,9 +1261,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     if not relative.startswith("/"):
                         relative = "/" + relative
                     gcs_dest = f"{gcs_base_uri.rstrip('/')}{relative}"
-                    return f"gsutil -m rsync -r {scratch_url}/ {gcs_dest.rstrip('/')}/"
+                    return f"gsutil -m rsync -r -e {scratch_url}/ {gcs_dest.rstrip('/')}/"
             # Fallback to gsutil with local path if GCS URI conversion fails
-            return f"gsutil -m rsync -r {scratch_url}/ {final_url}/"
+            return f"gsutil -m rsync -r -e {scratch_url}/ {final_url}/"
 
     def _get_scratch_cleanup_command(self, analysis):
         """Generate command to cleanup scratch directory after successful copy.
