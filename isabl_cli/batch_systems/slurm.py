@@ -37,12 +37,17 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
         requirements = ""
 
         # ignore command in tuple and use script instead
+        individuals = set()
         for i, _ in cmd_tuples:
             analyses.append(i)
             exit_cmd = app.get_patch_status_command(i["pk"], "FAILED")
             commands.append((app.get_command_script_path(i), exit_cmd))
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
+            for t in i["targets"]:
+                sid = t.get("sample", {}).get("individual", {}).get("system_id")
+                if sid:
+                    individuals.add(sid)
 
         # get requirements as a function of the app and target methods
         get_requirements = system_settings.SUBMIT_CONFIGURATION.get("get_requirements")
@@ -65,7 +70,8 @@ def submit_slurm(app, command_tuples):  # pragma: no cover
                     jobname=(
                         f"application: {app} | "
                         f"methods: {', '.join(methods)} | "
-                        f"projects: {', '.join(map(str, projects))}"
+                        f"projects: {', '.join(map(str, projects))} | "
+                        f"individuals: {', '.join(sorted(individuals))}"
                     ),
                 )
 
