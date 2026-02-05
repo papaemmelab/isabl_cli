@@ -1587,6 +1587,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         references = analysis["references"]
         methods = {i["technique"]["method"] for i in targets}
         projects = {str(j["pk"]) for i in targets for j in i["projects"]}
+        individuals = {
+            i.get("sample", {}).get("individual", {}).get("system_id")
+            for i in targets
+        }
+        individuals.discard(None)
 
         if len(targets) > 2 or not targets:
             targets = f"{len(targets)} samples."
@@ -1605,6 +1610,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f"references: {references}",
                 f'methods: {" ".join(methods)}',
                 f'projects: {" ".join(projects)}',
+                f'individuals: {" ".join(sorted(individuals))}',
                 f'rundir: {analysis["storage_url"]}',
                 f'application: {analysis["application"]["pk"]}',
             ]
