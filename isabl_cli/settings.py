@@ -94,9 +94,11 @@ _DEFAULTS = {
         # Shared inputs
         "shared_inputs_path": "/shared_inputs",  # Base dir on lustre for shared inputs
         "lustre_cleanup_on_failure": True,  # Release shared input refs on pipeline failure
-        # Retry settings for export initiation
+        # Retry settings for export/import initiation
         "lustre_export_max_retries": 180,
         "lustre_export_retry_interval": 60,
+        "lustre_import_max_retries": 180,
+        "lustre_import_retry_interval": 60,
     },
 }
 

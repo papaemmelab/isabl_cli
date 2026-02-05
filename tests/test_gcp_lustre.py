@@ -653,6 +653,8 @@ class TestInitiateImport:
             "lustre_instance": "test-instance",
             "lustre_location": "us-east4-a",
             "lustre_project": "test-project",
+            "lustre_import_max_retries": 1,
+            "lustre_import_retry_interval": 0,
         }
 
     def test_builds_correct_command(self, gcp_config):

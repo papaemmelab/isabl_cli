@@ -132,10 +132,10 @@ def normalize_lustre_path(lustre_path, lustre_mount_path=None):
     return path
 
 
-def _retry_with_fixed_interval(func, max_retries=180, retry_interval=60, operation_name="operation"):
+def _retry_with_fixed_interval(func, max_retries=180, retry_interval=60, operation_name="operation", error_class=None):
     """Retry a function with fixed interval.
 
-    Used for waiting on resources that may be busy (e.g., only one Lustre export
+    Used for waiting on resources that may be busy (e.g., only one Lustre export/import
     allowed at a time). Retries at a fixed interval until success or max retries.
 
     Arguments:
@@ -143,19 +143,22 @@ def _retry_with_fixed_interval(func, max_retries=180, retry_interval=60, operati
         max_retries (int): Maximum number of attempts (default: 180 = 3 hours at 60s interval).
         retry_interval (int): Delay between retries in seconds (default: 60).
         operation_name (str): Name for logging.
+        error_class (type): Exception class to raise on exhaustion (default: GCPLustreExportError).
 
     Returns:
         Any: Return value of func on success.
 
     Raises:
-        GCPLustreExportError: If all retries exhausted.
+        GCPLustreExportError or error_class: If all retries exhausted.
     """
+    if error_class is None:
+        error_class = GCPLustreExportError
     for attempt in range(1, max_retries + 1):
         try:
             return func()
         except Exception as e:
             if attempt == max_retries:
-                raise GCPLustreExportError(
+                raise error_class(
                     f"{operation_name} failed after {max_retries} attempts: {e}"
                 )
 
@@ -524,30 +527,46 @@ def initiate_import(gcp_config, gcs_path, lustre_path):
     click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] GCS source: {gcs_path}")
     click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Lustre target: {lustre_path}")
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise GCPLustreImportError(
-            f"Failed to initiate Lustre import: {e.stderr or e.stdout}"
-        )
-
-    # Parse JSON output to extract operation name
-    try:
-        output = json.loads(result.stdout)
-        operation_name = output.get("name")
-        if not operation_name:
-            raise GCPLustreImportError(
-                f"Could not extract operation name from output: {result.stdout}"
+    def _run_import_command():
+        """Inner function for retry logic."""
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
             )
-    except json.JSONDecodeError as e:
-        raise GCPLustreImportError(
-            f"Failed to parse import output as JSON: {result.stdout}"
-        )
+        except subprocess.CalledProcessError as e:
+            raise GCPLustreImportError(
+                f"Failed to initiate Lustre import: {e.stderr or e.stdout}"
+            )
+
+        # Parse JSON output to extract operation name
+        try:
+            output = json.loads(result.stdout)
+            operation_name = output.get("name")
+            if not operation_name:
+                raise GCPLustreImportError(
+                    f"Could not extract operation name from output: {result.stdout}"
+                )
+        except json.JSONDecodeError as e:
+            raise GCPLustreImportError(
+                f"Failed to parse import output as JSON: {result.stdout}"
+            )
+
+        return operation_name
+
+    # Retry with fixed interval (only one Lustre import/export can run at a time)
+    max_retries = gcp_config.get("lustre_import_max_retries", 180)
+    retry_interval = gcp_config.get("lustre_import_retry_interval", 60)
+
+    operation_name = _retry_with_fixed_interval(
+        _run_import_command,
+        max_retries=max_retries,
+        retry_interval=retry_interval,
+        operation_name="Lustre import initiation",
+        error_class=GCPLustreImportError,
+    )
 
     click.echo(
         f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Import initiated. Operation: {operation_name}"
