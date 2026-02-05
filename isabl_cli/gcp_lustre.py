@@ -781,8 +781,8 @@ def run_shared_import(analysis_pk, import_specs, strategy="lustre-import"):
         lock_file = f"{full_data_dir}.lock"
         marker_file = os.path.join(full_data_dir, ".import_complete")
 
-        # Ensure parent directories exist
-        os.makedirs(os.path.dirname(full_data_dir), exist_ok=True)
+        # Ensure directories exist (create data dir before import so we own it)
+        os.makedirs(full_data_dir, exist_ok=True)
         os.makedirs(refs_dir, exist_ok=True)
 
         click.echo(
