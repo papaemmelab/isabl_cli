@@ -403,6 +403,10 @@ def run_export(lustre_path, analysis_pk, delete_after=None):
         lustre_path, gcp_config.get("lustre_mount_path")
     )
 
+    # Sync filesystem to ensure all writes are flushed before export
+    click.echo(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Syncing filesystem...")
+    subprocess.run(["sync"], check=True)
+
     # Initiate export
     operation_name = initiate_export(gcp_config, normalized_lustre_path, gcs_path)
 
