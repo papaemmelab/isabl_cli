@@ -1243,9 +1243,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         # Use application-level setting with system validation
         use_lustre_export = self._should_use_lustre_export_for_scratch()
 
+        # Redirect output to /tmp to avoid FILE_MODIFIED_FAILURE
+        # Export commands output progress which would modify head_job.log
+        # inside the directory being exported, causing failure.
+        export_log = f"/tmp/scratch_export_{analysis['pk']}.log"
+
         if use_lustre_export:
             # Use Lustre export (requires GCP configuration)
-            return f"isabl lustre-export --lustre-path {scratch_url} --analysis-pk {analysis['pk']} --no-delete-after"
+            return f"isabl lustre-export --lustre-path {scratch_url} --analysis-pk {analysis['pk']} --no-delete-after > {export_log} 2>&1"
         else:
             # Use gsutil rsync to copy from scratch (Lustre) to GCS
             from isabl_cli.gcp_lustre import get_gcp_config
@@ -1261,9 +1266,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     if not relative.startswith("/"):
                         relative = "/" + relative
                     gcs_dest = f"{gcs_base_uri.rstrip('/')}{relative}"
-                    return f"gsutil rsync -r -e {scratch_url}/ {gcs_dest.rstrip('/')}/"
+                    return f"gsutil rsync -r -e {scratch_url}/ {gcs_dest.rstrip('/')}/ > {export_log} 2>&1"
             # Fallback to gsutil with local path if GCS URI conversion fails
-            return f"gsutil rsync -r -e {scratch_url}/ {final_url}/"
+            return f"gsutil rsync -r -e {scratch_url}/ {final_url}/ > {export_log} 2>&1"
 
     def _get_scratch_cleanup_command(self, analysis):
         """Generate command to cleanup scratch directory after successful copy.

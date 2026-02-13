@@ -491,7 +491,11 @@ def get_export_command_for_script(analysis, lustre_path):
         else "--no-delete-after"
     )
 
-    return f"isabl lustre-export --lustre-path {lustre_path} --analysis-pk {analysis_pk} {delete_flag}"
+    # Redirect output to /tmp to avoid FILE_MODIFIED_FAILURE
+    # The export command outputs progress updates which would modify head_job.log
+    # inside the directory being exported, causing the export to fail.
+    export_log = f"/tmp/lustre_export_{analysis_pk}.log"
+    return f"isabl lustre-export --lustre-path {lustre_path} --analysis-pk {analysis_pk} {delete_flag} > {export_log} 2>&1"
 
 
 # ============================================================================
