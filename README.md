@@ -8,6 +8,9 @@
 
 > **_Terms of Use: Academic Research_**
 
+> [!TIP]
+> Talk to your genomics data with AI. Try the [Isabl MCP Server](https://github.com/juanesarango/isabl-mcp) with Claude Code, Cursor, or your favorite agentic tool.
+
 `isabl_cli` is a command line client and SDK for the Isabl Platform infrastructure.
 
 ## 🧬 Isabl Platform
