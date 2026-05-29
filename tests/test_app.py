@@ -19,6 +19,10 @@ class NonSequencingApplication(AbstractApplication):
     NAME = str(uuid.uuid4())
     VERSION = "STILL_TESTING"
 
+    def get_command(*_):  # pylint: disable=no-method-argument
+        return "echo instantiated without an assembly"
+
+
 
 class ExperimentsFromDefaulCLIApplication(AbstractApplication):
     NAME = str(uuid.uuid4())
@@ -590,7 +594,7 @@ def test_engine(tmpdir):
 
 
 def test_validate_is_pair():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     application.validate_is_pair([{"pk": 1}], [{"pk": 2}])
 
     with pytest.raises(AssertionError) as error:
@@ -607,7 +611,7 @@ def test_validate_is_pair():
 def test_validate_reference_genome(tmpdir):
     reference = tmpdir.join("reference.fasta")
     required = ".fai", ".amb", ".ann", ".bwt", ".pac", ".sa"
-    application = AbstractApplication()
+    application = BaseMockApplication()
 
     with pytest.raises(AssertionError) as error:
         application.validate_reference_genome(reference.strpath)
@@ -625,7 +629,7 @@ def test_validate_reference_genome(tmpdir):
 
 
 def test_validate_fastq_only():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"raw_data": [], "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
@@ -652,7 +656,7 @@ def test_validate_fastq_only():
 
 
 def test_validate_methods():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"technique": {"method": "FOO"}, "system_id": "FOO BAR"}]
 
     with pytest.raises(AssertionError) as error:
@@ -662,7 +666,7 @@ def test_validate_methods():
 
 
 def test_validate_pdx_only():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"custom_fields": {"is_pdx": False}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
@@ -672,7 +676,7 @@ def test_validate_pdx_only():
 
 
 def test_validate_are_normals():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [
         api.isablfy(
             {"sample": {"category": "TUMOR", "system_id": "FOO"}, "system_id": "FOO"}
@@ -686,7 +690,7 @@ def test_validate_are_normals():
 
 
 def test_validate_dna_rna_only():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"technique": {"category": "DNA"}, "system_id": "FOO"}]
 
     with pytest.raises(AssertionError) as error:
@@ -713,7 +717,7 @@ def test_validate_species():
 
 
 def test_validate_one_target_no_references():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{}]
     references = []
     application.validate_one_target_no_references(targets, references)
@@ -726,7 +730,7 @@ def test_validate_one_target_no_references():
 
 
 def test_validate_atleast_onetarget_onereference():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{}]
     references = [{}]
     application.validate_at_least_one_target_one_reference(targets, references)
@@ -739,7 +743,7 @@ def test_validate_atleast_onetarget_onereference():
 
 
 def test_validate_targets_not_in_references():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"pk": 1, "system_id": 1}]
     references = [{"pk": 2, "system_id": 2}]
     application.validate_targets_not_in_references(targets, references)
@@ -752,7 +756,7 @@ def test_validate_targets_not_in_references():
 
 
 def test_validate_dna_tuples():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"system_id": 1, "technique": {"category": "DNA"}}]
     references = [{"system_id": 2, "technique": {"category": "DNA"}}]
     application.validate_dna_only(targets + references)
@@ -765,14 +769,14 @@ def test_validate_dna_tuples():
 
 
 def test_validate_dna_pairs():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"pk": 1, "technique": {"category": "DNA"}}]
     references = [{"pk": 2, "technique": {"category": "DNA"}}]
     application.validate_dna_pairs(targets, references)
 
 
 def test_validate_same_technique():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"system_id": 1, "technique": {"slug": "1"}}]
     references = [{"system_id": 2, "technique": {"slug": "1"}}]
     application.validate_same_technique(targets, references)
@@ -791,7 +795,7 @@ def test_validate_same_technique():
 
 
 def test_validate_same_platform():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"system_id": 1, "platform": {"slug": "1"}}]
     references = [{"system_id": 2, "platform": {"slug": "1"}}]
     application.validate_same_platform(targets, references)
@@ -810,7 +814,7 @@ def test_validate_same_platform():
     
 
 def test_validate_source():
-    application = AbstractApplication()
+    application = BaseMockApplication()
     targets = [{"sample": {"system_id": "FOO", "source": "BLOOD"}}]
     application.validate_source(targets, "BLOOD")
 
@@ -884,7 +888,7 @@ def test_get_experiments_from_default_cli_options(tmpdir):
 
 def test_validate_individuals():
     # Test matched analyis
-    matched_application = AbstractApplication()
+    matched_application = BaseMockApplication()
 
     targets = [
         {"system_id": 1, "sample": {"individual": {"pk": 1, "system_id": "ind1"}}}
@@ -902,7 +906,7 @@ def test_validate_individuals():
     assert "Same individual required:" in str(error.value)
 
     # Test unmatched analysis
-    unmatched_application = AbstractApplication()
+    unmatched_application = BaseMockApplication()
     unmatched_application.IS_UNMATCHED = True
 
     targets = [
