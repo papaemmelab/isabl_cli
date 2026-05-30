@@ -142,12 +142,22 @@ def submit_slurm_array(
                     f"<< EOF\n#!/bin/bash\n{exit_command}\nEOF\n"
                 )
 
+                # When unbuffer is on, the pty merges stdout+stderr. Redirect
+                # stderr *inside* the pty (via `bash -c '... 2> head_job.err'`)
+                # so the program writing to fd 2 lands in a separate file
+                # before the pty captures fd 1. Preserves head_job.err.
+                head_job_err = join(rundir, "head_job.err")
+                run_cmd = (
+                    f"{unbuffer} bash -c 'bash {command} 2> {head_job_err}'"
+                    if unbuffer else f"bash {command}"
+                )
+
                 # use random sleep to avoid parallel API hits
                 f.write(
                     f"#!/bin/bash\n\n"
                     f"sleep {random.uniform(0, 10):.3f} && "
                     f"echo {dependency} >> {command.replace('head_job.sh', 'job_ids.txt')} && "
-                    f"({after_not_ok_job}) && {unbuffer} bash {command}"
+                    f"({after_not_ok_job}) && {run_cmd}"
                 )
 
             for j in {"log", "err", "exit"}:

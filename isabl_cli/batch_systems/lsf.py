@@ -132,10 +132,18 @@ def submit_lsf_array(
             index += 1
             rundir = abspath(dirname(command))
 
+            # When unbuffer is on, the pty merges stdout+stderr. Redirect
+            # stderr *inside* the pty so head_job.err is preserved.
+            head_job_err = join(rundir, "head_job.err")
+            run_cmd = (
+                f"{unbuffer} bash -c 'bash {command} 2> {head_job_err}'"
+                if unbuffer else f"bash {command}"
+            )
+
             with open(join(root, "in.%s" % index), "w") as f:
                 # use random sleep to avoid parallel API hits
                 f.write(
-                    f"sleep {random.uniform(0, 10):.3} && {unbuffer} bash {command}"
+                    f"sleep {random.uniform(0, 10):.3} && {run_cmd}"
                 )
 
             with open(join(root, "exit_cmd.%s" % index), "w") as f:
