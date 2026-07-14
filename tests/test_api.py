@@ -122,3 +122,73 @@ def test_send_error_email():
     # Test notification for errors
     assert api.send_error_email(["test@test.com"], "test", "test").ok
     assert api.send_error_email(["test1@test.com","test2@test.com"], "test", "test").ok
+
+
+class FakeAuthResponse:
+    """Stand-in for requests responses in token-header tests."""
+
+    def __init__(self, payload, ok=True):
+        self._payload = payload
+        self.ok = ok
+        self.text = str(payload)
+
+    def json(self):
+        return self._payload
+
+
+@pytest.fixture
+def isolated_token_state(monkeypatch, tmp_path):
+    """Keep token tests away from ~/.isabl and the lru_cache."""
+    monkeypatch.setattr(
+        user_settings.__class__, "settings_path", str(tmp_path / "settings.json")
+    )
+    monkeypatch.delenv("ISABL_API_TOKEN", raising=False)
+    monkeypatch.setattr(api, "send_analytics", lambda user: None)
+    api.get_token_headers.cache_clear()
+    yield monkeypatch
+    api.get_token_headers.cache_clear()
+
+
+def test_get_token_headers_env_token(isolated_token_state):
+    monkeypatch = isolated_token_state
+    monkeypatch.setenv("ISABL_API_TOKEN", "env-token")
+    seen = {}
+
+    def fake_retry_request(method, **kwargs):
+        seen["headers"] = kwargs.get("headers")
+        return FakeAuthResponse({"username": "alice"})
+
+    monkeypatch.setattr(api, "retry_request", fake_retry_request)
+    assert api.get_token_headers()["Authorization"] == "Token env-token"
+    assert seen["headers"]["Authorization"] == "Token env-token"
+    # the environment token is used directly, never persisted
+    assert user_settings.api_token is None
+
+
+def test_get_token_headers_invalid_env_token(isolated_token_state):
+    monkeypatch = isolated_token_state
+    monkeypatch.setenv("ISABL_API_TOKEN", "expired-token")
+    monkeypatch.setattr(
+        api,
+        "retry_request",
+        lambda method, **kwargs: FakeAuthResponse({"detail": "Invalid token."}, ok=False),
+    )
+
+    # never falls back to the interactive prompt when the token came from the env
+    with pytest.raises(click.ClickException, match="ISABL_API_TOKEN is not valid"):
+        api.get_token_headers()
+
+
+def test_login_with_pasted_token(isolated_token_state):
+    from isabl_cli import commands
+
+    monkeypatch = isolated_token_state
+    monkeypatch.setattr(
+        api,
+        "retry_request",
+        lambda method, **kwargs: FakeAuthResponse({"username": "alice"}),
+    )
+
+    result = CliRunner().invoke(commands.login, ["--token", "pasted-token"])
+    assert result.exit_code == 0
+    assert user_settings.api_token == "pasted-token"

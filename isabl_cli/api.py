@@ -217,16 +217,31 @@ def retry_request(method, **kwargs):
 @lru_cache(None)
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
-    headers = {"Authorization": f"Token {user_settings.api_token}"}
+    env_token = environ.get("ISABL_API_TOKEN")
+    headers = {"Authorization": f"Token {env_token or user_settings.api_token}"}
     auth_url = get_api_url("/rest-auth/user/")
     response = retry_request("get", url=auth_url, headers=headers)
 
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
+        if env_token:  # never prompt when the token came from the environment
+            raise click.ClickException(
+                f"ISABL_API_TOKEN is not valid for {get_api_url('/')}. "
+                "Copy a fresh token from the web UI user menu."
+            )
+
         testing = (
             basename(sys.argv[0]) in ("pytest", "py.test")
         ) or "pytest" in sys.modules
+
+        if not testing:  # pragma: no cover
+            click.secho(
+                "Tip: single sign-on users can paste an API token from the web "
+                "UI user menu with `isabl login --token`, or set ISABL_API_TOKEN.",
+                err=True,
+                fg="blue",
+            )
 
         response = retry_request(
             "post",

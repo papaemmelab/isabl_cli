@@ -128,9 +128,16 @@ export CLIENT_ID="<your-client-id>"
 # Authenticate and cache credentials
 isabl login
 
+# Single sign-on users: paste an API token instead of a password
+# (copy it from the web UI user menu → "Copy API token")
+isabl login --token <your-api-token>
+
 # See all available commands
 isabl --help
 ```
+
+For scripted or CI environments, set `ISABL_API_TOKEN` to skip interactive
+login entirely; the token is used directly and never written to disk.
 
 ## CI/CD Setup
 

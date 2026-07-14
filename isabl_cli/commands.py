@@ -51,9 +51,15 @@ def _filters_or_identifiers(endpoint, identifiers, filters, fields=None):
 
 
 @click.command()
-def login():  # pragma: no cover
-    """Login with isabl credentials."""
-    user_settings.api_token = None
+@click.option(
+    "--token",
+    default=None,
+    help="API token copied from the web UI user menu (for single sign-on users).",
+)
+def login(token):  # pragma: no cover
+    """Login with isabl credentials or a pasted API token."""
+    # a pasted token is validated on use; None clears and triggers the prompt
+    user_settings.api_token = token
     api.get_token_headers.cache_clear()
     api.get_token_headers()
 
