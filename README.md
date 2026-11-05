@@ -140,6 +140,34 @@ isabl login
 isabl --help
 ```
 
+### Applications from installed packages
+
+Instead of listing every application in `INSTALLED_APPLICATIONS`, a package can provide its applications through the `isabl_cli.applications` entry point group:
+
+```python
+# setup.py of your applications package
+entry_points={"isabl_cli.applications": ["my_apps = my_apps.isabl:get_isabl_info"]}
+```
+
+```python
+# my_apps/isabl.py
+from isabl_cli.discovery import find_applications
+
+def get_isabl_info():
+    return {"applications": find_applications("my_apps.apps", required=("NAME", "VERSION", "ASSEMBLY"))}
+```
+
+`find_applications` imports the package and returns the `AbstractApplication` subclasses defined in it, skipping classes with `_PRIVATE = True`. To keep `isabl --help` fast, a provider can instead return metadata dictionaries from `isabl_cli.discovery.find_application_specs` (e.g. saved to a JSON file when apps change); those applications are listed from the metadata and only imported when their command runs.
+
+Then enable discovery in the client settings:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `DISCOVER_APPLICATIONS` | `False` | Add applications from installed providers to the CLI. |
+| `EXCLUDED_APPLICATIONS` | `[]` | Glob patterns on import strings or command names to hide, e.g. `["my_apps.apps.legacy.*", "bwa-mem-0.0.*"]`. |
+
+`INSTALLED_APPLICATIONS` keeps working and takes precedence; an application found in both places is added once.
+
 ## CI/CD Setup
 
 The GitHub Actions workflow requires the following secrets to be configured in the repository settings:
