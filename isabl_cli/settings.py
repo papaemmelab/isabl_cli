@@ -37,6 +37,7 @@ _DEFAULTS = {
     "TIME_ZONE": "America/New_York",
     "INSTALLED_APPLICATIONS": [],
     "EXCLUDED_APPLICATIONS": [],
+    "DISCOVER_APPLICATIONS": False,
     "CUSTOM_COMMANDS": [],
     "ON_DATA_IMPORT": [],
     "ON_STATUS_CHANGE": [],

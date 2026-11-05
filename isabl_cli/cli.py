@@ -23,6 +23,7 @@ import click
 
 from isabl_cli import __version__
 from isabl_cli import exceptions
+from isabl_cli import providers
 from isabl_cli.settings import system_settings
 from isabl_cli.utils import send_analytics
 
@@ -34,9 +35,16 @@ def main():  # pragma: no cover
     pass
 
 
-def add_apps_groups(apps):
-    """Group apps by assembly."""
+def add_apps_groups(apps, lazy_applications=()):
+    """
+    Group apps by assembly.
+
+    Arguments:
+        apps (list): application classes, their commands are built now.
+        lazy_applications (list): providers.LazyApplication, imported on use.
+    """
     apps_dict = defaultdict(dict)
+    lazy_dict = defaultdict(dict)
 
     for i in apps:  # pylint: disable=W0621
         start_time = time.time()
@@ -50,10 +58,21 @@ def add_apps_groups(apps):
         if (time.time() - start_time) > 0.1:  # pragma: no cover
             click.secho(f"{i.__name__} is loading slowly...", err=True, fg="yellow")
 
-    for i, j in apps_dict.items():
+    for i in lazy_applications:
+        if i.command_name not in apps_dict.get(i.assembly, {}):
+            lazy_dict[i.assembly][i.command_name] = i
+
+    for i in dict.fromkeys(list(apps_dict) + list(lazy_dict)):
         name = f"apps-{slugify(i)}" if i else "apps"
         help_text = f"{i} applications." if i else "data processing applications."
-        main.add_command(click.Group(name=name, commands=j, help=help_text))
+        main.add_command(
+            providers.ApplicationGroup(
+                name=name,
+                commands=apps_dict.get(i),
+                lazy_applications=lazy_dict.get(i),
+                help=help_text,
+            )
+        )
 
 
 for i in system_settings.SYSTEM_COMMANDS:
@@ -66,7 +85,13 @@ for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
 try:
-    add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
+    add_apps_groups(
+        *providers.collect_applications(
+            installed=system_settings.INSTALLED_APPLICATIONS,
+            excluded=system_settings.EXCLUDED_APPLICATIONS,
+            discover=system_settings.DISCOVER_APPLICATIONS,
+        )
+    )
 except ImportError as error:
     click.secho(f"Failed to import applications: {error}", err=True, fg="red")
 
