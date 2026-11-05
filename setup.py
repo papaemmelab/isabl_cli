@@ -40,7 +40,8 @@ setup(
         "PyYAML>=5.3",
         "requests>=2.19.1",
         "six>=1.11.0",
-        "packaging>=21.0"
+        "packaging>=21.0",
+        "importlib-metadata; python_version<'3.8'"
     ],
     extras_require={
         "test": [

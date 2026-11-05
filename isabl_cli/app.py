@@ -15,7 +15,6 @@ import traceback
 
 from cached_property import cached_property
 from click import progressbar
-from slugify import slugify
 import analytics
 import click
 
@@ -25,6 +24,7 @@ from isabl_cli import exceptions
 from isabl_cli import utils
 from isabl_cli import options
 from isabl_cli.batch_systems import submit_local
+from isabl_cli.discovery import cli_command_name
 from isabl_cli.settings import get_application_settings
 from isabl_cli.settings import system_settings
 
@@ -785,7 +785,7 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     def get_cli_command_name(self):
         """Get name for isabl_cli command."""
-        return f"{slugify(self.NAME)}-{slugify(self.VERSION, separator='.')}"
+        return cli_command_name(self.NAME, self.VERSION)
 
     @classmethod
     def get_experiments_from_default_cli_options(cls, cli_options):
