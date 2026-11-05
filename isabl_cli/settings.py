@@ -36,6 +36,7 @@ _DEFAULTS = {
     "CLIENT_NAME": None,
     "TIME_ZONE": "America/New_York",
     "INSTALLED_APPLICATIONS": [],
+    "EXCLUDED_APPLICATIONS": [],
     "CUSTOM_COMMANDS": [],
     "ON_DATA_IMPORT": [],
     "ON_STATUS_CHANGE": [],
