@@ -242,6 +242,7 @@ def test_check_paths(tmp_path):
         f"path outside production locations: b.c = {tmp_path}/absent",
     ]
     assert check_paths({"a": str(present)}, [f"{tmp_path}/"]) == []
+    assert check_paths({"a": str(tmp_path)}, [f"{tmp_path}/"]) == []
 
 
 def test_settings_record(tmp_path, monkeypatch):

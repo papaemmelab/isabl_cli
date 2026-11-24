@@ -524,7 +524,8 @@ def check_paths(values: object, production: list[str] | None = None) -> list[str
     for key, path in setting_paths(values):
         if not os.path.exists(path):
             faults.append(f"path does not exist: {key} = {path}")
-        if production is not None and not path.startswith(tuple(production)):
+        # The added slash lets a production folder itself pass.
+        if production is not None and not f"{path}/".startswith(tuple(production)):
             faults.append(f"path outside production locations: {key} = {path}")
     return faults
 
