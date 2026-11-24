@@ -1,5 +1,6 @@
 """Package exceptions."""
 
+from click import ClickException
 from click import UsageError
 
 
@@ -26,6 +27,15 @@ class MissingOutputError(PackageBaseException):
 class ConfigurationError(PackageBaseException):
 
     """A class to raise when is not properly configured."""
+
+
+class ApplicationNotRegisteredError(ConfigurationError, ClickException):
+
+    """A class to raise when an application has no database object yet."""
+
+    def __init__(self, message):
+        """Show the message without a traceback when raised in a command."""
+        ClickException.__init__(self, message)
 
 
 class ImplementationError(PackageBaseException):

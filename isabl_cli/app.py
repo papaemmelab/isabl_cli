@@ -91,6 +91,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     dependencies_results = []
 
+    # Several classes can share one application (same NAME, VERSION and ASSEMBLY),
+    # for example the steps of a workflow that act on the same analyses (run, refit,
+    # finalise) or an alias kept for an old class name. Only one of them, the
+    # primary class, registers the application and is stored as its
+    # `application_class`. Set this to False in the others, they use the application
+    # registered by the primary class. See `register` and `isabl list-apps`.
+    application_primary = True
+
     # It is possible to create applications that are unique at the individual level.
     # A good example of a unique per individual application could be a patient centric
     # report that aggregates results across all samples. Applications that require a
@@ -557,7 +565,177 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     @cached_property
     def application(self):
-        """Get application database object."""
+        """
+        Get the application database object, it must have been registered.
+
+        Running an application never creates or changes its database object, see
+        `register` and `isabl register-apps`.
+        """
+        return self._get_registered(self.NAME)
+
+    @cached_property
+    def individual_level_auto_merge_application(self):
+        """Get the individual level application database object."""
+        assert self.has_individual_auto_merge, (
+            "No logic implemented to merge analyses for an individual..."
+        )
+
+        return self._get_registered(self.individual_level_auto_merge_name)
+
+    @cached_property
+    def project_level_auto_merge_application(self):
+        """Get the project level application database object."""
+        assert self.has_project_auto_merge, (
+            "No logic implemented to merge project analyses..."
+        )
+
+        return self._get_registered(self.project_level_auto_merge_name)
+
+    @property
+    def individual_level_auto_merge_name(self):
+        """Name of the individual level auto merge application."""
+        return f"{self.NAME} Individual Application"
+
+    @property
+    def project_level_auto_merge_name(self):
+        """Name of the project level auto merge application."""
+        return f"{self.NAME} Project Application"
+
+    @classmethod
+    def get_application_class_path(cls):
+        """Import string stored as the `application_class` of the application."""
+        return f"{cls.__module__}.{cls.__name__}"
+
+    def register(self):
+        """
+        Create or update the application database object, and its auto merge ones.
+
+        This is the only way the database object of an application is created or
+        changed, running an application only reads it. Only the primary class of an
+        application can register it, see `application_primary`.
+
+        Returns:
+            types.SimpleNamespace: the application database object.
+        """
+        self._validate_identity()
+
+        if not self.application_primary:
+            raise exceptions.ConfigurationError(
+                f"{self.get_application_class_path()} is not the primary class of "
+                f"{self._identity}, register its primary class instead."
+            )
+
+        application_class = self.get_application_class_path()
+        assembly = (
+            {"name": self.ASSEMBLY, "species": self.SPECIES} if self.ASSEMBLY else None
+        )
+
+        application = api.create_instance(
+            endpoint="applications",
+            name=self.NAME,
+            version=self.VERSION,
+            assembly=assembly,
+        )
+
+        # settings are not written here, see `patch_application_settings`
+        application = api.patch_instance(
+            "applications",
+            application.pk,
+            description=self.application_description,
+            application_class=application_class,
+            results=self._application_results,
+            url=self.application_url,
+        )
+
+        merges = []
+        if self.has_individual_auto_merge:
+            merges.append(
+                (
+                    self.individual_level_auto_merge_name,
+                    "Individual",
+                    self._application_individual_level_results,
+                )
+            )
+
+        if self.has_project_auto_merge:
+            merges.append(
+                (
+                    self.project_level_auto_merge_name,
+                    "Project",
+                    self._application_project_level_results,
+                )
+            )
+
+        for name, level, results in merges:
+            merge = api.create_instance(
+                endpoint="applications",
+                name=name,
+                version=self.VERSION,
+                assembly=application.assembly,
+            )
+
+            api.patch_instance(
+                "applications",
+                merge.pk,
+                description=f"{self.NAME} {self.VERSION} {level} Level Application.",
+                application_class=application_class,
+                results=results,
+                url=self.application_url,
+            )
+
+        # make sure cached database objects are fetched again
+        for i in [
+            "application",
+            "primary_key",
+            "settings",
+            "assembly",
+            "individual_level_auto_merge_application",
+            "project_level_auto_merge_application",
+        ]:
+            self.__dict__.pop(i, None)
+
+        return self.application
+
+    def get_registered_application(self, name=None):
+        """
+        Return the application database object, or None if not registered.
+
+        Arguments:
+            name (str): defaults to NAME, pass an auto merge application name to get
+                the auto merge application.
+        """
+        self._validate_identity()
+        name = name or self.NAME
+
+        for i in api.get_instances(
+            "applications", verbose=False, name=name, version=self.VERSION
+        ):
+            assembly = i.assembly.name if i.assembly else None
+            if i.name == name and i.version == self.VERSION and assembly == self.ASSEMBLY:
+                return i
+
+        return None
+
+    def _get_registered(self, name):
+        application = self.get_registered_application(name)
+
+        if application is None:
+            registered_by = (
+                "" if self.application_primary else ", by its primary class"
+            )
+            raise exceptions.ApplicationNotRegisteredError(
+                f"Application '{name}' {self.VERSION} {self.ASSEMBLY or ''} is not "
+                f"registered. Register it with `isabl register-apps "
+                f"{self.get_cli_command_name()} --commit`{registered_by}."
+            )
+
+        return application
+
+    @property
+    def _identity(self):
+        return f"{self.NAME} {self.VERSION} {self.ASSEMBLY or ''}".strip()
+
+    def _validate_identity(self):
         assert all([self.NAME, self.VERSION]), (
             f"NAME must be set: {self.NAME}\n" f"VERSION must be set: {self.VERSION}\n"
         )
@@ -567,76 +745,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f"ASSEMBLY must be set: {self.ASSEMBLY}\n"
                 f"SPECIES must be set: {self.SPECIES}\n"
             )
-
-        application = api.create_instance(
-            endpoint="applications",
-            name=self.NAME,
-            version=self.VERSION,
-            assembly=(
-                {"name": self.ASSEMBLY, "species": self.SPECIES}
-                if self.ASSEMBLY
-                else None
-            ),
-        )
-
-        if application.settings.get("default_client") is None:
-            application.settings["default_client"] = {}
-
-        return api.patch_instance(
-            description=self.application_description,
-            endpoint="applications",
-            instance_id=application["pk"],
-            application_class=f"{self.__module__}.{self.__class__.__name__}",
-            results=self._application_results,
-            url=self.application_url,
-            settings=application.settings,
-        )
-
-    @cached_property
-    def individual_level_auto_merge_application(self):
-        """Get or create an individual level application database object."""
-        assert not hasattr(
-            self.merge_individual_analyses, "__isabstractmethod__"
-        ), "No logic implemented to merge analyses for an individual..."
-
-        application = api.create_instance(
-            endpoint="applications",
-            name=f"{self.NAME} Individual Application",
-            version=self.VERSION,
-            assembly=self.application["assembly"],
-        )
-
-        return api.patch_instance(
-            description=f"{self.NAME} {self.VERSION} Individual Level Application.",
-            endpoint="applications",
-            instance_id=application["pk"],
-            results=self._application_individual_level_results,
-            application_class=self.application["application_class"],
-            url=self.application_url,
-        )
-
-    @cached_property
-    def project_level_auto_merge_application(self):
-        """Get or create a project level application database object."""
-        assert not hasattr(
-            self.merge_project_analyses, "__isabstractmethod__"
-        ), "No logic implemented to merge project analyses..."
-
-        application = api.create_instance(
-            endpoint="applications",
-            name=f"{self.NAME} Project Application",
-            version=self.VERSION,
-            assembly=self.application["assembly"],
-        )
-
-        return api.patch_instance(
-            description=f"{self.NAME} {self.VERSION} Project Level Application.",
-            endpoint="applications",
-            instance_id=application["pk"],
-            results=self._application_project_level_results,
-            application_class=self.application["application_class"],
-            url=self.application_url,
-        )
 
     @cached_property
     def assembly(self):
@@ -1270,7 +1378,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         return utils.get_results(*args, **kwargs)
 
     def patch_application_settings(self, client_id=None, **settings):
-        """Patch application settings if necessary."""
+        """
+        Patch application settings if necessary.
+
+        The application must be registered first, see `register`.
+        """
         assert system_settings.is_admin_user, "Apps can be patched only by admin user."
         click.echo(f"Patching settings: {self.NAME} {self.VERSION} {self.ASSEMBLY}\n")
         client_id = str(client_id or self.client_id)  # must be a string
@@ -1303,20 +1415,6 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 click.secho(
                     f"\tPatched failed with error: {error}.\n", err=True, fg="red"
                 )
-
-        # create or update project level application
-        if self.has_project_auto_merge:
-            assert self.project_level_auto_merge_application
-            click.secho(
-                "\tSuccessfully updated project level application.\n", fg="magenta"
-            )
-
-        # create or update individual level application
-        if self.has_individual_auto_merge:
-            assert self.individual_level_auto_merge_application
-            click.secho(
-                "\tSuccessfully updated individual level application.\n", fg="magenta"
-            )
 
     @staticmethod
     def get_job_name(analysis):
