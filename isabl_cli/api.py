@@ -628,7 +628,7 @@ def patch_analysis_status(analysis, status):
     analysis["status"] = status  # make sure that the analysis status is updated
     _set_analysis_permissions(analysis)
 
-    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS", "REJECTED"}:
+    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS", "FINISHED", "REJECTED"}:
         data["storage_usage"] = utils.get_tree_size(storage_url)
 
     if status == "STARTED":
@@ -641,6 +641,10 @@ def patch_analysis_status(analysis, status):
             data["status"] = "FAILED"
             patch_instance("analyses", analysis["pk"], **data)
             raise error
+    elif status == "FINISHED":
+        # expose results of non-admin runs before process-finished, which
+        # still validates them strictly when marking the analysis SUCCEEDED
+        data["results"] = _get_analysis_results(analysis, raise_error=False)
 
     return patch_instance("analyses", analysis["pk"], **data)
 

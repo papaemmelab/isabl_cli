@@ -324,6 +324,25 @@ def test_force_process_finished_tags(tmpdir):
     assert analysis["status"] == "SUCCEEDED"
 
 
+def test_patch_status_finished_results(tmpdir):
+    """Check FINISHED analyses get results and storage usage patched."""
+    application = MockApplication()
+    analysis = api.create_instance(
+        "analyses",
+        storage_url=tmpdir.strpath,
+        status="STARTED",
+        application=application.application,
+        targets=[api.create_instance("experiments", **factories.ExperimentFactory())],
+    )
+    runner = CliRunner()
+    args = ["--key", analysis["pk"], "--status", "FINISHED"]
+    runner.invoke(commands.patch_status, args, catch_exceptions=False)
+    analysis = api.get_instance("analyses", analysis["pk"])
+    assert analysis["status"] == "FINISHED"
+    assert analysis["results"]["analysis_result_key"] == 1
+    assert analysis["storage_usage"] is not None
+
+
 def test_rejected_analysis(tmpdir):
     """Check an analysis can be rejected using the command cli."""
     analysis = api.create_instance(
