@@ -634,17 +634,13 @@ def patch_analysis_status(analysis, status):
     if status == "STARTED":
         data["ran_by"] = system_settings.api_username
 
-    if status in {"SUCCEEDED", "IN_PROGRESS"}:
+    if status in {"SUCCEEDED", "IN_PROGRESS", "FINISHED"}:
         try:
             data["results"] = _get_analysis_results(analysis, raise_error=True)
         except Exception as error:  # pragma: no cover
             data["status"] = "FAILED"
             patch_instance("analyses", analysis["pk"], **data)
             raise error
-    elif status == "FINISHED":
-        # expose results of non-admin runs before process-finished, which
-        # still validates them strictly when marking the analysis SUCCEEDED
-        data["results"] = _get_analysis_results(analysis, raise_error=False)
 
     return patch_instance("analyses", analysis["pk"], **data)
 
