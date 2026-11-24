@@ -157,3 +157,26 @@ def assert_run(
                 )
 
     return ret
+
+
+def auto_register_applications(monkeypatch):
+    """
+    Register applications the first time they are used, for tests only.
+
+    Applications must be registered before they run (see `isabl register-apps`),
+    tests that create a fresh database can call this from an autouse fixture:
+
+        @pytest.fixture(autouse=True)
+        def auto_register(monkeypatch):
+            utils.auto_register_applications(monkeypatch)
+    """
+    from isabl_cli.app import AbstractApplication  # pylint: disable=C0415
+
+    get_registered = AbstractApplication._get_registered
+
+    def _get_registered(self, name):
+        if self.application_primary and self.get_registered_application(name) is None:
+            self.register()
+        return get_registered(self, name)
+
+    monkeypatch.setattr(AbstractApplication, "_get_registered", _get_registered)

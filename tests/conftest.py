@@ -32,6 +32,7 @@ check_test_api_url()
 
 # pylint: disable=wrong-import-position
 from isabl_cli.api import create_instance, patch_instance, get_instance
+from isabl_cli.test import utils
 from isabl_cli.settings import _DEFAULTS
 
 
@@ -39,6 +40,14 @@ from isabl_cli.settings import _DEFAULTS
 def pytest_runtest_setup(item):
     """Check the API URL again before each test and its fixtures are set up."""
     check_test_api_url()
+
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line(
+        "markers",
+        "no_auto_register: don't register applications when they are first used",
+    )
 
 
 def pytest_sessionstart():
@@ -63,3 +72,15 @@ def set_data_dir(tmpdir_factory):
     """Set data dir for all tests."""
     _DEFAULTS["BASE_STORAGE_DIRECTORY"] = tmpdir_factory.mktemp("data").strpath
 
+
+
+@pytest.fixture(autouse=True)
+def auto_register_applications(request, monkeypatch):
+    """
+    Register test applications the first time they are used.
+
+    Most tests define their own applications and are about running them. Use the
+    `no_auto_register` marker to test the registration itself.
+    """
+    if not request.node.get_closest_marker("no_auto_register"):
+        utils.auto_register_applications(monkeypatch)
