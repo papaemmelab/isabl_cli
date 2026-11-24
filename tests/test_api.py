@@ -46,6 +46,44 @@ def test_api_request():
         api.api_request("delete", url="http://google.com")
 
 
+def _spy_requests(monkeypatch, *methods):
+    """Record headers sent by `requests.<method>` while still performing the call."""
+    sent = []
+    for method in methods:
+        real = getattr(requests, method)
+
+        def spy(*args, _real=real, **kwargs):
+            sent.append(dict(kwargs.get("headers") or {}))
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(requests, method, spy)
+    return sent
+
+
+def test_requests_send_cli_version(monkeypatch):
+    from isabl_cli import __version__
+
+    sent = _spy_requests(monkeypatch, "get")
+    api.get_token_headers.cache_clear()  # force the /rest-auth/user/ check too
+    assert api.api_request("get", url="auth").ok
+    assert api.api_request("get", url="/", authenticate=False).ok
+
+    assert len(sent) == 3  # token check, authenticated get, unauthenticated get
+    for headers in sent:
+        assert headers[api.CLI_VERSION_HEADER] == __version__
+        assert headers["User-Agent"].startswith(f"isabl_cli/{__version__} ")
+
+    assert "Authorization" in sent[1]
+    assert "Authorization" not in sent[2]
+
+
+def test_cli_headers_do_not_mutate_token_headers():
+    token_headers = api.get_token_headers()
+    api.api_request("get", url="auth")
+    assert api.CLI_VERSION_HEADER not in token_headers
+    assert set(token_headers) == {"Authorization"}
+
+
 def test_api_methods():
     endpoint = "diseases"
     diseases = [factories.DiseaseFactory() for _ in range(3)]

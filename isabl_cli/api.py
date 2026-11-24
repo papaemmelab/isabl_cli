@@ -194,8 +194,25 @@ def get_api_url(url):
     return url
 
 
+CLI_VERSION_HEADER = "X-Isabl-CLI-Version"
+
+
+@lru_cache(None)
+def get_cli_headers():
+    """Get headers that identify this isabl_cli version to the API."""
+    from isabl_cli import __version__  # avoid circular import
+
+    return {
+        CLI_VERSION_HEADER: __version__,
+        "User-Agent": f"isabl_cli/{__version__} {requests.utils.default_user_agent()}",
+    }
+
+
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
+    # build a new dict so cached headers (e.g. get_token_headers) aren't mutated
+    kwargs["headers"] = {**get_cli_headers(), **(kwargs.get("headers") or {})}
+
     for i in [0.2, 1, 5, 10, 60, 90, 120, 300, 900]:  # attempt some retries
         try:
             error = None
