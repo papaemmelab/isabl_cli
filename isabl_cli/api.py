@@ -697,6 +697,10 @@ def patch_analysis_status(analysis, status):
             data["status"] = "FAILED"
             patch_instance("analyses", analysis["pk"], **data)
             raise error
+    elif status == "FINISHED":
+        # expose results of non-admin runs before process-finished, which
+        # still validates them strictly when marking the analysis SUCCEEDED
+        data["results"] = _get_analysis_results(analysis, raise_error=False)
 
     return patch_instance("analyses", analysis["pk"], **data)
 
