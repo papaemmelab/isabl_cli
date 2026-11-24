@@ -25,7 +25,10 @@ from isabl_cli import exceptions
 from isabl_cli import utils
 from isabl_cli import options
 from isabl_cli.batch_systems import submit_local
+from isabl_cli.settings import check_paths
 from isabl_cli.settings import get_application_settings
+from isabl_cli.settings import load_app_settings
+from isabl_cli.settings import settings_file
 from isabl_cli.settings import system_settings
 
 
@@ -538,7 +541,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
 
     @cached_property
     def settings(self):
-        """Return the application settings."""
+        """Return the application settings.
+
+        An app with a `settings.yaml` next to its module reads its
+        section from that file and makes no API call. Other apps merge
+        the database row of the client with `application_settings`.
+        """
+        if settings_file(type(self)):
+            return load_app_settings(type(self))
+
         reference_data = dict()
         import_strings = set(self.application_import_strings)
         import_strings.add("submit_analyses")
@@ -870,9 +881,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         if not tuples:  # pragma: no cover
             return None
 
-        # make sure required settings are set before building commands
-        for i in self.application_settings:
-            getattr(self.settings, i)
+        # The loader checks keys and types, but not paths. Check paths
+        # before restart, force and run_args join the settings.
+        path = settings_file(type(self))
+        if path:
+            faults = check_paths(self.settings)
+            if faults:
+                raise exceptions.ConfigurationError(
+                    f"Invalid settings manifest {path} [{type(self).__name__}]:\n"
+                    + "\n".join(f"  - {i}" for i in faults)
+                )
+        else:
+            # make sure required settings are set before building commands
+            for i in self.application_settings:
+                getattr(self.settings, i)
 
         # set restart attribute
         self.settings.restart = restart
@@ -954,7 +976,9 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         submit_analyses = (
             submit_local
             if local
-            else (self.settings.submit_analyses or system_settings.SUBMIT_ANALYSES)
+            else (
+                self.settings.get("submit_analyses") or system_settings.SUBMIT_ANALYSES
+            )
         )
 
         with progressbar(analyses, label="Building commands...\t\t") as bar:
