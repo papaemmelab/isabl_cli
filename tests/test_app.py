@@ -13,6 +13,8 @@ from isabl_cli import factories
 from isabl_cli import options
 from isabl_cli.settings import _DEFAULTS
 from isabl_cli.settings import get_application_settings
+from tests.settings_app.apps import SettingsFileApp
+from tests.settings_app.apps import SettingsFileAppMissingPath
 
 
 class NonSequencingApplication(AbstractApplication):
@@ -1259,3 +1261,38 @@ def test_commit_description(tmpdir, capsys):
     )
     captured = capsys.readouterr()
     assert "RAN 1 | SKIPPED 2 | INVALID 0" in captured.out
+
+
+def test_run_with_settings_file():
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(sample=sample, projects=[project])
+    experiment = api.create_instance("experiments", **experiment)
+
+    application = SettingsFileApp()
+    ran_analyses, _, __ = application.run([([experiment], [])], commit=True)
+    analysis, status = ran_analyses[0]
+
+    assert status == "SUCCEEDED"
+    assert application.settings.restart is False
+    with open(join(analysis.storage_url, "head_job.log")) as f:
+        assert "hello-from-settings-yaml" in f.read()
+
+
+def test_run_with_settings_file_missing_path():
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiment = factories.ExperimentFactory(sample=sample, projects=[project])
+    experiment = api.create_instance("experiments", **experiment)
+
+    application = SettingsFileAppMissingPath()
+    with pytest.raises(exceptions.ConfigurationError) as error:
+        application.run([([experiment], [])], commit=True)
+
+    assert "path does not exist: reference = /no/such/settings/reference" in str(
+        error.value
+    )
+    # the run stopped before it created the application and its analyses
+    assert "application" not in application.__dict__
