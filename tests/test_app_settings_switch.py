@@ -35,7 +35,7 @@ def test_run_raises_on_a_missing_path() -> None:
     with pytest.raises(ConfigurationError) as error:
         SettingsFileAppMissingPath().run([([], [])], commit=False)
 
-    assert "settings_app/settings.yaml [SettingsFileAppMissingPath]:" in str(
+    assert f"settings_app/settings.yaml [{API_URL} SettingsFileAppMissingPath]:" in str(
         error.value
     )
     assert "path does not exist: reference = /no/such/settings/reference" in str(

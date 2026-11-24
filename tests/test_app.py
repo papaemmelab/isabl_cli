@@ -1,5 +1,6 @@
 from os.path import isfile
 from os.path import join
+import json
 import uuid
 
 from cached_property import cached_property
@@ -1296,3 +1297,16 @@ def test_run_with_settings_file_missing_path():
     )
     # the run stopped before it created the application and its analyses
     assert "application" not in application.__dict__
+
+
+def test_settings_record():
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+    application = MockApplication()
+    analysis = application.run([([experiment], [])], commit=True)[0][0][0]
+    record = api.Analysis(analysis.pk).data["settings"]
+    assert record["section"] == "MockApplication"
+    assert record["file"] is None
+    assert record["values"]["foo"] == "bar"
+    assert len(record["commit"]) == 40
+    with open(join(analysis.storage_url, "settings.json")) as f:
+        assert json.load(f) == record
