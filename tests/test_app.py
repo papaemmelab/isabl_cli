@@ -1,5 +1,6 @@
 from os.path import isfile
 from os.path import join
+import json
 import uuid
 
 from cached_property import cached_property
@@ -1259,3 +1260,16 @@ def test_commit_description(tmpdir, capsys):
     )
     captured = capsys.readouterr()
     assert "RAN 1 | SKIPPED 2 | INVALID 0" in captured.out
+
+
+def test_settings_record():
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+    application = MockApplication()
+    analysis = application.run([([experiment], [])], commit=True)[0][0][0]
+    record = api.Analysis(analysis.pk).data["settings"]
+    assert record["section"] == "MockApplication"
+    assert record["file"] is None
+    assert record["values"]["foo"] == "bar"
+    assert len(record["commit"]) == 40
+    with open(join(analysis.storage_url, "settings.json")) as f:
+        assert json.load(f) == record

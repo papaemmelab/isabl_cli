@@ -9,6 +9,7 @@ from os.path import isdir
 from os.path import isfile
 from os.path import join
 import abc
+import json
 import os
 import sys
 import traceback
@@ -26,7 +27,9 @@ from isabl_cli import utils
 from isabl_cli import options
 from isabl_cli.batch_systems import submit_local
 from isabl_cli.settings import get_application_settings
+from isabl_cli.settings import settings_record
 from isabl_cli.settings import system_settings
+from isabl_cli.settings import user_settings
 
 
 class AbstractApplication:  # pylint: disable=too-many-public-methods
@@ -956,6 +959,11 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             if local
             else (self.settings.submit_analyses or system_settings.SUBMIT_ANALYSES)
         )
+        record = (
+            settings_record(type(self), self.settings, user_settings.api_url)
+            if commit
+            else None
+        )
 
         with progressbar(analyses, label="Building commands...\t\t") as bar:
             for i in bar:
@@ -998,6 +1006,14 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                     command = self.get_command(i, inputs, self.settings)
                     command_tuples.append((i, command))
                     self.write_command_script(i, command)
+                    if record:
+                        with open(join(i.storage_url, "settings.json"), "w") as f:
+                            json.dump(record, f, indent=4, sort_keys=True)
+                        api.patch_instance(
+                            "analyses",
+                            i.pk,
+                            data={**(i.get("data") or {}), "settings": record},
+                        )
                 except self.skip_exceptions as error:  # pragma: no cover
                     skipped_tuples.append((i, error))
 
