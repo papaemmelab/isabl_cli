@@ -98,6 +98,10 @@ def test_settings_file(tmp_path, monkeypatch):
     assert "no settings.yaml next to" in faults_of(app)[0]
 
 
+def test_settings_file_without_source():
+    assert settings_file(type("App", (), {"__module__": "builtins"})) is None
+
+
 def test_missing_block(tmp_path, monkeypatch):
     app = make_app(tmp_path, monkeypatch, manifest(MSK, SHAH))
     other = "https://isabl.example.org/api/v1/"

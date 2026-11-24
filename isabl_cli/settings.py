@@ -409,7 +409,11 @@ def _check(value: object, declared: _Declared, key: str, faults: list[str]) -> N
 
 def settings_file(app_class: type) -> str | None:
     """Return the `settings.yaml` next to the module of `app_class`, if any."""
-    path = join(dirname(inspect.getfile(app_class)), "settings.yaml")
+    try:
+        source = inspect.getfile(app_class)
+    except (TypeError, OSError):  # A class from a REPL, a notebook or `-c`.
+        return None
+    path = join(dirname(source), "settings.yaml")
     return path if os.path.isfile(path) else None
 
 
