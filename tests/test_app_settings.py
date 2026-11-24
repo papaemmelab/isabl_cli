@@ -1,6 +1,7 @@
 """Pure tests for the settings manifest loader in `isabl_cli.settings`."""
 
 import importlib.util
+import subprocess
 import sys
 
 import pytest
@@ -11,6 +12,7 @@ from isabl_cli.settings import (
     load_app_settings,
     setting_paths,
     settings_file,
+    settings_record,
 )
 
 MSK = "https://isabl.mskcc.org/api/v1/"
@@ -240,3 +242,33 @@ def test_check_paths(tmp_path):
         f"path outside production locations: b.c = {tmp_path}/absent",
     ]
     assert check_paths({"a": str(present)}, [f"{tmp_path}/"]) == []
+
+
+def test_settings_record(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch, manifest(MSK))
+    values = {"tool": len, "items": ("/data1/a", 2), "plain": None}
+    with pytest.raises(ConfigurationError, match="Run apps from a git checkout"):
+        settings_record(app, values, MSK)
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True)
+
+    git("init", "-q")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    record = settings_record(app, values, MSK)
+    assert len(record.pop("commit")) == 40
+    assert record == {
+        "file": "settings.yaml",
+        "instance": MSK,
+        "section": "Tool",
+        "schema": "isabl-app-settings/1",
+        "values": {"tool": "builtins.len", "items": ["/data1/a", 2], "plain": None},
+        "dirty": False,
+    }
+    (tmp_path / "settings.yaml").write_text("changed")
+    assert settings_record(app, values, MSK)["dirty"] is True
+    (tmp_path / "settings.yaml").unlink()
+    git("rm", "-q", "--cached", "settings.yaml")
+    record = settings_record(app, values, MSK)
+    assert record["file"] is None and record["schema"] is None

@@ -8,12 +8,15 @@ from os.path import abspath
 from os.path import dirname
 from os.path import expanduser
 from os.path import join
+from os.path import realpath
+from os.path import relpath
 from typing import TypeAlias
 import getpass
 import inspect
 import json
 import os
 import re
+import subprocess
 
 from cached_property import cached_property
 from munch import Munch
@@ -524,6 +527,59 @@ def check_paths(values: object, production: list[str] | None = None) -> list[str
         if production is not None and not path.startswith(tuple(production)):
             faults.append(f"path outside production locations: {key} = {path}")
     return faults
+
+
+def _jsonable(value: object) -> object:
+    # Keep JSON types. Write callables as import strings, the rest with str.
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(i) for i in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if callable(value) and hasattr(value, "__qualname__"):
+        return f"{value.__module__}.{value.__qualname__}"
+    return str(value)
+
+
+def settings_record(app_class: type, values: object, api_url: str) -> dict:
+    """Return the record of the settings that a run of `app_class` uses.
+
+    The record holds the manifest path relative to the checkout, the
+    instance, the section, the schema, the values, the commit, and
+    whether the checkout has local edits. `file` and `schema` are None
+    for an app without a settings manifest.
+
+    :raises ConfigurationError: If the module of `app_class` is not in
+        a git checkout.
+    """
+    folder = dirname(inspect.getfile(app_class))
+
+    def git(*args: str) -> str:
+        # The bot account does not own every checkout, hence safe.directory.
+        command = ["git", "-c", "safe.directory=*", "-C", folder, *args]
+        try:
+            return subprocess.run(
+                command, check=True, capture_output=True, text=True
+            ).stdout
+        except (OSError, subprocess.CalledProcessError) as error:
+            detail = getattr(error, "stderr", None) or error
+            raise exceptions.ConfigurationError(
+                f"Can't read the git commit of {app_class.__name__} in {folder}: "
+                f"{str(detail).strip()}. Run apps from a git checkout."
+            ) from error
+
+    top, commit = git("rev-parse", "--show-toplevel", "HEAD").splitlines()
+    path = settings_file(app_class)
+    return {
+        "file": relpath(realpath(path), top) if path else None,
+        "instance": api_url,
+        "section": app_class.__name__,
+        "schema": SETTINGS_SCHEMA if path else None,
+        "values": _jsonable(values),
+        "commit": commit,
+        "dirty": bool(git("status", "--porcelain", "--untracked-files=no")),
+    }
 
 
 # load analytics token
