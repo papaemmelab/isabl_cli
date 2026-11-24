@@ -1,21 +1,28 @@
 """System and user settings."""
 
+from __future__ import annotations
+
 from getpass import getuser
 from importlib import import_module
 from os.path import abspath
 from os.path import dirname
 from os.path import expanduser
 from os.path import join
+from typing import TypeAlias
 import getpass
+import inspect
 import json
 import os
+import re
 
 from cached_property import cached_property
 from munch import Munch
+from munch import munchify
 import analytics
 import click
 import pytz
 import six
+import yaml
 
 from isabl_cli import exceptions
 
@@ -308,6 +315,215 @@ def get_application_settings(defaults, settings, reference_data, import_strings)
         )
 
     return settings
+
+
+SETTINGS_SCHEMA = "isabl-app-settings/1"
+
+_Declared: TypeAlias = "type | tuple[type, ...] | dict[str, _Declared]"
+
+_HEAD_JOB: _Declared = {
+    "partition": str,
+    "cores": int,
+    "memory_gb": int,
+    "minutes": int,
+}
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """Collect anchors, aliases and duplicate keys as faults."""
+
+    def __init__(self, stream: str) -> None:
+        """Start with no faults."""
+        super().__init__(stream)
+        self.faults: list[str] = []
+
+    def compose_node(self, parent: yaml.Node | None, index: object) -> yaml.Node | None:
+        """Record a fault for each anchor or alias, then compose the node."""
+        event = self.peek_event()
+        line = event.start_mark.line + 1
+        if isinstance(event, yaml.AliasEvent):
+            self.faults.append(f"YAML alias at line {line}: copy the value instead")
+        elif getattr(event, "anchor", None):
+            self.faults.append(f"YAML anchor at line {line}: copy the value instead")
+        return super().compose_node(parent, index)
+
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[object, object]:
+        """Record a fault for each duplicate key, then construct the map."""
+        # PyYAML keeps the last duplicate without a warning.
+        seen = set()
+        for key_node, _ in node.value:
+            if isinstance(key_node, yaml.ScalarNode):
+                if key_node.value in seen:
+                    line = key_node.start_mark.line + 1
+                    self.faults.append(
+                        f"duplicate key '{key_node.value}' at line {line}"
+                    )
+                seen.add(key_node.value)
+        return super().construct_mapping(node, deep)
+
+
+def _type_name(declared: type | tuple[type, ...]) -> str:
+    if isinstance(declared, tuple):
+        return " or ".join(i.__name__ for i in declared)
+    return declared.__name__
+
+
+def _check(value: object, declared: _Declared, key: str, faults: list[str]) -> None:
+    # Append the faults of one value against its declared type or nested map.
+    if isinstance(declared, dict):
+        if not isinstance(value, dict):
+            _check(value, dict, key, faults)
+            return
+        prefix = f"{key}." if key else ""
+        for name in declared:
+            if name not in value:
+                faults.append(f"missing setting '{prefix}{name}'")
+        for name, item in value.items():
+            if name in declared:
+                _check(item, declared[name], f"{prefix}{name}", faults)
+            else:
+                faults.append(f"unknown setting '{prefix}{name}'")
+        return
+
+    allowed = declared if isinstance(declared, tuple) else (declared,)
+    # A YAML boolean is a Python int, so isinstance alone accepts it as int.
+    if not isinstance(value, allowed) or (
+        isinstance(value, bool) and bool not in allowed
+    ):
+        faults.append(
+            f"setting '{key}' must be {_type_name(declared)}, "
+            f"got {type(value).__name__} {value!r}"
+        )
+
+
+def settings_file(app_class: type) -> str | None:
+    """Return the `settings.yaml` next to the module of `app_class`, if any."""
+    path = join(dirname(inspect.getfile(app_class)), "settings.yaml")
+    return path if os.path.isfile(path) else None
+
+
+def load_app_settings(app_class: type, api_url: str | None = None) -> Munch:
+    """Load the section of `app_class` from its settings manifest.
+
+    :param api_url: The Isabl instance whose block to read. Defaults to
+        `ISABL_API_URL`. A trailing slash does not matter.
+    :raises ConfigurationError: If the manifest has one or more faults.
+        The message lists every fault.
+    """
+    api_url = api_url or os.environ.get(
+        "ISABL_API_URL", "http://localhost:8000/api/v1/"
+    )
+    name = app_class.__name__
+    path = settings_file(app_class)
+    faults: list[str] = []
+
+    def _error() -> exceptions.ConfigurationError:
+        return exceptions.ConfigurationError(
+            f"Invalid settings manifest {path} [{api_url} {name}]:\n"
+            + "\n".join(f"  - {i}" for i in faults)
+        )
+
+    if path is None:
+        faults.append(
+            f"no settings.yaml next to {inspect.getfile(app_class)}: create it"
+        )
+        raise _error()
+
+    with open(path, encoding="utf-8") as stream:
+        loader = _StrictLoader(stream.read())
+    try:
+        data = loader.get_single_data()
+    except yaml.YAMLError as error:
+        faults.append(f"YAML syntax error: {error}")
+        raise _error() from error
+    finally:
+        loader.dispose()
+    faults += loader.faults
+
+    if not isinstance(data, dict):
+        faults.append(f"the file must be a map, got {type(data).__name__}")
+        raise _error()
+    if data.get("schema") != SETTINGS_SCHEMA:
+        faults.append(f"schema must be '{SETTINGS_SCHEMA}', got {data.get('schema')!r}")
+
+    blocks = [i for i in data if i != "schema"]
+    block = next(
+        (data[i] for i in blocks if str(i).rstrip("/") == api_url.rstrip("/")), None
+    )
+    if not isinstance(block, dict):
+        faults.append(
+            f"no block for {api_url} (blocks: {', '.join(map(str, blocks)) or 'none'})"
+        )
+        raise _error()
+
+    module = inspect.getmodule(app_class)
+    for key in block:
+        defined = getattr(module, str(key), None)
+        if not (
+            inspect.isclass(defined) and defined.__module__ == app_class.__module__
+        ):
+            faults.append(
+                f"unknown class '{key}': {app_class.__module__} defines no such class"
+            )
+
+    section = block.get(name)
+    if not isinstance(section, dict):
+        faults.append(f"no section for {name}")
+    else:
+        declared = getattr(app_class, "application_settings", {})
+        values = {k: v for k, v in section.items() if k != "head_job"}
+        _check(values, declared, "", faults)
+        head_job = section.get("head_job", {})
+        _check(head_job, dict, "head_job", faults)
+        if isinstance(head_job, dict):
+            for method, resources in head_job.items():
+                _check(resources, _HEAD_JOB, f"head_job.{method}", faults)
+
+    if faults:
+        raise _error()
+    return munchify(section)
+
+
+def setting_paths(values: object, key: str = "") -> list[tuple[str, str]]:
+    """Return `(dotted_key, path)` for every path in the setting values.
+
+    A path is a piece of a string value that starts with `/` but not
+    with `//`. The pieces come from a split on whitespace, commas,
+    colons, quotes and `=`. The split finds binds and quoted paths in
+    Nextflow text. It does not find an unquoted path in Groovy code.
+
+    :param key: The dotted key of `values`. Recursive calls set it.
+    """
+    if isinstance(values, dict):
+        items = values.items()
+    elif isinstance(values, list):
+        items = enumerate(values)
+    elif isinstance(values, str):
+        pieces = re.split(r"[\s,:'\"=]+", values)
+        return [
+            (key, i) for i in pieces if i.startswith("/") and not i.startswith("//")
+        ]
+    else:
+        return []
+    prefix = f"{key}." if key else ""
+    return [j for name, item in items for j in setting_paths(item, f"{prefix}{name}")]
+
+
+def check_paths(values: object, production: list[str] | None = None) -> list[str]:
+    """Return a fault for each path in the values that is not valid.
+
+    :param production: Folder prefixes, such as `/data1/papaemme/isabl/`.
+        If given, a path outside all of the prefixes is a fault.
+    """
+    faults = []
+    for key, path in setting_paths(values):
+        if not os.path.exists(path):
+            faults.append(f"path does not exist: {key} = {path}")
+        if production is not None and not path.startswith(tuple(production)):
+            faults.append(f"path outside production locations: {key} = {path}")
+    return faults
 
 
 # load analytics token
