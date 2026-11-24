@@ -155,6 +155,15 @@ def test_bool_is_not_int(tmp_path, monkeypatch):
     assert faults_of(app) == ["setting 'threads' must be int, got bool True"]
 
 
+def test_declared_default_value(tmp_path, monkeypatch):
+    text = f"schema: isabl-app-settings/1\n{MSK}:\n  Tool:\n    ref: /data/x\n"
+    app = make_app(tmp_path, monkeypatch, text)
+    monkeypatch.setattr(app, "application_settings", {"ref": "/data/x"})
+    assert faults_of(app) == [
+        "declaration of 'ref' must be a type, got '/data/x': fix application_settings"
+    ]
+
+
 def test_head_job_shape(tmp_path, monkeypatch):
     text = manifest(MSK).replace(
         "cores: 2, memory_gb: 16, minutes: 10080}",

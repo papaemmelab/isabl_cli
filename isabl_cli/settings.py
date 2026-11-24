@@ -391,6 +391,12 @@ def _check(value: object, declared: _Declared, key: str, faults: list[str]) -> N
         return
 
     allowed = declared if isinstance(declared, tuple) else (declared,)
+    if not all(isinstance(i, type) for i in allowed):
+        faults.append(
+            f"declaration of '{key}' must be a type, got {declared!r}: "
+            "fix application_settings"
+        )
+        return
     # A YAML boolean is a Python int, so isinstance alone accepts it as int.
     if not isinstance(value, allowed) or (
         isinstance(value, bool) and bool not in allowed
