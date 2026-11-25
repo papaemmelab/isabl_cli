@@ -485,9 +485,7 @@ def load_app_settings(app_class: type, api_url: str | None = None) -> Munch:
             and getattr(i, str(key)).__module__ == i.__name__
             for i in modules
         ):
-            faults.append(
-                f"unknown class '{key}': {app_class.__module__} defines no such class"
-            )
+            faults.append(f"unknown class '{key}': no module in {folder} defines it")
 
     section = block.get(name)
     if not isinstance(section, dict):

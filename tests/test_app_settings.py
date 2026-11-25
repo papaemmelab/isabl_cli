@@ -112,7 +112,7 @@ def test_missing_section_and_unknown_class(tmp_path, monkeypatch):
     text = manifest(MSK) + "  Ghost: {}\n"
     app = make_app(tmp_path, monkeypatch, text, name="ToolUnmatched")
     assert faults_of(app) == [
-        f"unknown class 'Ghost': {app.__module__} defines no such class",
+        f"unknown class 'Ghost': no module in {tmp_path} defines it",
         "no section for ToolUnmatched",
     ]
 
