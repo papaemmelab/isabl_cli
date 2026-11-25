@@ -194,8 +194,64 @@ def get_api_url(url):
     return url
 
 
+CLI_VERSION_HEADER = "X-Isabl-CLI-Version"
+
+
+@lru_cache(None)
+def get_cli_headers():
+    """Get headers that identify this isabl_cli version to the API."""
+    from isabl_cli import __version__  # avoid circular import
+
+    return {
+        CLI_VERSION_HEADER: __version__,
+        "User-Agent": f"isabl_cli/{__version__} {requests.utils.default_user_agent()}",
+    }
+
+
+# Test suites create, change and delete records and replace client settings, so a
+# test session only writes to a local API. Set this variable to the URL of an API
+# that is safe to write to from tests, e.g. a disposable remote test server.
+LOCAL_API_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+TEST_WRITES_URL_VARIABLE = "ISABL_ALLOW_TEST_WRITES_TO"
+WRITE_METHODS = frozenset({"post", "put", "patch", "delete"})
+
+
+def check_test_session_write(method, url):
+    """
+    Refuse a write from a test session to an API that isn't local.
+
+    A test session is any process that imported pytest, the same check
+    `get_token_headers` uses to log in as the test admin.
+
+    Raises:
+        exceptions.TestSessionWriteError: if the write must not be sent.
+    """
+    if method.lower() not in WRITE_METHODS or "pytest" not in sys.modules:
+        return
+
+    if urlparse(url).hostname in LOCAL_API_HOSTS:
+        return
+
+    allowed = environ.get(TEST_WRITES_URL_VARIABLE)
+    if allowed and url.startswith(allowed):
+        return
+
+    raise exceptions.TestSessionWriteError(
+        f"Refusing to {method.upper()} {url} from a test session: tests create, "
+        "change and delete records, so they only write to a local Isabl API. Point "
+        "ISABL_API_URL at a local test API (e.g. http://localhost:8000/api/v1/), or "
+        f"set {TEST_WRITES_URL_VARIABLE} to this API's URL if it is a disposable "
+        "test server."
+    )
+
+
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
+    check_test_session_write(method, kwargs.get("url", ""))
+
+    # build a new dict so cached headers (e.g. get_token_headers) aren't mutated
+    kwargs["headers"] = {**get_cli_headers(), **(kwargs.get("headers") or {})}
+
     for i in [0.2, 1, 5, 10, 60, 90, 120, 300, 900]:  # attempt some retries
         try:
             error = None
