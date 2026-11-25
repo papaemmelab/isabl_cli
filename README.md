@@ -90,6 +90,8 @@ To skip the build step (faster for subsequent runs):
 
 ### Running Tests Directly
 
+Tests create, change and delete records and replace client settings, so isabl_cli refuses to write to any API other than `localhost` while pytest is loaded, whatever `ISABL_API_URL` your shell exports. This applies to every test suite that uses isabl_cli, not only this one. To run tests against a disposable remote test server, set `ISABL_ALLOW_TEST_WRITES_TO` to its URL.
+
 If you have a local Isabl API instance running (e.g., via `docker compose up -d` in the `isabl_api` repository), you can run pytest commands directly:
 
 ```bash
