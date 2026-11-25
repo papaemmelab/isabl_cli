@@ -1,9 +1,12 @@
+import sys
+
 from click.testing import CliRunner
 import click
 import pytest
 import requests
 
 from isabl_cli import api
+from isabl_cli import exceptions
 from isabl_cli import factories
 from isabl_cli.settings import system_settings
 from isabl_cli.settings import user_settings
@@ -43,7 +46,90 @@ def test_get_custom_fields():
 def test_api_request():
     assert api.api_request("get", url="auth").ok
     with pytest.raises(requests.HTTPError):
-        api.api_request("delete", url="http://google.com")
+        api.api_request("get", url="http://google.com/isabl-cli-not-found")
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete", "PATCH"])
+def test_test_session_writes_refused_for_remote_api(method):
+    url = "https://isabl.example.org/api/v1/projects"
+    with pytest.raises(exceptions.TestSessionWriteError, match="from a test session"):
+        api.check_test_session_write(method, url)
+
+
+@pytest.mark.parametrize(
+    "method, url",
+    [
+        ("get", "https://isabl.example.org/api/v1/projects"),
+        ("post", "http://localhost:8000/api/v1/projects"),
+        ("post", "http://127.0.0.1:8000/api/v1/projects"),
+        ("delete", "http://[::1]:8000/api/v1/projects/1"),
+    ],
+)
+def test_test_session_reads_and_local_writes_allowed(method, url):
+    api.check_test_session_write(method, url)
+
+
+def test_test_session_writes_allowed_to_named_api(monkeypatch):
+    url = "https://isabl-test.example.org/api/v1/projects"
+    monkeypatch.setenv(api.TEST_WRITES_URL_VARIABLE, "https://isabl-test.example.org/")
+    api.check_test_session_write("post", url)
+
+    monkeypatch.setenv(api.TEST_WRITES_URL_VARIABLE, "https://other.example.org/")
+    with pytest.raises(exceptions.TestSessionWriteError):
+        api.check_test_session_write("post", url)
+
+
+def test_writes_allowed_outside_test_sessions(monkeypatch):
+    monkeypatch.delitem(sys.modules, "pytest")
+    api.check_test_session_write("post", "https://isabl.example.org/api/v1/projects")
+
+
+def test_test_session_write_refused_before_sending(monkeypatch):
+    sent = []
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: sent.append(kwargs))
+
+    with pytest.raises(exceptions.TestSessionWriteError):
+        api.retry_request("post", url="https://isabl.example.org/api/v1/projects")
+
+    assert sent == []
+
+
+def _spy_requests(monkeypatch, *methods):
+    """Record headers sent by `requests.<method>` while still performing the call."""
+    sent = []
+    for method in methods:
+        real = getattr(requests, method)
+
+        def spy(*args, _real=real, **kwargs):
+            sent.append(dict(kwargs.get("headers") or {}))
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(requests, method, spy)
+    return sent
+
+
+def test_requests_send_cli_version(monkeypatch):
+    from isabl_cli import __version__
+
+    sent = _spy_requests(monkeypatch, "get")
+    api.get_token_headers.cache_clear()  # force the /rest-auth/user/ check too
+    assert api.api_request("get", url="auth").ok
+    assert api.api_request("get", url="/", authenticate=False).ok
+
+    assert len(sent) == 3  # token check, authenticated get, unauthenticated get
+    for headers in sent:
+        assert headers[api.CLI_VERSION_HEADER] == __version__
+        assert headers["User-Agent"].startswith(f"isabl_cli/{__version__} ")
+
+    assert "Authorization" in sent[1]
+    assert "Authorization" not in sent[2]
+
+
+def test_cli_headers_do_not_mutate_token_headers():
+    token_headers = api.get_token_headers()
+    api.api_request("get", url="auth")
+    assert api.CLI_VERSION_HEADER not in token_headers
+    assert set(token_headers) == {"Authorization"}
 
 
 def test_api_methods():
