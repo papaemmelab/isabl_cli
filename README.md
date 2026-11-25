@@ -90,6 +90,8 @@ To skip the build step (faster for subsequent runs):
 
 ### Running Tests Directly
 
+The tests create, change and delete records through the API, so only run them against a throwaway local API that you started for them. `pytest.ini` points `ISABL_API_URL` at `http://localhost:8000/api/v1/` and `tests/conftest.py` refuses any other host, so a production `ISABL_API_URL` in your shell is never used.
+
 If you have a local Isabl API instance running (e.g., via `docker compose up -d` in the `isabl_api` repository), you can run pytest commands directly:
 
 ```bash
