@@ -1,81 +1,162 @@
 """Isabl CLI utils."""
 
+from functools import update_wrapper
+from getpass import getuser
+from os import stat
+from pathlib import Path
+from pwd import getpwuid
 import getpass
 import json
 import os
+import re
 import sys
 import tarfile
 
+import analytics
 import click
 
+from packaging import version
 from isabl_cli.settings import system_settings
+
+
+def makedirs(path, exist_ok=True, mode=0o777):
+    """Make dirs ignoring umask."""
+    original_umask = os.umask(0)
+    os.makedirs(path, exist_ok=exist_ok, mode=mode)
+    os.umask(original_umask)
 
 
 def get_results(
     experiment,
-    application_key,
     result_key,
+    application_key=None,
+    application_name=None,
+    application_version=None,
+    application_assembly=None,
     targets=None,
     references=None,
     analyses=None,
+    status="SUCCEEDED",
+    raise_error=True,
 ):
     """
     Match results from a experiment object.
 
     If targets, references or analyses are provided the analysis result must
-    match these list of samples and dependencies.
+    match these list of samples and dependencies. Match can be done by app pk, by app
+    name, or by app name and cversion.
 
     Pass `result_key='storage_url'` to get the output directory.
 
     Arguments:
         experiment (dict): experiment object for which result will be retrieved.
-        application_key (int): key of the application that generated the result.
         result_key (dict): name of the result.
+        application_key (int): key of the application that generated the result.
+        application_name (str): name of the application that generated the result.
+        application_version (str): version of the application that generated the result.
+        application_assembly (str): assembly name of the app. i.e: GRCh37.
         targets (list): target experiments dicts that must match.
         references (dict): reference experiments dicts that must match.
         analyses (dict): analyses dicts that must match.
+        status (str): expected analysis status. For multiple, string with `/`.
 
     Returns:
         list: of tuples (result_value, analysis primary key).
     """
-    results = []
     targets = {i.pk for i in targets or []}
     references = {i.pk for i in references or []}
     analyses = {i.pk for i in analyses or []}
 
+    # Filter candidates by app pk or name and/ version, and assembly, if provided.
+    experiment_results = []
     for i in experiment.results:
-        if i.application.pk == application_key:
-            if targets and {j.pk for j in i.targets}.difference(targets):
-                continue
+        if (
+            application_assembly
+            and "assembly" in i.application
+            and i.application.get("assembly") != application_assembly
+        ):
+            continue
+        if application_key:
+            if i.application.pk == application_key:
+                experiment_results.append(i)
+        elif application_name:
+            if (
+                application_version
+                and application_version != "latest"
+            ):
+                if (
+                    i.application.name == application_name
+                    and i.application.version == application_version
+                ):
+                    experiment_results.append(i)
+            else:
+                if i.application.name == application_name:
+                    experiment_results.append(i)
 
-            if references and {j.pk for j in i.references}.difference(references):
-                continue
+    # Filter candidates by same targets/references/analyses
+    candidates = []
+    for i in experiment_results:
+        if targets and {j.pk for j in i.targets}.difference(
+            targets
+        ):  # pragma: no cover
+            continue
 
-            if analyses and not analyses.issubset({j.pk for j in i.analyses}):
-                continue
+        if references and {j.pk for j in i.references}.difference(
+            references
+        ):  # pragma: no cover
+            continue
 
-            results_dict = i if result_key == "storage_url" else i.results
-            result = results_dict.get(result_key)
-            results.append((result, i.pk))
+        if analyses and not analyses.issubset(
+            {j.pk for j in i.analyses}
+        ):  # pragma: no cover
+            continue
+
+        candidates.append(i)
+
+    # Return latest [`pk`] if more than 1 result and version is `latest`.
+    if len(candidates) > 1 and application_version == "latest":
+        candidates = sorted(candidates, key=lambda x: int(x.pk), reverse=True)[:1]
+
+    results = []
+    for i in candidates:
+        results_dict = i if result_key == "storage_url" else i.results
+        result = results_dict.get(result_key)
+        results.append((result, i.pk))
+        if raise_error:
             assert result_key in results_dict, (
                 f"Result '{result_key}' not found for analysis {i.pk}"
                 f"({i.application.name} {i.application.version}) "
                 f"with status: {i.status}"
             )
 
+        assert i.status in status.split("/") if status else True, (
+            f"Expected status '{status}' for result '{result_key}' did not match: "
+            f"{i.pk}({i.application.name} {i.application.version}) is {i.status}"
+        )
     return results
 
 
 def get_result(*args, **kwargs):
     """
-    See get_experiments_results for full signature.
+    See get_results for full signature.
+
+    Arguments:
+        args (list): see get_results.
+        kwargs (dict): see get_results.
+        application_name (str): app name to display a more explicit error.
+        application_assembly (str): app assembly name to display better error.
 
     Returns:
         tuple: result value, analysis pk that produced the result
     """
+    app_name = kwargs.get("application_name") or kwargs.get("application_key")
+    app_assembly = kwargs.get("application_assembly")
     results = get_results(*args, **kwargs)
-    assert results, f"No results found for application: {kwargs.get('application_key')}"
-    assert len(results) == 1, f"Multiple results returned {results}"
+    assert results, f"No results found for application: {app_name}" + (
+        f" for {app_assembly}) assembly" if app_assembly else ""
+    )
+    if kwargs.get("application_version") != "latest": 
+        assert len(results) == 1, f"Multiple results returned {results}"
     result, key = results[0]
     return result, key
 
@@ -139,6 +220,13 @@ def get_rsync_command(src, dst, chmod="a-w"):
         r'-exec rmdir "{}" \;'
     )
 
+def check_rsync_version(version_stdout):
+    """Check for outdated rsync lacking the --append-verify."""
+    version_string =  re.search(r'.*(?P<ver>\d\.\d\.\d).*', version_stdout).group("ver")
+    major_version = version.parse(version_string).major
+    if major_version != 3:
+        raise ValueError("Please upgrade your version of rsync!")
+
 
 def get_tree_size(path, follow_symlinks=False):
     """Return total size of directory in bytes."""
@@ -193,4 +281,91 @@ def echo_title(title, color="cyan", blink=False):
     """Echo a title."""
     title = "\n" + title.strip().upper() + "\n"
     title += "".join("-" for i in title.strip()) + "\n"
-    click.secho(title, fg=color, file=sys.stderr, blink=blink)
+    click.secho(title, fg=color, blink=blink)
+
+
+def find_owner(filename):
+    """Find directory owner."""
+    return getpwuid(stat(filename).st_uid).pw_name
+
+
+def assert_same_owner(path):
+    """Validate that a path is owned by the same user."""
+    try:
+        assert find_owner(path) == getuser(), f"{path} must be owned by {getuser()}"
+    except AssertionError as error:  # pragma: no cover
+        raise click.UsageError(str(error))
+    except FileNotFoundError:  # pragma: no cover
+        pass
+
+
+def called_from(depth=1, verbose=True):
+    """Print where the current function was called from."""
+    ret = sys._getframe(1).f_code.co_name + f" -> was called from: (depth={depth})\n"
+    ret += "\n".join(
+        "\t" + sys._getframe(i).f_code.co_name + str(i) for i in range(3, 3 + depth)
+    )
+
+    if verbose:  # pragma: no cover
+        print(ret)
+
+    return ret
+
+
+def send_analytics(command):  # noqa
+    """Can be used as method or decorator of click group commands to send analytics."""
+
+    @click.pass_context
+    def wrapper(ctx, *args, **kwargs):
+        """Send track event after the command is executed."""
+        ctx.invoke(command, *args, **kwargs)
+        analytics.track(
+            system_settings.api_username,
+            "Ran cli command",
+            {"command": command.__name__, "args": args, "kwargs": kwargs},
+        )
+
+    return update_wrapper(wrapper, command)
+
+
+def first_matching_file(
+        directory,
+        pattern,
+        exclude=None,
+        sort_by_newest=True,
+        optional=False,
+    ):
+    """
+    Recursively search within a directory for the first file that matches the pattern.
+    Args:
+        directory (str): the directory to search within.
+        pattern (str): a glob pattern (e.g., '*.txt') to match filenames.
+        exclude (str, optional): files containing this substring will be skipped.
+        sort_by_newest (bool, optional): sort by file's creation time, newer to older.
+        optional (bool): ok if none is found.
+
+    Returns:
+        str: the path to the first matching file as a string.
+
+    Raises:
+        NotADirectoryError: If `directory` is not a valid directory.
+        FileNotFoundError: If no matching file is found.
+    """
+    root_path = Path(directory)
+    if not root_path.is_dir(): # pragma: no cover
+        raise NotADirectoryError(f"{directory} is not a valid directory.")
+
+    matching_files = (
+        file for file in root_path.rglob(pattern)
+        if not (exclude and exclude in file.name)
+    )
+    if sort_by_newest:
+        matching_files = iter(
+            sorted(matching_files, key=lambda f: f.stat().st_mtime, reverse=True)
+        )
+    try:
+        return str(next(matching_files))
+    except StopIteration: # pragma: no cover
+        if optional:
+            return None
+        raise FileNotFoundError(f"No file matching pattern '{pattern}' found in '{directory}'")

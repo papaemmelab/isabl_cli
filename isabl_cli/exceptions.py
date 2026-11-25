@@ -41,3 +41,8 @@ class CantBeRunError(PackageBaseException):
 class MissingDataError(PackageBaseException):
 
     """A class to raise when data is missing."""
+
+
+class AutomationError(PackageBaseException):
+
+    """A class to raise when automations fail."""

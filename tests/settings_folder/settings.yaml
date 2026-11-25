@@ -1,0 +1,10 @@
+schema: isabl-app-settings/1
+https://isabl.mskcc.org/api/v1/:
+  BaseTool:
+    head_job:
+      WG: {partition: componc_cpu, cores: 1, memory_gb: 4, minutes: 10}
+    greeting: hello-from-base
+  OtherTool:
+    head_job:
+      WG: {partition: componc_cpu, cores: 1, memory_gb: 4, minutes: 10}
+    greeting: hello-from-other

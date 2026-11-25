@@ -9,6 +9,7 @@ from os.path import join
 import os
 import random
 import re
+import shutil
 import subprocess
 
 import click
@@ -17,11 +18,6 @@ from isabl_cli import api
 from isabl_cli import utils
 from isabl_cli.settings import system_settings
 from isabl_cli.settings import perform_import
-
-# settings from environ variables
-LSF_GET_REQUIREMENTS = "ISABL_LSF_GET_REQUIREMENTS"
-LSF_EXTRA_ARGS = "ISABL_LSF_EXTRA_ARGS"
-LSF_THROTTLE_BY = "ISABL_LSF_THROTTLE_BY"
 
 
 def submit_lsf(app, command_tuples):  # pragma: no cover
@@ -48,25 +44,32 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
             keys = [j["pk"] for k in i["targets"] for j in k["projects"]]
             projects.update(keys)
 
-        if os.environ.get(LSF_GET_REQUIREMENTS):
-            requirements = perform_import(
-                val=os.environ.get(LSF_GET_REQUIREMENTS),
-                setting_name=LSF_GET_REQUIREMENTS,
-            )(app, methods)
+        # get requirements as a function of the app and target methods
+        get_requirements = system_settings.SUBMIT_CONFIGURATION.get("get_requirements")
+
+        if get_requirements:
+            name = "SUBMIT_CONFIGURATION.get_requirements"
+            get_requirements = perform_import(val=get_requirements, setting_name=name)
+            requirements = get_requirements(app, methods)
 
         try:
             api.patch_analyses_status(analyses, "SUBMITTED")
-            submit_lsf_array(
-                commands=commands,
-                requirements=requirements,
-                extra_args=os.environ.get(LSF_EXTRA_ARGS, ""),
-                throttle_by=os.environ.get(LSF_THROTTLE_BY, 50),
-                jobname=(
-                    f"application: {app} | "
-                    f"methods: {', '.join(methods)} | "
-                    f"projects: {', '.join(map(str, projects))}"
-                ),
-            )
+            submit_configuration = system_settings.SUBMIT_CONFIGURATION
+
+            # LSF may not like arrays bigger thank 10K
+            for i in api.chunks(commands, 10000):
+                submit_lsf_array(
+                    commands=i,
+                    requirements=requirements or "",
+                    extra_args=submit_configuration.get("extra_args", ""),
+                    throttle_by=submit_configuration.get("throttle_by", 50),
+                    unbuffer=submit_configuration.get("unbuffer", False),
+                    jobname=(
+                        f"application: {app} | "
+                        f"methods: {', '.join(methods)} | "
+                        f"projects: {', '.join(map(str, projects))}"
+                    ),
+                )
 
         except Exception:  # pylint: disable=broad-except
             api.patch_analyses_status(analyses, "STAGED")
@@ -76,7 +79,13 @@ def submit_lsf(app, command_tuples):  # pragma: no cover
 
 
 def submit_lsf_array(
-    commands, requirements, jobname, extra_args=None, throttle_by=50
+    commands,
+    requirements,
+    jobname,
+    extra_args=None,
+    throttle_by=50,
+    wait=False,
+    unbuffer=False,
 ):  # pragma: no cover
     """
     Submit an array of bash scripts.
@@ -92,10 +101,15 @@ def submit_lsf_array(
         jobname (str): lsf array jobname.
         extra_args (str): extra LSF args.
         throttle_by (int): max number of jobs running at same time.
+        wait (bool): if true, wait until clean command finishes.
+        unbuffer (bool): if true, will unbuffer the stdout/stderr.
 
     Returns:
         str: jobid of clean up job.
     """
+    if not shutil.which("bsub"):
+        raise RuntimeError("LSF is not available.")
+
     extra_args = extra_args or ""
     assert system_settings.BASE_STORAGE_DIRECTORY
 
@@ -106,27 +120,32 @@ def submit_lsf_array(
         datetime.now(system_settings.TIME_ZONE).isoformat(),
     )
 
+    wait_flag = "-K" if wait else ""
+    unbuffer = "unbuffer" if unbuffer and shutil.which("unbuffer") else ""
     os.makedirs(root, exist_ok=True)
     jobname += " | rundir: {}".format(root)
     total = len(commands)
     index = 0
 
-    for command, exit_command in commands:
-        index += 1
-        rundir = abspath(dirname(command))
+    with click.progressbar(commands, label="preparing submission...") as bar:
+        for command, exit_command in bar:
+            index += 1
+            rundir = abspath(dirname(command))
 
-        with open(join(root, "in.%s" % index), "w") as f:
-            # use random sleep to avoid parallel API hits
-            f.write(f"sleep {random.uniform(0, 10):.3} && bash {command}")
+            with open(join(root, "in.%s" % index), "w") as f:
+                # use random sleep to avoid parallel API hits
+                f.write(
+                    f"sleep {random.uniform(0, 10):.3} && {unbuffer} bash {command}"
+                )
 
-        with open(join(root, "exit_cmd.%s" % index), "w") as f:
-            f.write(exit_command)
+            with open(join(root, "exit_cmd.%s" % index), "w") as f:
+                f.write(exit_command)
 
-        for j in "log", "err", "exit":
-            src = join(rundir, "head_job.{}".format(j))
-            dst = join(root, "{}.{}".format(j, index))
-            open(src, "w").close()
-            utils.force_symlink(src, dst)
+            for j in "log", "err", "exit":
+                src = join(rundir, "head_job.{}".format(j))
+                dst = join(root, "{}.{}".format(j, index))
+                open(src, "w").close()
+                utils.force_symlink(src, dst)
 
     # submit array of commands
     cmd = (
@@ -139,8 +158,9 @@ def submit_lsf_array(
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # submit array of exit commands
+    # -ti, or immediate termination, prevents orphan jobs when -w is not valid anymore
     cmd = (
-        f'bsub -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
+        f'bsub -W 15 -J "EXIT | {jobname}[1-{total}]" -ti -o "{root}/exit.%I" '
         f'-w "exit({jobid}[*])" -i "{root}/exit_cmd.%I" bash '
     )
 
@@ -148,8 +168,8 @@ def submit_lsf_array(
     jobid = re.findall("<(.*?)>", jobid)[0]
 
     # clean the execution directory
-    cmd = f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti rm -r {root}'
+    cmd = (
+        f'bsub -J "CLEAN | {jobname}" -w "ended({jobid})" -ti {wait_flag} rm -r {root}'
+    )
     jobid = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    jobid = re.findall("<(.*?)>", jobid)[0]
-
-    return jobid
+    return re.findall("<(.*?)>", jobid)[0]

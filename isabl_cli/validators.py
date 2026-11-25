@@ -88,7 +88,7 @@ def validate_pairs_from_file(ctx, _, path):
     if path:
         with open(path, "r") as f:
             for i in f:
-                if i.startswith("#"):
+                if i.startswith("#") or not i.strip():
                     continue
 
                 try:

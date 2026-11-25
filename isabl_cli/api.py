@@ -1,24 +1,27 @@
 """Logic to interact with API."""
 
-from datetime import datetime
+from functools import lru_cache
 from itertools import islice
 from os import environ
-from os.path import join
+from os.path import basename
 from urllib.parse import urljoin
+from urllib.parse import urlparse
 import collections
 import json
-import os
 import shutil
 import subprocess
+import sys
 import time
 import traceback
 
 from munch import Munch
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from six import iteritems
+import analytics
 import click
 import requests
 
+from isabl_cli import exceptions
 from isabl_cli import utils
 from isabl_cli.settings import import_from_string
 from isabl_cli.settings import system_settings
@@ -60,13 +63,51 @@ class IsablDict(Munch):
         """Transform a dictionary into IsablDicts recursively."""
         return isablfy(d)
 
+    def get(self, k, default=None):
+        """Check first if k is a custom field."""
+        if self._is_custom_field(k):
+            return self.custom_fields.get(k, default)
+        return super().get(k, default)
+
+    def pop(self, k, default=None):
+        """Check first if k is a custom field."""
+        if self._is_custom_field(k):
+            return self.custom_fields.pop(k, default)
+        return super().pop(k, default)
+
+    def _is_custom_field(self, k):
+        return k != "custom_fields" and k in self.get("custom_fields", {})
+
+    def __contains__(self, k):
+        if self._is_custom_field(k):
+            return True
+        return dict.__contains__(self, k)
+
+    def __setitem__(self, k, v):
+        if self._is_custom_field(k):
+            self.custom_fields[k] = v
+        return super().__setitem__(k, v)
+
+    def __getitem__(self, k):
+        if self._is_custom_field(k):
+            return self.custom_fields[k]
+        return super().__getitem__(k)
+
+    def __delitem__(self, k):
+        if self._is_custom_field(k):
+            return self.custom_fields.__delitem__(k)
+        return super().__delitem__(k)
+
     def __dir__(self):
-        """Bypass Munch's __dir__."""
-        return super(dict, self).__dir__()  # pylint: disable=bad-super-call
+        return super(dict, self).__dir__() + list(  # pylint: disable=bad-super-call
+            self.get("custom_fields", {}).keys()
+        )
 
     def __repr__(self):
-        """Get a simple representation, Munch's is too long."""
-        identifier = getattr(self, "system_id", getattr(self, "pk", None))
+        identifier = getattr(
+            self, "system_id", getattr(self, "slug", getattr(self, "pk", None))
+        )
+
         return (
             f"{getattr(self, 'model_name', self.__class__.__name__)}({identifier})"
             if identifier
@@ -97,7 +138,7 @@ class Assembly(IsablDict):
 
     api_endpoint = "assemblies"
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         """Get better representation for assemblies."""
         identifier = getattr(self, "name", getattr(self, "pk", None))
         return super().__repr__() if not identifier else f"Assembly({identifier})"
@@ -106,6 +147,33 @@ class Assembly(IsablDict):
 class Experiment(IsablDict):
 
     api_endpoint = "experiments"
+
+    def get_fastq(self):
+        """
+        Get experiment fastq R1 and R2 files.
+
+        Raises:
+            MissingDataError: if number of R1 and R2 files is not the same.
+
+        Returns:
+            tuple: list of R1 fastq, list of R2.
+        """
+        read_1, read_2 = [], []
+
+        for i in self.raw_data:
+            if i["file_type"] == "FASTQ_R1":
+                read_1.append(i["file_url"])
+            elif i["file_type"] == "FASTQ_R2":
+                read_2.append(i["file_url"])
+
+        if read_2 and len(read_1) != len(read_2):  # pragma: no cover
+            raise exceptions.MissingDataError(
+                f"The # of read 1 files ({len(read_1)}) "
+                f"and read 2 ({len(read_2)}) should be the same "
+                f"for paired-end sequencing, found: {read_1 + read_2}"
+            )
+
+        return sorted(read_1), sorted(read_2)
 
 
 def chunks(array, size):
@@ -117,7 +185,7 @@ def chunks(array, size):
 def get_api_url(url):
     """Get an API URL."""
     # hmm, don't like this messing around with slashes
-    base_url = environ.get("ISABL_API_URL", "http://0.0.0.0:8000/api/v1/")
+    base_url = environ.get("ISABL_API_URL", "http://localhost:8000/api/v1/")
     base_url = base_url if base_url[-1] == "/" else f"{base_url}/"
 
     if not url.startswith(base_url):
@@ -126,20 +194,44 @@ def get_api_url(url):
     return url
 
 
+CLI_VERSION_HEADER = "X-Isabl-CLI-Version"
+
+
+@lru_cache(None)
+def get_cli_headers():
+    """Get headers that identify this isabl_cli version to the API."""
+    from isabl_cli import __version__  # avoid circular import
+
+    return {
+        CLI_VERSION_HEADER: __version__,
+        "User-Agent": f"isabl_cli/{__version__} {requests.utils.default_user_agent()}",
+    }
+
+
 def retry_request(method, **kwargs):
     """Retry request operation multiple times."""
-    for i in [0.2, 1, 5, 60, 300]:  # attempt some retries
-        response = getattr(requests, method)(verify=False, **kwargs)
+    # build a new dict so cached headers (e.g. get_token_headers) aren't mutated
+    kwargs["headers"] = {**get_cli_headers(), **(kwargs.get("headers") or {})}
 
-        if not str(response.status_code).startswith("50"):
+    for i in [0.2, 1, 5, 10, 60, 90, 120, 300, 900]:  # attempt some retries
+        try:
+            error = None
+            response = getattr(requests, method)(verify=False, **kwargs)
+        except requests.exceptions.RequestException as request_error:  # pragma: no cover
+            error = request_error
+            response = None
+
+        if response is not None and not str(response.status_code).startswith("50"):
             break
         else:  # pragma: no cover
-            click.secho(f"Request failed, retrying in {i}s...", fg="yellow", err=True)
+            msg = f"Request failed with error: {error}, retrying in {i}s..."
+            click.secho(msg, fg="yellow", err=True)
             time.sleep(i)
 
     return response
 
 
+@lru_cache(None)
 def get_token_headers():
     """Get an API token and store it in user's home directory."""
     headers = {"Authorization": f"Token {user_settings.api_token}"}
@@ -149,39 +241,69 @@ def get_token_headers():
     try:
         assert "username" in response.json()
     except (json.JSONDecodeError, AssertionError):
+        testing = (
+            basename(sys.argv[0]) in ("pytest", "py.test")
+        ) or "pytest" in sys.modules
+
         response = retry_request(
             "post",
             url=get_api_url("/rest-auth/login/"),
             data={
-                "username": click.prompt(
-                    "username",
-                    type=str,
-                    hide_input=False,
-                    default="admin",
-                    show_default=False,
-                ),
-                "password": click.prompt(
-                    "password",
-                    type=str,
-                    hide_input=True,
-                    default="admin",
-                    show_default=False,
-                ),
+                "username": click.prompt("username", type=str, hide_input=False)
+                if not testing
+                else "admin",
+                "password": click.prompt("password", type=str, hide_input=True)
+                if not testing
+                else "admin",
             },
         )
 
-        if not response.ok and "non_field_errors" in response.text:
-            click.secho("\n".join(response.json()["non_field_errors"]), fg="red")
+        if (
+            not response.ok and "non_field_errors" in response.text and not testing
+        ):  # pragma: no cover
+            click.secho("\n".join(response.json()["non_field_errors"]), err=True, fg="red")
+            get_token_headers.cache_clear()
             return get_token_headers()
-        else:
-            click.echo(f"Request Error: {response.url}")
+        elif not response.ok:  # pragma: no cover
+            click.secho(f"Request Error: {response.url}", err=True, fg="red")
             response.raise_for_status()
 
         user_settings.api_token = response.json()["key"]  # pylint: disable=invalid-name
         headers = {"Authorization": f"Token {user_settings.api_token}"}
         click.secho("Successful authorization! Token stored.", fg="green")
 
+    # Authenticate user for analytics
+    send_analytics(user=response.json())
+
     return headers
+
+
+def send_analytics(user):
+    """Send analytics about the identity and group of the user."""
+    from isabl_cli import __version__
+
+    if user.get("username"):
+        username = user["username"]
+        api_url = get_api_url("/")
+        if "localhost" in api_url or  "0.0.0.0" in api_url or "isabl-api" in api_url:
+            domain = urlparse(api_url).netloc
+            subdomain = ""
+            group_id = "DEV"
+        else:
+            subdomain, domain, *_, = urlparse(api_url).netloc.split(".")
+            group_id = f"{subdomain.upper()} {domain.upper()}"
+
+        analytics.identify(username, user)
+        analytics.group(
+            username,
+            group_id,
+            {
+                "subdomain": subdomain,
+                "domain": domain,
+                "component": "cli",
+                "version": __version__,
+            },
+        )
 
 
 def api_request(method, url, authenticate=True, **kwargs):
@@ -201,7 +323,7 @@ def api_request(method, url, authenticate=True, **kwargs):
         except Exception:  # pylint: disable=broad-except
             msg = ""
 
-        click.echo(f"Request Error: {response.url}\n{msg}")
+        click.echo(f"Request Error: {response.url}\n{msg}", err=True)
         response.raise_for_status()
 
     return response
@@ -227,7 +349,7 @@ def process_api_filters(**filters):
             if key == "fields" and "pk" not in value:  # pk is required
                 value = ",".join(value.split(",") + ["pk"])
             filters_dict[key] = value
-        elif isinstance(value, collections.Iterable):
+        elif isinstance(value, collections.abc.Iterable):
             is_in = key.endswith("__in") or key.endswith("__in!")
             value = list(map(str, value))
             filters_dict[key] = [",".join(value)] if is_in else value
@@ -262,7 +384,7 @@ def iterate(url, **filters):
         objects += results["results"]
 
         if len(objects) >= limit:  # pragma: no cover
-            message = f'retrieved {len(objects)} ouf of {results["count"]}...'
+            message = f'retrieved {len(objects)} out of {results["count"]}...'
             click.echo(message, err=True)
 
     return objects
@@ -303,44 +425,58 @@ def create_instance(endpoint, **data):
     return isablfy(api_request("post", url=endpoint, json=data).json())
 
 
-def patch_instance(endpoint, identifier, **data):
+def patch_instance(endpoint, instance_id, **data):
     """
     Patch database instance.
 
     Arguments:
-        identifier (str): a primary key, system_id, email or username.
+        instance_id (str): a primary key, system_id, email or username.
         endpoint (str): endpoint without API base URL (e.g. `analyses`).
         data (dict): fields to be patched.
 
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
+    from isabl_cli.data import symlink_analysis_to_targets
+    from isabl_cli.data import symlink_experiment_to_projects
+    from isabl_cli.data import trigger_analyses_merge
+
     run_status_change_signals = False
     run_data_import_signals = False
 
     if (
         endpoint == "analyses"
         and data.get("status")
-        and Analysis(identifier).status != data.get("status")
+        and Analysis(instance_id).status != data.get("status")
     ):
         run_status_change_signals = True
 
     if (
         endpoint == "experiments"
-        and data.get("sequencing_data")
-        and Experiment(identifier).sequencing_data != data.get("sequencing_data")
+        and data.get("raw_data")
+        and Experiment(instance_id).raw_data != data.get("raw_data")
     ):
         run_data_import_signals = True
 
     instance = isablfy(
-        api_request("patch", url=f"/{endpoint}/{identifier}", json=data).json()
+        api_request("patch", url=f"/{endpoint}/{instance_id}", json=data).json()
     )
 
     if run_status_change_signals:
-        _run_signals("analyses", instance, system_settings.ON_STATUS_CHANGE)
+        signals = system_settings.ON_STATUS_CHANGE + [trigger_analyses_merge]
+
+        if system_settings.CREATE_SYMLINKS:
+            signals.append(symlink_analysis_to_targets)
+
+        _run_signals("analyses", instance, signals)
 
     if run_data_import_signals:
-        _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
+        signals = system_settings.ON_DATA_IMPORT
+
+        if system_settings.CREATE_SYMLINKS:
+            signals.append(symlink_experiment_to_projects)
+
+        _run_signals("experiments", instance, signals)
 
     return instance
 
@@ -505,40 +641,153 @@ def patch_analysis_status(analysis, status):
         dict: patched analysis instance.
     """
     data = {"status": status}
-    application = analysis["application"]
     storage_url = analysis["storage_url"]
+    analysis["status"] = status  # make sure that the analysis status is updated
+    _set_analysis_permissions(analysis)
 
-    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS"}:
+    if status in {"FAILED", "SUCCEEDED", "IN_PROGRESS", "FINISHED", "REJECTED"}:
         data["storage_usage"] = utils.get_tree_size(storage_url)
 
-    # admin must own directory of regular analyses
-    if status == "SUCCEEDED" and not analysis["project_level_analysis"]:
-        utils.check_admin()
+    if status == "STARTED":
+        data["ran_by"] = system_settings.api_username
 
-        if analysis["ran_by"] != system_settings.api_username:
-            src = storage_url + "__tmp"
-            shutil.move(storage_url, src)
-            cmd = utils.get_rsync_command(src, storage_url, chmod="a-w")
-            subprocess.check_call(cmd, shell=True)
-
-    if status in {"SUCCEEDED", "IN_PROGRESS"}:
+    if status in {"SUCCEEDED", "IN_PROGRESS", "FINISHED"}:
         try:
-            application = import_from_string(application["application_class"])()
-            data["results"] = application._get_analysis_results(analysis)
-        except ImportError:
-            pass
+            data["results"] = _get_analysis_results(analysis, raise_error=True)
         except Exception as error:  # pragma: no cover
             data["status"] = "FAILED"
             patch_instance("analyses", analysis["pk"], **data)
             raise error
 
-    if status == "STARTED":
-        data["ran_by"] = system_settings.api_username
-
     return patch_instance("analyses", analysis["pk"], **data)
 
 
-def _run_signals(endpoint, instance, signals):
+def send_error_email(recipients, subject, message):
+    """
+    Send an error message to recipients.
+
+    Arguments:
+        recipients (list): email recipients.
+        subject (str): email subject.
+        message (str): error message.
+
+    Returns:
+        requests.models.Response: api request response.
+    """
+    kwargs = {
+        "data": {
+            "recipients": recipients,
+            "subject": subject,
+            "content": message,
+            "html_template": "error",
+        }
+    }
+    return api_request("post", url=f"/send_email", **kwargs)
+
+
+def _set_analysis_permissions(analysis):
+    protect_results = analysis.status == "SUCCEEDED"
+    unique_analysis_per_individual = False
+    application_protect_results = True
+    chgrp_cmd = (
+        ["false"]
+        if not system_settings.DEFAULT_LINUX_GROUP
+        else ["chgrp", "-R", system_settings.DEFAULT_LINUX_GROUP, analysis.storage_url]
+    )
+
+    try:
+        application = import_from_string(analysis.application.application_class)()
+        unique_analysis_per_individual = application.unique_analysis_per_individual
+        application_protect_results = application.application_protect_results
+    except ImportError:
+        pass
+
+    if (
+        # dont protect results if project level analysis
+        analysis.project_level_analysis
+        # dont protect results if individual level automerge
+        or (analysis.individual_level_analysis and not unique_analysis_per_individual)
+        # dont protect results if the application says so
+        or not application_protect_results
+    ):
+        protect_results = False
+
+    if protect_results:
+        utils.check_admin()
+
+        if analysis.ran_by != system_settings.api_username:
+            src = analysis.storage_url + "__tmp"
+            shutil.move(analysis.storage_url, src)
+            cmd = utils.get_rsync_command(src, analysis.storage_url, chmod="a-w")
+            try:
+                subprocess.check_call(cmd, shell=True)
+            except subprocess.CalledProcessError:
+                try:
+                    version_stdout = subprocess.run(
+                        ["rsync", "--version"], capture_output=True, text=True
+                    ).stdout.split("\n")[0]
+                    utils.check_rsync_version(version_stdout)
+                except Exception as e:
+                    click.secho(f"Error running rsync and checking its version", err=True, fg="red")
+                    raise(e)
+        else:
+            subprocess.check_call(["chmod", "-R", "a-w", analysis.storage_url])
+
+        try:
+            subprocess.check_output(chgrp_cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:
+            pass
+
+    elif not protect_results or analysis.status in {"FAILED", "FINISHED"}:
+        for i in [chgrp_cmd, ["chmod", "-R", "g+rwX", analysis.storage_url]]:
+            try:
+                subprocess.check_output(i, stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError:
+                pass
+
+
+def _get_analysis_results(analysis, raise_error=True):
+    """Patch analysis results."""
+    app_name = f"{analysis.application.name} {analysis.application.version}"
+    error_msg = f"\tFailed to patch {app_name}({analysis.pk}, {analysis.storage_url}):"
+    results = analysis.results
+
+    try:
+        application = import_from_string(analysis.application.application_class)()
+    except ImportError as error:
+        click.secho(f"{error_msg} cant import application class", err=True, fg="red")
+        return results
+
+    if not analysis.storage_url:  # pragma: no cover
+        analysis = application._patch_analysis(analysis)
+
+    try:
+        # just used to make sure the app results are patched
+        expected_app = application.primary_key
+
+        if analysis.project_level_analysis:
+            expected_app = application.project_level_auto_merge_application.pk
+        elif (
+            analysis.individual_level_analysis and application.has_individual_auto_merge
+        ):
+            expected_app = application.individual_level_auto_merge_application.pk
+
+        assert analysis.application.pk == expected_app, (
+            f"{application.__class__} does not match: "
+            f"{analysis.application.application_class}"
+        )
+
+        results = application._get_analysis_results(analysis)
+    except Exception as error:  # pragma: no cover pylint: disable=broad-except
+        click.secho(f"{error_msg} {error}", err=True, fg="red")
+        if raise_error:
+            raise error
+        print(traceback.format_exc())
+
+    return results
+
+
+def _run_signals(endpoint, instance, signals, raise_error=False, create_record=True):
     errors = []
     on_failure = system_settings.ON_SIGNAL_FAILURE or (lambda *_, **__: None)
 
@@ -546,29 +795,38 @@ def _run_signals(endpoint, instance, signals):
         try:
             signal(instance)
         except Exception as error:  # pragma: no cover pylint: disable=W0703
-            errors.append((error, traceback.format_exc()))
+            failure_traceback = traceback.format_exc()
+            errors.append((error, failure_traceback))
 
             try:
                 on_failure(endpoint, instance, signal, error)
             except Exception as on_failure_error:  # pylint: disable=W0703
                 errors.append((on_failure_error, traceback.format_exc()))
+                failure_traceback += traceback.format_exc()
+
+            if not create_record:
+                continue
+
+            # get or create signal instance
+            signal_instance = create_instance(
+                "signals",
+                target_endpoint=endpoint,
+                target_id=instance.pk,
+                import_string=".".join([signal.__module__, signal.__name__]),
+            )
+
+            # patch signal with error message
+            signal_instance.data["failure_traceback"] = failure_traceback
+            patch_instance("signals", signal_instance.pk, data=signal_instance.data)
 
     if errors:
-        errors_dir = join(
-            system_settings.BASE_STORAGE_DIRECTORY,
-            ".failed_signals",
-            endpoint,
-            f"{instance.pk:04d}"[-4:-2],
-            f"{instance.pk:04d}"[-2:],
-            str(instance.pk),
+        msg = (
+            click.style("\nERROR:", fg="red")
+            + " some signals failed!\n\n"
+            + click.style("\n".join([f"{i}:\n\t{j}" for i, j in errors]), fg="red")
         )
 
-        try:
-            os.makedirs(errors_dir, exist_ok=True, mode=0o770)
-            msg = "\n".join([f"{i}:\n\t{j}" for i, j in errors])
+        click.echo(msg, err=True)
 
-            with open(join(errors_dir, datetime.now().isoformat()), "+w") as f:
-                f.write(msg)
-
-        except Exception as error:  # pylint: disable=broad-except
-            click.secho(f"Failed to log signal errors ({error}):\n\n{msg}", fg="red")
+        if raise_error:
+            raise exceptions.AutomationError(msg)

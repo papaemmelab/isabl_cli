@@ -1,5 +1,6 @@
 """isabl_cli utils tests."""
 
+from getpass import getuser
 from os.path import join
 import os
 import tarfile
@@ -8,6 +9,11 @@ import pytest
 
 from isabl_cli import utils
 from isabl_cli.settings import _DEFAULTS
+
+
+def test_find_user(tmpdir):
+    assert getuser() == utils.find_owner(str(tmpdir))
+    assert utils.assert_same_owner(str(tmpdir)) is None
 
 
 def test_force_symlink(tmpdir):
@@ -125,3 +131,24 @@ def test_check_admin():
 
     assert "not the admin" in str(error.value)
     _DEFAULTS["ADMIN_USER"] = admin
+
+
+def test_traverse_dict():
+    assert utils.traverse_dict({"1": {}}, ["1"], serialize=True) == "{}"
+    assert utils.traverse_dict({"1": [{"2": 1}]}, ["1", "2"], serialize=True) == "[1]"
+
+
+def test_called_from():
+    def a_function():
+        return utils.called_from(3, verbose=False)
+
+    assert "a_function" in a_function()
+    assert "test_called_from" in a_function()
+    assert "pytest_pyfunc_call" in a_function()
+
+def test_rsync_version_checking():
+    incompatible_version_string = "rsync  version 2.6.9  protocol version 29"
+    with pytest.raises(ValueError):
+        utils.check_rsync_version(incompatible_version_string)
+    compatible_version_string = "rsync  version 3.2.7  protocol version 31"
+    assert utils.check_rsync_version(compatible_version_string) is None

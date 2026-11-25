@@ -24,6 +24,7 @@ import click
 from isabl_cli import __version__
 from isabl_cli import exceptions
 from isabl_cli.settings import system_settings
+from isabl_cli.utils import send_analytics
 
 
 @click.group()
@@ -43,25 +44,32 @@ def add_apps_groups(apps):
         try:
             command = i.as_cli_command()
             apps_dict[i.ASSEMBLY][command.name] = command
-        except exceptions.ConfigurationError as error:
-            click.secho(f"Invalid configuration, failed to register {i}: {error}")
+        except (exceptions.ConfigurationError, AttributeError) as error:
+            click.secho(f"Invalid configuration, failed to register {i}: {error}", err=True, fg="red")
 
-        if (time.time() - start_time) > 0.1:
+        if (time.time() - start_time) > 0.1:  # pragma: no cover
             click.secho(f"{i.__name__} is loading slowly...", err=True, fg="yellow")
 
     for i, j in apps_dict.items():
-        name, _help = f"apps-{slugify(i)}", f"{i} applications."
-        main.add_command(click.Group(name=name, commands=j, help=_help))
+        name = f"apps-{slugify(i)}" if i else "apps"
+        help_text = f"{i} applications." if i else "data processing applications."
+        main.add_command(click.Group(name=name, commands=j, help=help_text))
 
 
 for i in system_settings.SYSTEM_COMMANDS:
+    # Add analytics to every system command
+    i.callback = send_analytics(i.callback)
+
     main.add_command(i)
 
 for i in system_settings.CUSTOM_COMMANDS:  # pragma: no cover
     main.add_command(i)
 
-if system_settings.INSTALLED_APPLICATIONS:
+try:
     add_apps_groups(system_settings.INSTALLED_APPLICATIONS)
+except ImportError as error:
+    click.secho(f"Failed to import applications: {error}", err=True, fg="red")
+
 
 if system_settings.is_admin_user:
     for i in system_settings.ADMIN_COMMANDS:
@@ -78,3 +86,6 @@ if system_settings.is_admin_user:
 
     if system_settings.BED_IMPORTER:
         main.add_command(system_settings.BED_IMPORTER.as_cli_command())
+
+    if system_settings.YAML_DATA_IMPORTER:
+        main.add_command(system_settings.YAML_DATA_IMPORTER.as_cli_command())

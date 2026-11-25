@@ -1,0 +1,12 @@
+schema: isabl-app-settings/1
+http://localhost:8000/api/v1/:
+  SettingsFileApp:
+    head_job:
+      WG: {partition: componc_cpu, cores: 1, memory_gb: 4, minutes: 10}
+    greeting: hello-from-settings-yaml
+    reference: /tmp
+  SettingsFileAppMissingPath:
+    head_job:
+      WG: {partition: componc_cpu, cores: 1, memory_gb: 4, minutes: 10}
+    greeting: hello-from-settings-yaml
+    reference: /no/such/settings/reference

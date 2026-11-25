@@ -9,23 +9,79 @@ from isabl_cli.settings import system_settings
 from isabl_cli.settings import user_settings
 
 
-def test_get_token_headers():
-    """Sample test for main command."""
-    user_settings.token = None
+def test_get_custom_fields():
+    i = api.IsablDict.fromDict(dict(custom_fields={}))
 
-    @click.command()
-    def test():
-        assert "Authorization" in api.get_token_headers()
+    # assert set
+    i.custom_fields.field = 2
+    assert i.field == 2
+    i.field = 3
+    assert i.custom_fields.field == 3
+    i["field"] = 1
 
-    runner = CliRunner()
-    result = runner.invoke(test, input="admin\nadmin")
-    assert not result.exception
+    # check can get
+    assert i.field == 1
+    assert i.custom_fields.field == 1
+    assert i["field"] == 1
+    assert i.get("field") == 1
+
+    # assert contains
+    assert "field" in i
+    assert "field" in dir(i)
+    assert "field" in list(i)
+
+    # assert can delete
+    i.custom_fields.a = 1
+    i.custom_fields.b = 1
+    i.custom_fields.c = 1
+    del i.a
+    del i["b"]
+    assert i.pop("c") == 1
+    assert "a" not in i.custom_fields
 
 
 def test_api_request():
     assert api.api_request("get", url="auth").ok
     with pytest.raises(requests.HTTPError):
         api.api_request("delete", url="http://google.com")
+
+
+def _spy_requests(monkeypatch, *methods):
+    """Record headers sent by `requests.<method>` while still performing the call."""
+    sent = []
+    for method in methods:
+        real = getattr(requests, method)
+
+        def spy(*args, _real=real, **kwargs):
+            sent.append(dict(kwargs.get("headers") or {}))
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(requests, method, spy)
+    return sent
+
+
+def test_requests_send_cli_version(monkeypatch):
+    from isabl_cli import __version__
+
+    sent = _spy_requests(monkeypatch, "get")
+    api.get_token_headers.cache_clear()  # force the /rest-auth/user/ check too
+    assert api.api_request("get", url="auth").ok
+    assert api.api_request("get", url="/", authenticate=False).ok
+
+    assert len(sent) == 3  # token check, authenticated get, unauthenticated get
+    for headers in sent:
+        assert headers[api.CLI_VERSION_HEADER] == __version__
+        assert headers["User-Agent"].startswith(f"isabl_cli/{__version__} ")
+
+    assert "Authorization" in sent[1]
+    assert "Authorization" not in sent[2]
+
+
+def test_cli_headers_do_not_mutate_token_headers():
+    token_headers = api.get_token_headers()
+    api.api_request("get", url="auth")
+    assert api.CLI_VERSION_HEADER not in token_headers
+    assert set(token_headers) == {"Authorization"}
 
 
 def test_api_methods():
@@ -47,6 +103,8 @@ def test_api_methods():
 
     for i in created:
         assert api.delete_instance(endpoint, i["pk"]) is None
+
+    assert api.get_token_headers()["Authorization"]
 
 
 def test_patch_analyses_status():
@@ -83,3 +141,22 @@ def test_system_id():
     )
     assert patched["sample"]["data"]["key"] == "value"
     assert patched["sample"]["notes"] == "a note"
+
+
+def test_get_instances():
+    technique = api.create_instance("techniques", **factories.TechniqueFactory())
+    assert api.get_instances("techniques", [technique.name])[0].pk == technique.pk
+
+    experiment = api.create_instance("experiments", **factories.ExperimentFactory())
+    individual = experiment.sample.individual
+    project = experiment.projects[0]
+    assert api.get_experiments([experiment.pk])[0].pk == experiment.pk
+    assert api.get_projects([project.pk])[0].pk == project.pk
+    assert api.get_tree(individual.pk).pk == individual.pk
+    assert api.get_trees([individual.pk])[0].pk == individual.pk
+
+
+def test_send_error_email():
+    # Test notification for errors
+    assert api.send_error_email(["test@test.com"], "test", "test").ok
+    assert api.send_error_email(["test1@test.com","test2@test.com"], "test", "test").ok

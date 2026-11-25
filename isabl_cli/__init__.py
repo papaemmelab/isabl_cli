@@ -8,6 +8,7 @@ from isabl_cli.api import Analysis
 from isabl_cli.api import Assembly
 from isabl_cli.api import Experiment
 from isabl_cli.api import create_instance
+from isabl_cli.api import delete_instance
 from isabl_cli.api import get_analyses
 from isabl_cli.api import get_experiments
 from isabl_cli.api import get_instance

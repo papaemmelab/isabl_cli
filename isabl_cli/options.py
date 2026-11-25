@@ -16,7 +16,10 @@ IDENTIFIER = click.option(
     "--identifier",
     "-id",
     show_default=True,
-    help="identifier to be used (traverse with dot, e.g. `sample.system_id`)",
+    help=(
+        "experiment identifier field to be used (traverse with dot, e.g., "
+        "system_id, sample.system_id, sample.individual.identifier, etc.)"
+    ),
     callback=lambda _, __, i: i.split("."),
     required=True,
 )
@@ -46,6 +49,7 @@ ANALYSIS_STATUS = click.option(
             "STARTED",
             "SUBMITTED",
             "SUCCEEDED",
+            "REJECTED",
         ]
     ),
 )
@@ -153,7 +157,9 @@ NORMAL_TARGETS = click.option(
     help="API filters for NORMAL target experiments",
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: _get_experiments(i + ("sample__sample_class", "NORMAL")),
+    callback=lambda _, __, i: _get_experiments(
+        list(i) + [("sample__category", "NORMAL")]
+    ),
     required=True,
 )
 
@@ -198,8 +204,8 @@ PAIR = click.option(
     "-p",
     show_default=True,
     type=(str, str),
-    callback=lambda _, __, i: validators.validate_pairs([i])[0],
-    help="Pass one tumor normal pair identifiers (e.g. -tn 1 2).",
+    callback=lambda _, __, i: validators.validate_pairs([i]),
+    help="Pass one tumor normal pair identifiers (e.g. -p 1 2).",
 )
 
 PAIRS = click.option(
@@ -209,7 +215,7 @@ PAIRS = click.option(
     type=(str, str),
     multiple=True,
     callback=lambda _, __, i: validators.validate_pairs(i),
-    help="Pass one or more tumor normal pairs (e.g. -tn 1 2 -tn 3 4).",
+    help="Pass one or more tumor normal pairs (e.g. -p 1 2 -p 3 4).",
 )
 
 PAIRS_FROM_FILE = click.option(
@@ -309,6 +315,12 @@ RESTART = click.option(
     is_flag=True,
 )
 
+SKIP = click.option(
+    "--skip",
+    help="Run to skip validation of same panel technique for the pairs.",
+    is_flag=True,
+)
+
 
 def get_analyses_filters_option(application_classes=None, **defaults):
     """Get analyses filters with `defaults`."""
@@ -335,6 +347,17 @@ def get_analyses_filters_option(application_classes=None, **defaults):
                     "analyses", **{**dict(tuples), **defaults}
                 )
             return analyses
+        if defaults.get("application__name"):
+            app_name = defaults['application__name']
+            app_version = defaults.get('application__version')
+            if app_version:
+                click.secho(
+                    f"Getting completed analyses for {app_name} {app_version}:", fg="cyan"
+                )
+            else:
+                click.secho(
+                    f"Getting completed analyses for {app_name}:", fg="cyan"
+                )
         return api.get_instances("analyses", **{**dict(tuples), **defaults})
 
     return click.option(
@@ -346,3 +369,39 @@ def get_analyses_filters_option(application_classes=None, **defaults):
         type=(str, str),
         callback=lambda _, __, i: callback(i),
     )
+
+def get_dependency_analyses_option(dependencies_results, **extra_filters):
+    """Get dependencies from specified app pk or name [with version]."""
+    return [
+        *[
+            get_analyses_filters_option(
+                application__classes=i["app"],
+                **extra_filters,
+            )
+            for i in dependencies_results
+            if i.get("app")
+        ],
+        *[
+            get_analyses_filters_option(
+                application__name=i["app_name"],
+                **extra_filters,
+            )
+            for i in dependencies_results
+            if i.get("app_name")
+            and (
+                not i.get("app_version")
+                or i.get("app_version") in {"latest", "any"}
+            )
+        ],
+        *[
+            get_analyses_filters_option(
+                application__name=i["app_name"],
+                application__version=i["app_version"],
+                **extra_filters,
+            )
+            for i in dependencies_results
+            if i.get("app_name")
+            and i.get("app_version")
+            and i.get("app_version") not in {"latest", "any"}
+        ]
+    ]

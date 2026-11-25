@@ -1,6 +1,5 @@
 """Instance factories used for testing."""
 
-import random
 import string
 
 from factory import fuzzy
@@ -12,6 +11,10 @@ class BaseFactory(factory.DictFactory):
     tags = [{"name": "tag 1"}, {"name": "tag 2"}]
 
 
+class UserFactory(BaseFactory):
+    username = fuzzy.FuzzyText(length=6, chars=string.ascii_letters)
+
+
 class ProjectFactory(BaseFactory):
     analyst = factory.Sequence(lambda n: f"analyst-{n}@test.com")
     coordinator = factory.Sequence(lambda n: f"coordinator-{n}@test.com")
@@ -19,11 +22,11 @@ class ProjectFactory(BaseFactory):
     owner = factory.Sequence(lambda n: f"owner-{n}@test.com")
     principal_investigator = factory.Sequence(lambda n: f"pi-{n}@test.com")
     title = fuzzy.FuzzyText(length=20, chars=string.ascii_lowercase + " ")
+    sharing = {"can_share": [], "can_read": [], "is_public": True}
 
 
 class CenterFactory(BaseFactory):
     acronym = fuzzy.FuzzyText(length=3, chars=string.ascii_letters)
-    internal = fuzzy.FuzzyChoice([True, False])
     name = fuzzy.FuzzyText(length=6, chars=string.ascii_letters)
 
 
@@ -59,16 +62,9 @@ class AnalysisFactory(BaseFactory):
 
 
 class TechniqueFactory(BaseFactory):
-    bed_files = factory.SubFactory(factory.DictFactory)
-    analyte = fuzzy.FuzzyChoice(["DNA", "RNA"])
+    reference_data = factory.SubFactory(factory.DictFactory)
     name = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-
-    @factory.lazy_attribute
-    def method(self):
-        """Get method as a function of the analyte."""
-        if self.analyte == "RNA":
-            return random.choice(["TR", "WT"])
-        return random.choice(["CS", "TD", "WE", "WG", "MD"])
+    method = fuzzy.FuzzyChoice(choices=["CS", "TD", "WE", "WG", "MD", "TR", "WT"])
 
 
 class IndividualFactory(BaseFactory):
@@ -83,26 +79,21 @@ class SampleFactory(BaseFactory):
     disease = factory.SubFactory(DiseaseFactory)
     individual = factory.SubFactory(IndividualFactory)
     pdx_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    sample_class = fuzzy.FuzzyChoice(["TUMOR", "NORMAL"])
+    category = fuzzy.FuzzyChoice(["TUMOR", "NORMAL"])
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
 
 
 class ExperimentFactory(BaseFactory):
     bam_files = factory.SubFactory(factory.DictFactory)
-    cell_type = fuzzy.FuzzyChoice(["SINGLE", "BULK"])
-    center_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
     aliquot_id = None
-    analyte_id = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    read_length = fuzzy.FuzzyChoice(["100", "150"])
-    read_type = fuzzy.FuzzyChoice(["PAIR-END", "SINGLE-END"])
     identifier = fuzzy.FuzzyText(length=12, chars=string.hexdigits)
-    sequencing_center = factory.SubFactory(CenterFactory)
-    sequencing_data = None
-    sequencing_platform = factory.SubFactory(PlatformFactory)
+    center = factory.SubFactory(CenterFactory)
+    raw_data = None
+    platform = factory.SubFactory(PlatformFactory)
     sample = factory.SubFactory(SampleFactory)
     technique = factory.SubFactory(TechniqueFactory)
 
     @factory.lazy_attribute
-    def projects(self):
-        """Get method as a function of the analyte."""
+    def projects(self):  # pylint: disable=no-self-use
+        """Lazy method to return list of projects."""
         return [ProjectFactory()]
