@@ -46,3 +46,10 @@ class MissingDataError(PackageBaseException):
 class AutomationError(PackageBaseException):
 
     """A class to raise when automations fail."""
+
+
+class TestSessionWriteError(PackageBaseException):
+
+    """A class to raise when a test session would write to an API that isn't local."""
+
+    __test__ = False  # not a pytest test class
