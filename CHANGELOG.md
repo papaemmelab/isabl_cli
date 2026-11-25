@@ -5,7 +5,35 @@ All notable changes to isabl_cli are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.3] - Unreleased
+## [2.1.0] - Unreleased
+
+### Added
+
+- Applications are discovered from installed packages: a package lists its apps in
+  the `isabl_cli.applications` entry point group, and clients with
+  `DISCOVER_APPLICATIONS` set no longer need them in `INSTALLED_APPLICATIONS`. Apps
+  given as metadata are listed without being imported, and imported only when their
+  command runs. `EXCLUDED_APPLICATIONS` hides apps.
+- `isabl register-apps [APPS] [--commit]` creates or updates the application records
+  of installed apps that are new or changed; without `--commit` it only shows what it
+  would do. `isabl list-apps` shows whether each installed app is registered, changed,
+  not registered, shared, in conflict or invalid.
+- `application_primary` marks the one class that registers an application shared by
+  several classes, such as the steps of an app.
+
+### Changed
+
+- Running an app no longer creates or changes its application record: the
+  `application` property only looks it up, and raises `ApplicationNotRegisteredError`
+  when it is missing. Register apps with `isabl register-apps --commit` before running
+  them. `patch_application_settings` no longer creates the auto merge records.
+- Registering never writes `settings`; it no longer adds an empty `default_client`
+  entry.
+- Only the class an application is registered to can register or run it, otherwise
+  `ApplicationClassMismatchError` says how to fix it. Use
+  `isabl register-apps --takeover` when a class was moved or renamed.
+
+## [2.0.3] - 2026-11-25
 
 ### Added
 
@@ -173,7 +201,8 @@ This is the first tagged release, covering the work since May 2018. It provides:
 - Data import into Isabl.
 - Test factories for Isabl models.
 
-[2.0.3]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.2...develop
+[2.1.0]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.3...master
+[2.0.3]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/papaemmelab/isabl_cli/compare/v1.0.0...v2.0.0
