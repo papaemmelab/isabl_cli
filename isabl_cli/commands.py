@@ -571,7 +571,13 @@ def list_apps(statuses, show_all):
     is_flag=True,
     help="Register the applications, without it only shows what would be done.",
 )
-def register_apps(identifiers, commit):
+@click.option(
+    "--takeover",
+    is_flag=True,
+    help="Also register applications registered to another class, e.g. after the "
+    "class was moved or renamed.",
+)
+def register_apps(identifiers, commit, takeover):
     """
     Create or update the database objects of installed applications.
 
@@ -581,6 +587,9 @@ def register_apps(identifiers, commit):
     IDENTIFIERS are command names, import strings or class names. Without them,
     every installed application that is not registered or has changed is
     registered. Nothing is changed unless --commit is passed.
+
+    An application registered to another class is skipped unless --takeover is
+    passed: an application is owned by one class.
     """
     from isabl_cli import registration  # pylint: disable=C0415
 
@@ -607,12 +616,20 @@ def register_apps(identifiers, commit):
     to_register, skipped = [], []
 
     for i in app_statuses:
+        conflict = (
+            i.app().get_registration_conflict(i.record)
+            if i.primary and i.record is not None and not takeover
+            else None
+        )
+
         if i.status in {"conflict", "invalid"}:
             skipped.append((i, f"can't register a {i.status} application"))
         elif not i.primary:
             skipped.append((i, "not the primary class, register its primary class"))
         elif i.status == "registered":
             skipped.append((i, "already registered"))
+        elif conflict:
+            skipped.append((i, f"{conflict} Use --takeover to replace it."))
         else:
             to_register.append(i)
 
@@ -635,6 +652,6 @@ def register_apps(identifiers, commit):
         return
 
     for i in to_register:
-        i.app().register()
+        i.app().register(takeover=takeover)
 
     click.secho(f"\nRegistered {len(to_register)} applications.", fg="green")

@@ -26,6 +26,7 @@ from isabl_cli import options
 from isabl_cli.batch_systems import submit_local
 from isabl_cli.discovery import cli_command_name
 from isabl_cli.settings import get_application_settings
+from isabl_cli.settings import import_from_string
 from isabl_cli.settings import system_settings
 
 
@@ -606,13 +607,20 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         """Import string stored as the `application_class` of the application."""
         return f"{cls.__module__}.{cls.__name__}"
 
-    def register(self):
+    def register(self, takeover=False):
         """
         Create or update the application database object, and its auto merge ones.
 
         This is the only way the database object of an application is created or
         changed, running an application only reads it. Only the primary class of an
         application can register it, see `application_primary`.
+
+        An application registered to a different class is not changed unless
+        `takeover` is True, see `get_registration_conflict`.
+
+        Arguments:
+            takeover (bool): register even if another class owns the application,
+                e.g. after the class was moved or renamed.
 
         Returns:
             types.SimpleNamespace: the application database object.
@@ -623,6 +631,15 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             raise exceptions.ConfigurationError(
                 f"{self.get_application_class_path()} is not the primary class of "
                 f"{self._identity}, register its primary class instead."
+            )
+
+        conflict = self.get_registration_conflict(self.get_registered_application())
+        if conflict and not takeover:
+            raise exceptions.ApplicationClassMismatchError(
+                f"{conflict} Give this class its own NAME or VERSION, or if it "
+                "replaces the registered class (e.g. it was moved or renamed), run "
+                f"`isabl register-apps {self.get_cli_command_name()} --takeover "
+                "--commit`."
             )
 
         application_class = self.get_application_class_path()
@@ -729,7 +746,98 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 f"{self.get_cli_command_name()} --commit`{registered_by}."
             )
 
+        problem = self.get_class_mismatch(application.application_class)
+        if problem:
+            raise exceptions.ApplicationClassMismatchError(problem)
+
         return application
+
+    def get_class_mismatch(self, registered_path):
+        """
+        Return why this class can't use an application registered to another class.
+
+        The primary class can only use an application registered to itself. A step
+        or alias (`application_primary = False`) can use the application of a
+        primary class from the same package. Classes are compared by what the
+        registered import string imports, so a different path to the same class is
+        not a mismatch.
+
+        Arguments:
+            registered_path (str): the `application_class` of the application.
+
+        Returns:
+            str: the problem, or None if this class can use the application.
+        """
+        own_path = self.get_application_class_path()
+        registered = _import_class(registered_path)
+        is_self = registered_path == own_path or registered is type(self)
+        fix = (
+            "If this class replaces the registered one, register it again with "
+            f"`isabl register-apps {self.get_cli_command_name()} --takeover --commit`"
+            ", otherwise give it its own NAME or VERSION."
+        )
+
+        if not registered_path:
+            return f"{self._identity} has no registered class. {fix}"
+
+        if self.application_primary and is_self:
+            return None
+
+        if (
+            not self.application_primary
+            and not is_self
+            and getattr(registered, "application_primary", False)
+            and _package(registered) == _package(type(self))
+        ):
+            return None
+
+        if registered is not None and _package(registered) == _package(type(self)):
+            if not getattr(registered, "application_primary", True):
+                return (
+                    f"{self._identity} is registered to {registered_path}, a step or "
+                    "alias of the application rather than its primary class. "
+                    "Register the primary class with `isabl register-apps <its "
+                    "command> --commit`."
+                )
+
+        where = "" if registered is not None else ", which can't be imported here"
+        return (
+            f"{self._identity} is registered to {registered_path}{where}, not "
+            f"{own_path}. {fix}"
+        )
+
+    def get_registration_conflict(self, application):
+        """
+        Return why registering would take the application from another class.
+
+        Registering is allowed when the application is new, already belongs to this
+        class, or belongs to a step or alias of this package (records written
+        before registration existed can point to those).
+
+        Arguments:
+            application (types.SimpleNamespace): the database object, or None.
+
+        Returns:
+            str: the conflict, or None if this class can register the application.
+        """
+        registered_path = getattr(application, "application_class", None)
+        if not registered_path:
+            return None
+
+        registered = _import_class(registered_path)
+        own_path = self.get_application_class_path()
+        if registered_path == own_path or registered is type(self):
+            return None
+
+        if (
+            registered is not None
+            and _package(registered) == _package(type(self))
+            and not getattr(registered, "application_primary", True)
+        ):
+            return None
+
+        where = "" if registered is not None else " (it can't be imported here)"
+        return f"{self._identity} is registered to {registered_path}{where}."
 
     @property
     def _identity(self):
@@ -2038,3 +2146,16 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             "data": {"recipients": analysts, "subject": subject, "content": message}
         }
         return api.api_request("post", url=f"/send_email", **kwargs)
+
+
+def _import_class(path):
+    """Import a class from its import string, None if it can't be imported."""
+    try:
+        return import_from_string(path) if path else None
+    except ImportError:
+        return None
+
+
+def _package(cls):
+    """Return the top level package of a class, e.g. isabl_apps."""
+    return cls.__module__.split(".")[0]
