@@ -35,6 +35,12 @@ from isabl_cli.api import create_instance, patch_instance, get_instance
 from isabl_cli.settings import _DEFAULTS
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """Check the API URL again before each test and its fixtures are set up."""
+    check_test_api_url()
+
+
 def pytest_sessionstart():
     """Run before any test starts."""
     check_test_api_url()  # again, right before the clients are changed
