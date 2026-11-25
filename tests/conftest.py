@@ -1,10 +1,49 @@
+"""
+Test configuration.
+
+The tests create, change and delete records and replace the settings of the
+`default-backend-settings` client, which configures the whole API. They must only run
+against a disposable local API, see tests/test-with-compose.sh. pytest.ini sets
+ISABL_API_URL to it, and the check below stops the tests before isabl_cli is imported
+if the URL is not local anyway (e.g. pytest-env is not installed).
+"""
+
+from urllib.parse import urlparse
+import os
+
 import pytest
 
+LOCAL_API_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def check_test_api_url():
+    """Raise a UsageError unless the tests would use a local API."""
+    url = os.environ.get("ISABL_API_URL", "http://localhost:8000/api/v1/")
+
+    if urlparse(url).hostname not in LOCAL_API_HOSTS:
+        raise pytest.UsageError(
+            f"Refusing to run the tests against {url}, they create, change and "
+            "delete records and replace client settings. Run them against a local "
+            "API, see tests/test-with-compose.sh."
+        )
+
+
+check_test_api_url()
+
+# pylint: disable=wrong-import-position
 from isabl_cli.api import create_instance, patch_instance, get_instance
 from isabl_cli.settings import _DEFAULTS
 
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """Check the API URL again before each test and its fixtures are set up."""
+    check_test_api_url()
+
+
 def pytest_sessionstart():
     """Run before any test starts."""
+    check_test_api_url()  # again, right before the clients are changed
     client_cli_id = "test-cli-client"
     client_api_id = "default-backend-settings"
     new_settings_cli = {"EXTRA_RAW_DATA_FORMATS": [(r"\.tf(\.gz)?$", "TEST_FORMAT")]}
