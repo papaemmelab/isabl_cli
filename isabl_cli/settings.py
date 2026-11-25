@@ -17,6 +17,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 from cached_property import cached_property
 from munch import Munch
@@ -471,11 +472,18 @@ def load_app_settings(app_class: type, api_url: str | None = None) -> Munch:
         )
         raise _error()
 
-    module = inspect.getmodule(app_class)
+    # One file can serve the classes of several modules in its folder.
+    folder = dirname(path)
+    modules = [
+        i
+        for i in list(sys.modules.values())
+        if dirname(getattr(i, "__file__", None) or "") == folder
+    ]
     for key in block:
-        defined = getattr(module, str(key), None)
-        if not (
-            inspect.isclass(defined) and defined.__module__ == app_class.__module__
+        if not any(
+            inspect.isclass(getattr(i, str(key), None))
+            and getattr(i, str(key)).__module__ == i.__name__
+            for i in modules
         ):
             faults.append(
                 f"unknown class '{key}': {app_class.__module__} defines no such class"

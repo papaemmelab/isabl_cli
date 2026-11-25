@@ -117,6 +117,14 @@ def test_missing_section_and_unknown_class(tmp_path, monkeypatch):
     ]
 
 
+def test_classes_from_two_modules_in_one_folder():
+    from tests.settings_folder.base import BaseTool
+    from tests.settings_folder.other import OtherTool
+
+    assert load_app_settings(BaseTool, MSK).greeting == "hello-from-base"
+    assert load_app_settings(OtherTool, MSK).greeting == "hello-from-other"
+
+
 def test_subclass_inherits_declarations(tmp_path, monkeypatch):
     text = manifest(MSK) + "  ToolUnmatched:\n" + SECTION
     app = make_app(tmp_path, monkeypatch, text, name="ToolUnmatched")
