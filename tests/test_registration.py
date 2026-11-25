@@ -267,3 +267,91 @@ def test_register_apps_command(monkeypatch):
     result = runner.invoke(commands.register_apps, ["nope"])
     assert result.exit_code == 2
     assert "No installed application matches: nope" in result.output
+
+
+def test_class_mismatch_rules():
+    primary = Primary.get_application_class_path()
+    step = Step.get_application_class_path()
+    other = OtherPrimary.get_application_class_path()
+    foreign = type(
+        "Foreign",
+        (Primary,),
+        {"application_primary": False, "__module__": "other.apps"},
+    )
+
+    # the primary class only uses an application registered to itself
+    assert Primary().get_class_mismatch(primary) is None
+    assert "registered to" in OtherPrimary().get_class_mismatch(primary)
+    assert "can't be imported" in Primary().get_class_mismatch("nowhere.Primary")
+    assert "no registered class" in Primary().get_class_mismatch(None)
+
+    # records that point to a step or alias are fixed by registering the primary
+    assert "register-apps <its command>" in Primary().get_class_mismatch(step)
+
+    # steps and aliases use the application of a primary class of their package
+    assert Step().get_class_mismatch(primary) is None
+    assert Step().get_class_mismatch(other) is None
+    assert Step().get_class_mismatch(step)
+    assert foreign().get_class_mismatch(primary)
+
+
+def test_registration_conflict_rules():
+    def record(path):
+        return SimpleNamespace(application_class=path)
+
+    primary = Primary()
+    own = Primary.get_application_class_path()
+    step = Step.get_application_class_path()
+    assert primary.get_registration_conflict(None) is None
+    assert primary.get_registration_conflict(record(None)) is None
+    assert primary.get_registration_conflict(record(own)) is None
+
+    # a record written by a step or alias of this package is corrected
+    assert primary.get_registration_conflict(record(step)) is None
+
+    # another class owns it
+    other = OtherPrimary.get_application_class_path()
+    assert other in primary.get_registration_conflict(record(other))
+    assert "can't be imported" in primary.get_registration_conflict(record("nowhere.X"))
+
+
+class Owner(AbstractApplication):
+    NAME = f"OWNERSHIP {UNIQUE}"
+    VERSION = "1.0.0"
+
+
+class Intruder(Owner):
+    pass
+
+
+def test_register_and_run_only_as_the_owner(monkeypatch):
+    Owner().register()
+
+    # another class can't register or use the application
+    with pytest.raises(exceptions.ApplicationClassMismatchError, match="--takeover"):
+        Intruder().register()
+    with pytest.raises(exceptions.ApplicationClassMismatchError, match="registered to"):
+        Intruder().application
+
+    # the command skips it unless --takeover is passed
+    monkeypatch.setattr(
+        registration, "get_installed_applications", lambda: installed(Intruder)
+    )
+    command = Intruder().get_cli_command_name()
+    runner = CliRunner()
+    result = runner.invoke(commands.register_apps, [command, "--commit"])
+    assert result.exit_code == 0, result.output
+    assert "Use --takeover to replace it" in result.output
+    assert Owner().application.application_class == Owner.get_application_class_path()
+
+    result = runner.invoke(commands.register_apps, [command, "--takeover", "--commit"])
+    assert result.exit_code == 0, result.output
+    assert "Registered 1 applications" in result.output
+    path = Intruder.get_application_class_path()
+    assert Intruder().application.application_class == path
+
+    # now the previous owner can't use it, until it takes it back
+    with pytest.raises(exceptions.ApplicationClassMismatchError):
+        Owner().application
+    application = Owner().register(takeover=True)
+    assert application.application_class == Owner.get_application_class_path()

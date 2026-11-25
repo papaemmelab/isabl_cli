@@ -38,6 +38,15 @@ class ApplicationNotRegisteredError(ConfigurationError, ClickException):
         ClickException.__init__(self, message)
 
 
+class ApplicationClassMismatchError(ConfigurationError, ClickException):
+
+    """A class to raise when an application is registered to a different class."""
+
+    def __init__(self, message):
+        """Show the message without a traceback when raised in a command."""
+        ClickException.__init__(self, message)
+
+
 class ImplementationError(PackageBaseException):
 
     """A class to raise when is not properly implemented."""
