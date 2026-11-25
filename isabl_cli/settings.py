@@ -576,8 +576,11 @@ def settings_record(app_class: type, values: object, api_url: str) -> dict:
         except (OSError, subprocess.CalledProcessError) as error:
             detail = getattr(error, "stderr", None) or error
             raise exceptions.ConfigurationError(
-                f"Can't read the git commit of {app_class.__name__} in {folder}: "
-                f"{str(detail).strip()}. Run apps from a git checkout."
+                f"Can't record the settings of {app_class.__name__}: its code in "
+                f"{folder} is not in a git checkout ({str(detail).strip()}). "
+                "Every committed run records the git commit of the app's code. "
+                "Run apps from a git checkout, for example a clone installed "
+                "with `pip install -e <clone>`."
             ) from error
 
     top, commit = git("rev-parse", "--show-toplevel", "HEAD").splitlines()
