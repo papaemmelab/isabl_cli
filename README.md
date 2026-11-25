@@ -90,9 +90,13 @@ To skip the build step (faster for subsequent runs):
 
 ### Running Tests Directly
 
-The tests create, change and delete records through the API, so only run them against a throwaway local API that you started for them. `pytest.ini` points `ISABL_API_URL` at `http://localhost:8000/api/v1/` and `tests/conftest.py` refuses any other host, so a production `ISABL_API_URL` in your shell is never used.
+The tests create, change and delete records and replace client settings, so only run them against a throwaway local API that you started for them. Three things stop them reaching any other API, whatever ISABL_API_URL your shell exports:
 
-Tests create, change and delete records and replace client settings, so isabl_cli refuses to write to any API other than `localhost` while pytest is loaded, whatever `ISABL_API_URL` your shell exports. This applies to every test suite that uses isabl_cli, not only this one. To run tests against a disposable remote test server, set `ISABL_ALLOW_TEST_WRITES_TO` to its URL.
+ - pytest.ini sets ISABL_API_URL to http://localhost:8000/api/v1/.
+ - tests/conftest.py refuses to start, and refuses each test, if the URL isn't localhost.
+ - isabl_cli itself refuses to write to any API other than localhost while pytest is loaded. This applies to every test suite that uses isabl_cli, not only this one.
+
+To run the tests against a disposable remote test server, change ISABL_API_URL in pytest.ini and set ISABL_ALLOW_TEST_WRITES_TO to the server's URL.
 
 If you have a local Isabl API instance running (e.g., via `docker compose up -d` in the `isabl_api` repository), you can run pytest commands directly:
 
