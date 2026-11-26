@@ -5,6 +5,15 @@ All notable changes to isabl_cli are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - Unreleased
+
+### Fixed
+
+- Registering sends an application's description, url and result text without leading
+  and trailing whitespace, as the API stores them, and `isabl list-apps` compares them
+  the same way. Before, an app with a triple-quoted description showed as changed even
+  right after `isabl register-apps --commit`.
+
 ## [2.1.0] - 2026-11-25
 
 ### Added
@@ -201,7 +210,8 @@ This is the first tagged release, covering the work since May 2018. It provides:
 - Data import into Isabl.
 - Test factories for Isabl models.
 
-[2.1.0]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.3...master
+[2.1.1]: https://github.com/papaemmelab/isabl_cli/compare/v2.1.0...master
+[2.1.0]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.3...v2.1.0
 [2.0.3]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.0...v2.0.1
