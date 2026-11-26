@@ -7,6 +7,8 @@ from click.testing import CliRunner
 import pytest
 
 from isabl_cli import AbstractApplication
+from isabl_cli.app import strip_results_whitespace
+from isabl_cli.app import strip_whitespace
 from isabl_cli import api
 from isabl_cli import commands
 from isabl_cli import exceptions
@@ -143,6 +145,47 @@ def test_statuses_changed():
         "description differs",
         f"'{Primary().project_level_auto_merge_name}' not registered",
     ]
+
+
+class Padded(Primary):
+    application_description = """
+    Primary application, written as a triple-quoted string.
+    """
+    application_url = ""
+    application_results = {
+        "vcf": {"frontend_type": "text-file", "description": "\nA vcf.\n"}
+    }
+
+
+def test_strip_results_whitespace_only_strips_text():
+    results = {
+        "vcf": {"description": " A vcf.\n", "pattern": " *.vcf ", "optional": True}
+    }
+    assert strip_results_whitespace(results) == {
+        "vcf": {"description": "A vcf.", "pattern": " *.vcf ", "optional": True}
+    }
+    assert strip_whitespace("\n Text \n") == "Text"
+    assert strip_whitespace(None) is None
+
+
+def test_statuses_compare_text_as_stored():
+    # the API trims text, and register sends it trimmed too
+    stored = record(
+        Padded,
+        description="Primary application, written as a triple-quoted string.",
+        url=None,
+    )
+    stored.results["vcf"]["description"] = "A vcf."
+    records = records_of(stored, merge_record(Padded))
+    assert by_class(registration.get_statuses(installed(Padded), records)) == {
+        "Padded": ("registered", [])
+    }
+
+    stored.description = "Another description."
+    status, details = by_class(registration.get_statuses(installed(Padded), records))[
+        "Padded"
+    ]
+    assert (status, details) == ("changed", ["description differs"])
 
 
 def test_statuses_class_path_compared_by_import():
@@ -355,3 +398,25 @@ def test_register_and_run_only_as_the_owner(monkeypatch):
         Owner().application
     application = Owner().register(takeover=True)
     assert application.application_class == Owner.get_application_class_path()
+
+
+class PaddedText(AbstractApplication):
+    NAME = f"PADDED TEXT {UNIQUE}"
+    VERSION = "1.0.0"
+    application_description = """
+    Written as a triple-quoted string.
+    """
+    application_results = {
+        "vcf": {"frontend_type": "text-file", "description": "\nA vcf.\n"}
+    }
+
+
+def test_register_sends_text_as_stored():
+    application = PaddedText().register()
+    assert application.description == "Written as a triple-quoted string."
+    assert application.results["vcf"]["description"] == "A vcf."
+
+    statuses = registration.get_statuses(
+        installed(PaddedText), registration.get_application_records()
+    )
+    assert by_class(statuses) == {"PaddedText": ("registered", [])}

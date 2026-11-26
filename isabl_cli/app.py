@@ -658,10 +658,10 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
         application = api.patch_instance(
             "applications",
             application.pk,
-            description=self.application_description,
+            description=strip_whitespace(self.application_description),
             application_class=application_class,
-            results=self._application_results,
-            url=self.application_url,
+            results=strip_results_whitespace(self._application_results),
+            url=strip_whitespace(self.application_url),
         )
 
         merges = []
@@ -696,8 +696,8 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 merge.pk,
                 description=f"{self.NAME} {self.VERSION} {level} Level Application.",
                 application_class=application_class,
-                results=results,
-                url=self.application_url,
+                results=strip_results_whitespace(results),
+                url=strip_whitespace(self.application_url),
             )
 
         # make sure cached database objects are fetched again
@@ -2146,6 +2146,41 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
             "data": {"recipients": analysts, "subject": subject, "content": message}
         }
         return api.api_request("post", url=f"/send_email", **kwargs)
+
+
+# text fields of a result specification that the API stores, it drops the others
+# (e.g. `pattern`, which is only used to find the result's file)
+STORED_RESULT_TEXT_FIELDS = (
+    "frontend_type",
+    "verbose_name",
+    "description",
+    "external_link",
+    "logo",
+)
+
+
+def strip_whitespace(value):
+    """
+    Return text without leading and trailing whitespace, as the API stores it.
+
+    The API trims text the same way, so what `register` sends is what is stored and
+    `isabl list-apps` can compare code and database exactly (e.g. a description
+    written as a triple-quoted string starts and ends with a newline).
+    """
+    return value.strip() if isinstance(value, str) else value
+
+
+def strip_results_whitespace(results):
+    """Strip whitespace from the text fields of a results specification, see above."""
+    return {
+        key: {
+            field: (
+                strip_whitespace(value) if field in STORED_RESULT_TEXT_FIELDS else value
+            )
+            for field, value in (spec or {}).items()
+        }
+        for key, spec in (results or {}).items()
+    }
 
 
 def _import_class(path):

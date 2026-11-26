@@ -10,6 +10,8 @@ from collections import defaultdict
 from collections import namedtuple
 
 from isabl_cli import api
+from isabl_cli.app import strip_results_whitespace
+from isabl_cli.app import strip_whitespace
 from isabl_cli.discovery import get_command_name
 from isabl_cli.discovery import import_string as get_import_string
 from isabl_cli.settings import import_from_string
@@ -218,10 +220,13 @@ def compare(app, record, records):
 
     details += _diff_results(app._application_results, record.results)
 
-    if (app.application_description or "") != (record.description or ""):
+    # compared as `register` sends them, see `strip_whitespace`
+    if (strip_whitespace(app.application_description) or None) != (
+        record.description or None
+    ):
         details.append("description differs")
 
-    if (app.application_url or None) != (record.url or None):
+    if (strip_whitespace(app.application_url) or None) != (record.url or None):
         details.append("url differs")
 
     for name, results in _get_merges(app):
@@ -277,8 +282,10 @@ def _diff_results(expected, stored):
 
     The API keeps only the fields it knows of each result (e.g. it drops `pattern`)
     and fills the others with None, so only the stored fields are compared, and a
-    missing field equals None.
+    missing field equals None. The class's text is compared as `register` sends it,
+    see `strip_results_whitespace`.
     """
+    expected = strip_results_whitespace(expected)
     stored = stored or {}
     details = []
     added = sorted(set(expected) - set(stored))
