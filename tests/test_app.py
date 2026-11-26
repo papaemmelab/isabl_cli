@@ -416,6 +416,49 @@ def test_unique_analysis_per_individual_app(tmpdir):
     assert experiments[0].system_id in result.output
 
 
+def test_unique_analysis_per_individual_changed_inputs_are_staged(tmpdir):
+    individual = factories.IndividualFactory(species="HUMAN")
+    sample = factories.SampleFactory(individual=individual)
+    project = api.create_instance("projects", **factories.ProjectFactory())
+    experiments = [
+        factories.ExperimentFactory(
+            identifier=str(i), sample=sample, projects=[project]
+        )
+        for i in range(3)
+    ]
+
+    experiments = [api.create_instance("experiments", **i) for i in experiments]
+    application = UniquePerIndividualApplication()  # results are protected
+    ran_analyses, _, __ = application.run([(experiments[:1], [])], commit=True)
+    analysis = ran_analyses[0][0]
+    done = {"SUCCEEDED", "FINISHED"}  # FINISHED if not run by an admin user
+    assert ran_analyses[0][1] in done
+
+    # changed inputs are rerun even if the analysis is FINISHED, FAILED or
+    # SUCCEEDED with protected results, previously they were skipped
+    for status, targets in [
+        ("FINISHED", experiments[:2]),
+        ("FAILED", experiments[:3]),
+        ("SUCCEEDED", experiments[:2]),
+    ]:
+        api.patch_instance("analyses", analysis.pk, status=status)
+        ran_analyses, skipped, __ = application.run([(targets, [])], commit=True)
+        assert not skipped
+        assert len(ran_analyses) == 1
+        assert ran_analyses[0][0].pk == analysis.pk
+        assert ran_analyses[0][1] in done
+        assert len(api.get_instance("analyses", analysis.pk).targets) == len(targets)
+
+    # running analyses are left unchanged and skipped
+    api.patch_instance("analyses", analysis.pk, status="STARTED")
+    ran_analyses, skipped, __ = application.run([(experiments[:3], [])], commit=True)
+    assert not ran_analyses
+    assert skipped[0][1] == "STARTED"
+    analysis = api.get_instance("analyses", analysis.pk)
+    assert analysis.status == "STARTED"
+    assert len(analysis.targets) == 2
+
+
 def test_engine(tmpdir):
     _DEFAULTS["DEFAULT_LINUX_GROUP"] = "not_a_group"
 
