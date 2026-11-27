@@ -238,7 +238,7 @@ This is the first tagged release, covering the work since May 2018. It provides:
 - Data import into Isabl.
 - Test factories for Isabl models.
 
-[2.1.1]: https://github.com/papaemmelab/isabl_cli/compare/v2.1.0...master
+[2.1.1]: https://github.com/papaemmelab/isabl_cli/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.3...v2.1.0
 [2.0.3]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/papaemmelab/isabl_cli/compare/v2.0.1...v2.0.2
