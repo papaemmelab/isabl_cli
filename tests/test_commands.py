@@ -1,3 +1,5 @@
+from os.path import join
+
 from click.testing import CliRunner
 
 from isabl_cli import api
@@ -217,29 +219,26 @@ def test_login():
     assert "Successful authorization! Token stored" in result.output
 
 
+def write_status_signal(analysis):
+    with open(join(analysis.storage_url, "status.txt"), "w") as f:
+        f.write(analysis.status)
+
+
 def test_run_signals(tmpdir):
-    signal = "isabl_cli.data.symlink_analysis_to_targets"
+    signal = "tests.test_commands.write_status_signal"
     runner = CliRunner()
-    experiment_dir = tmpdir.mkdir("experiment")
     analysis = api.create_instance(
-        "analyses",
-        **factories.AnalysisFactory(
-            storage_url=str(tmpdir.mkdir("analysis")),
-            targets=[factories.ExperimentFactory(storage_url=str(experiment_dir))],
-        ),
+        "analyses", **factories.AnalysisFactory(storage_url=tmpdir.strpath)
     )
 
     api.patch_instance("analyses", analysis.pk, status="CREATED")
     args = ["analyses", "-fi", "pk", analysis.pk, "-s", signal]
-    result = runner.invoke(commands.run_signals, args, catch_exceptions=False)
-    assert "analyses" not in str(experiment_dir.listdir())
+    runner.invoke(commands.run_signals, args, catch_exceptions=False)
+    assert tmpdir.join("status.txt").read() == "CREATED"
 
     api.patch_instance("analyses", analysis.pk, status="SUCCEEDED")
-    args = ["analyses", "-fi", "pk", analysis.pk, "-s", signal]
-    result = runner.invoke(commands.run_signals, args, catch_exceptions=False)
-    assert analysis.application.name.lower() in str(
-        experiment_dir.join("analyses").listdir()
-    )
+    runner.invoke(commands.run_signals, args, catch_exceptions=False)
+    assert tmpdir.join("status.txt").read() == "SUCCEEDED"
 
 
 def test_run_web_signals():

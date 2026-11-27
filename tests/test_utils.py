@@ -3,6 +3,7 @@
 from getpass import getuser
 from os.path import join
 import os
+import stat
 import tarfile
 
 import pytest
@@ -14,6 +15,33 @@ from isabl_cli.settings import _DEFAULTS
 def test_find_user(tmpdir):
     assert getuser() == utils.find_owner(str(tmpdir))
     assert utils.assert_same_owner(str(tmpdir)) is None
+
+
+def test_makedirs(tmpdir):
+    path = join(str(tmpdir), "parent", "child")
+    original_umask = os.umask(0o022)
+
+    try:
+        utils.makedirs(path)
+        assert os.umask(0o022) == 0o022
+    finally:
+        os.umask(original_umask)
+
+    for i in [path, os.path.dirname(path)]:
+        assert stat.S_IMODE(os.stat(i).st_mode) & 0o777 == 0o770
+
+
+def test_chmod(tmpdir, monkeypatch, capsys):
+    utils.chmod(str(tmpdir), 0o550)
+    assert stat.S_IMODE(os.stat(str(tmpdir)).st_mode) & 0o777 == 0o550
+    os.chmod(str(tmpdir), 0o750)
+
+    def raise_permission_error(*_):
+        raise PermissionError
+
+    monkeypatch.setattr(os, "chmod", raise_permission_error)
+    utils.chmod(str(tmpdir), 0o550)
+    assert f"Could not set mode 550 on {tmpdir}" in capsys.readouterr().err
 
 
 def test_force_symlink(tmpdir):

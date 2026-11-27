@@ -1,5 +1,6 @@
 import os
 import shutil
+import stat
 import uuid
 
 from click.testing import CliRunner
@@ -20,11 +21,20 @@ def test_trash_analysis_storage():
     assert "You can't wipe a succeeded analysis" in str(error.value)
 
 
+def _mode(path):
+    """Return the permission bits of `path`."""
+    return stat.S_IMODE(os.stat(path).st_mode) & 0o777
+
+
 def test__make_storage_directory(tmpdir):
     i = data._make_storage_directory(tmpdir.strpath, "test", 12345, use_hash=True)
     j = data._make_storage_directory(tmpdir.strpath, "test", 12345, use_hash=False)
     assert "/test/23/45/12345" in i
     assert "/test/12345" in j
+
+    # test the storage directory and its hash directories aren't open to others
+    for path in [i, os.path.dirname(i), os.path.dirname(os.path.dirname(i))]:
+        assert _mode(path) == 0o770
 
 
 def test_local_reference_genome_importer(tmpdir):
@@ -188,6 +198,12 @@ def test_local_data_import(tmpdir):
     assert "samples matched: 1" in summary
     assert api.Experiment(experiments[0].pk).get_fastq()
 
+    # test imported files and the experiment directories are read-only
+    experiment = api.Experiment(experiments[0].pk)
+    assert all(_mode(i["file_url"]) == 0o440 for i in experiment.raw_data)
+    assert _mode(experiment.storage_url) == 0o550
+    assert _mode(os.path.join(experiment.storage_url, "data")) == 0o550
+
     # test can exclude formats
     path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
     path_2 = tmpdir.join(f'{experiments[1]["system_id"]}.bam')
@@ -225,8 +241,6 @@ def test_local_data_import(tmpdir):
         directories=dirs, commit=True, symlink=True, pk__in=keys
     )
 
-    project = api.get_instance("projects", projects[0]["pk"])
-    assert project["storage_url"]
     assert imported[0]["storage_usage"] > 0
     assert imported[0]["raw_data"]
     assert imported[1]["raw_data"]
@@ -234,6 +248,10 @@ def test_local_data_import(tmpdir):
     assert len(os.listdir(os.path.join(imported[1]["storage_url"], "data"))) == 2
     assert "samples matched: 2" in summary
     assert "samples skipped: 2" in summary
+
+    # test symlinked files are left as they are, chmod would follow the links
+    assert all(os.access(i.strpath, os.W_OK) for i in [path_1, path_2, path_3, path_4])
+    assert _mode(imported[1]["storage_url"]) == 0o550
 
     # test import data from command line and files_data functionality
     path_1 = tmpdir.join(f'{experiments[1]["system_id"]}_1.fastq')
@@ -273,6 +291,10 @@ def test_local_data_import(tmpdir):
     experiments[1] = api.get_instance("experiments", experiments[1]["pk"])
     assert experiments[1]["raw_data"][0]["file_data"]["PU"] == "TEST_PU"
     assert experiments[1]["raw_data"][1]["file_data"]["PU"] == "TEST_PU"
+
+    # test importing into a read-only experiment locks it again
+    assert _mode(experiments[1]["storage_url"]) == 0o550
+    assert _mode(os.path.join(experiments[1]["storage_url"], "data")) == 0o550
 
     # test import using invalid identifier
     args = ["-di", tmpdir.strpath, "-id", "sample", "-fi", "pk__in", keys]
@@ -318,6 +340,11 @@ def test_local_data_import(tmpdir):
     assert api.Experiment(experiments[6].pk).get_fastq()
     assert path_1.exists()
     assert path_2.exists()
+    assert os.access(path_1.strpath, os.W_OK)
+    assert all(
+        _mode(i["file_url"]) == 0o440
+        for i in api.Experiment(experiments[6].pk).raw_data
+    )
 
 
 def test_local_data_import_with_extra(tmpdir):

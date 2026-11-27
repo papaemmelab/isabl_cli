@@ -41,7 +41,6 @@ _DEFAULTS = {
     "CUSTOM_COMMANDS": [],
     "ON_DATA_IMPORT": [],
     "ON_STATUS_CHANGE": [],
-    "CREATE_SYMLINKS": True,
     "SUBMIT_MERGE_ANALYSIS": None,
     "ON_SIGNAL_FAILURE": None,
     "ADMIN_COMMANDS": [

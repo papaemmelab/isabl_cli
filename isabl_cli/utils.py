@@ -19,11 +19,26 @@ from packaging import version
 from isabl_cli.settings import system_settings
 
 
-def makedirs(path, exist_ok=True, mode=0o777):
-    """Make dirs ignoring umask."""
-    original_umask = os.umask(0)
-    os.makedirs(path, exist_ok=exist_ok, mode=mode)
-    os.umask(original_umask)
+def makedirs(path, exist_ok=True, mode=0o770):
+    """Make dirs, parents included, open to owner and group and closed to others."""
+    original_umask = os.umask(0o007)
+
+    try:
+        os.makedirs(path, exist_ok=exist_ok, mode=mode)
+    finally:
+        os.umask(original_umask)
+
+
+def chmod(path, mode):
+    """Set the mode of `path`, warn instead of failing if the user doesn't own it."""
+    try:
+        os.chmod(path, mode)
+    except PermissionError:
+        click.secho(
+            f"Could not set mode {mode:o} on {path}, owned by {find_owner(path)}",
+            err=True,
+            fg="yellow",
+        )
 
 
 def get_results(

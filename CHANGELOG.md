@@ -5,6 +5,34 @@ All notable changes to isabl_cli are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Removed
+
+- The `CREATE_SYMLINKS` setting and the `isabl_cli.data.symlink_analysis_to_targets`
+  and `isabl_cli.data.symlink_experiment_to_projects` signals. Succeeded analyses are
+  no longer linked from their experiments' `analyses/` or their project's
+  `analyses/`, and experiments are no longer linked from their projects'
+  `experiments/`. Clients that list either signal in `ON_STATUS_CHANGE` or
+  `ON_DATA_IMPORT` must remove it. Importing data no longer sets a project's
+  `storage_url`.
+
+### Changed
+
+- Storage directories, and the hash directories above them, are created with mode
+  `770` instead of `777`, so they are no longer writable, readable or searchable by
+  others.
+- Imported experiments are read-only: imported files get mode `440`, and the
+  experiment's directory and its `data/` directory get mode `550`. Importing more
+  data into an experiment makes those directories writable for their owner and
+  locks them again afterwards; other users can no longer import into it. When the
+  current user doesn't own a path, isabl_cli warns instead of failing.
+
+### Fixed
+
+- Importing with `--symlink` no longer makes the linked source file read-only:
+  `chmod` followed the link to the file outside Isabl storage.
+
 ## [2.1.1] - 2026-11-26
 
 ### Fixed

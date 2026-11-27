@@ -476,8 +476,6 @@ def patch_instance(endpoint, instance_id, **data):
     Returns:
         types.SimpleNamespace: loaded with data returned from the API.
     """
-    from isabl_cli.data import symlink_analysis_to_targets
-    from isabl_cli.data import symlink_experiment_to_projects
     from isabl_cli.data import trigger_analyses_merge
 
     run_status_change_signals = False
@@ -503,19 +501,10 @@ def patch_instance(endpoint, instance_id, **data):
 
     if run_status_change_signals:
         signals = system_settings.ON_STATUS_CHANGE + [trigger_analyses_merge]
-
-        if system_settings.CREATE_SYMLINKS:
-            signals.append(symlink_analysis_to_targets)
-
         _run_signals("analyses", instance, signals)
 
     if run_data_import_signals:
-        signals = system_settings.ON_DATA_IMPORT
-
-        if system_settings.CREATE_SYMLINKS:
-            signals.append(symlink_experiment_to_projects)
-
-        _run_signals("experiments", instance, signals)
+        _run_signals("experiments", instance, system_settings.ON_DATA_IMPORT)
 
     return instance
 
