@@ -12,6 +12,7 @@ from os.path import join
 import os
 import re
 import shutil
+import stat
 import subprocess
 
 from slugify import slugify
@@ -86,50 +87,6 @@ def update_experiment_bam_file(experiment, assembly_name, analysis_pk, bam_url):
 
     bam_files[assembly_name] = {"url": bam_url, "analysis": analysis_pk}
     return api.patch_instance("experiments", pk, bam_files=bam_files)
-
-
-def symlink_experiment_to_projects(experiment):
-    """Create symlink from experiment directory and projects directories."""
-    for i in experiment["projects"]:
-        if not i["storage_url"]:  # pragma: no cover
-            i = update_storage_url("projects", i["pk"])
-
-        experiments_dir = join(i["storage_url"], "experiments")
-        experiment_dir = join(experiments_dir, experiment["system_id"])
-        utils.makedirs(experiments_dir)
-        utils.force_symlink(experiment["storage_url"], experiment_dir)
-
-
-def symlink_analysis_to_targets(analysis):
-    """Create symlink from experiment directory and projects directories."""
-    if analysis["status"] != "SUCCEEDED":
-        return
-
-    src = analysis["storage_url"]
-    dst = "__".join(
-        [
-            analysis["application"]["name"].lower().replace(" ", "_"),
-            analysis["application"]["version"].lower().replace(" ", "_"),
-            str(analysis["pk"]),
-        ]
-    )
-
-    for i in analysis["targets"]:
-        if not i["storage_url"]:  # pragma: no cover
-            i = update_storage_url("experiments", i["pk"])
-
-        analyses_dir = join(i["storage_url"], "analyses")
-        utils.makedirs(analyses_dir)
-        utils.force_symlink(src, join(analyses_dir, dst))
-
-    if analysis["project_level_analysis"]:
-        i = analysis["project_level_analysis"]
-        if not i["storage_url"]:
-            i = update_storage_url("projects", i["pk"])
-
-        analyses_dir = join(i["storage_url"], "analyses")
-        utils.makedirs(analyses_dir)
-        utils.force_symlink(src, join(analyses_dir, dst))
 
 
 def trigger_analyses_merge(analysis):
@@ -241,9 +198,7 @@ def _make_storage_directory(root, base, identifier, use_hash=False):
         path = join(base)
 
     storage_directory = join(root, path, str(identifier))
-    original_umask = os.umask(0)
     utils.makedirs(storage_directory)
-    os.umask(original_umask)
     return storage_directory
 
 
@@ -878,7 +833,14 @@ class LocalDataImporter(BaseImporter):
                 endpoint="experiments", identifier=instance["pk"], use_hash=True
             )
 
-        data_dir = join(instance["storage_url"], "data")
+        experiment_dir = instance["storage_url"]
+        data_dir = join(experiment_dir, "data")
+
+        # imported experiments are read-only, let the owner write to import more data
+        for i in [experiment_dir, data_dir]:
+            if isdir(i) and not os.access(i, os.W_OK):
+                utils.chmod(i, stat.S_IMODE(os.stat(i).st_mode) | stat.S_IWUSR)
+
         utils.makedirs(data_dir)
 
         for src, file_type in [(i["path"], i["dtype"]) for i in files]:
@@ -919,10 +881,12 @@ class LocalDataImporter(BaseImporter):
             else:
                 self.move(src, dst)
 
-            try:
-                subprocess.check_call(["chmod", "a-w", dst])
-            except subprocess.CalledProcessError:
-                pass
+            # chmod follows symlinks, it would change the linked file outside storage
+            if not os.path.islink(dst):
+                utils.chmod(dst, 0o440)
+
+        for i in [data_dir, experiment_dir]:
+            utils.chmod(i, 0o550)
 
         return api.patch_instance(
             endpoint="experiments",
