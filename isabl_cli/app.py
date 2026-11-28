@@ -1867,20 +1867,55 @@ class AbstractApplication:  # pylint: disable=too-many-public-methods
                 existing[individual.pk] = i
 
                 # patch analysis if tuples differ
-                for ix, key in enumerate(["targets", "references", "analyses"]):
-                    if {getattr(j, "pk", j) for j in i[key]} != {
-                        getattr(j, "pk", j) for j in current_tuple[ix]
-                    }:
-                        existing[individual.pk] = api.patch_instance(
-                            "analyses",
-                            i.pk,
-                            targets=current_tuple[0],
-                            references=current_tuple[1],
-                            analyses=current_tuple[2],
-                        )
-                        break
+                changed = any(
+                    {getattr(j, "pk", j) for j in i[key]}
+                    != {getattr(j, "pk", j) for j in current_tuple[ix]}
+                    for ix, key in enumerate(["targets", "references", "analyses"])
+                )
+
+                if changed:
+                    existing[individual.pk] = self._patch_changed_individual_analysis(
+                        i, *current_tuple[:3]
+                    )
 
         return list(existing.values()), [i for i in tuples if i[-1].pk not in existing]
+
+    def _patch_changed_individual_analysis(self, analysis, targets, references, analyses):
+        """
+        Update an individual level analysis whose inputs changed, and stage it.
+
+        The existing results were produced from the old inputs, so the analysis is
+        set to STAGED with its results reset, and it is run again, also if it
+        SUCCEEDED with protected results. Running analyses (SUBMITTED or STARTED) are
+        left unchanged, and then skipped because of their status.
+        """
+        status = analysis.status
+
+        if status in {"SUBMITTED", "STARTED"}:
+            click.secho(
+                f"Inputs changed for analysis {analysis.pk} "
+                f"({analysis.individual_level_analysis.system_id}), not updated: "
+                f"it is {status}, run again once it is done.",
+                fg="yellow",
+            )
+            return analysis
+
+        click.secho(
+            f"Inputs changed for analysis {analysis.pk} "
+            f"({analysis.individual_level_analysis.system_id}), "
+            f"updating it and setting {status} -> STAGED.",
+            fg="yellow",
+        )
+
+        return api.patch_instance(
+            "analyses",
+            analysis.pk,
+            targets=targets,
+            references=references,
+            analyses=analyses,
+            status="STAGED",
+            results=self._get_analysis_results(analysis, created=True),
+        )
 
     def _patch_analysis(self, analysis):
         analysis["storage_url"] = data.get_storage_url(
